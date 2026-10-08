@@ -39,9 +39,11 @@ type Config struct {
 	SecureCookies        bool
 
 	// PDF
-	PDFEngine    string // native | chromium | gotenberg
-	ChromiumPath string
-	GotenbergURL string
+	PDFEngine       string // native | chromium | gotenberg
+	ChromiumPath    string
+	GotenbergURL    string
+	DocxConverter   string // gotenberg | libreoffice | none
+	LibreOfficePath string
 
 	// Currency
 	ExchangeRateProvider string // frankfurter | none
@@ -116,9 +118,11 @@ func Load() (*Config, error) {
 		AdminName:            env("ADMIN_NAME", "Admin"),
 		SecureCookies:        envBool("SECURE_COOKIES", false),
 
-		PDFEngine:    strings.ToLower(env("PDF_ENGINE", "native")),
-		ChromiumPath: env("CHROMIUM_PATH", "chromium"),
-		GotenbergURL: strings.TrimRight(env("GOTENBERG_URL", "http://gotenberg:3000"), "/"),
+		PDFEngine:       strings.ToLower(env("PDF_ENGINE", "native")),
+		ChromiumPath:    env("CHROMIUM_PATH", "chromium"),
+		GotenbergURL:    strings.TrimRight(env("GOTENBERG_URL", "http://gotenberg:3000"), "/"),
+		DocxConverter:   strings.ToLower(env("DOCX_CONVERTER", "gotenberg")),
+		LibreOfficePath: env("LIBREOFFICE_PATH", "soffice"),
 
 		ExchangeRateProvider: strings.ToLower(env("EXCHANGE_RATE_PROVIDER", "frankfurter")),
 		ExchangeRateRefresh:  envDuration("EXCHANGE_RATE_REFRESH", 12*time.Hour),
@@ -133,6 +137,11 @@ func Load() (*Config, error) {
 	case "local", "proxy", "none":
 	default:
 		return nil, fmt.Errorf("AUTH_MODE must be one of local, proxy, none (got %q)", c.AuthMode)
+	}
+	switch c.DocxConverter {
+	case "gotenberg", "libreoffice", "soffice", "none":
+	default:
+		return nil, fmt.Errorf("DOCX_CONVERTER must be one of gotenberg, libreoffice, none (got %q)", c.DocxConverter)
 	}
 	switch c.PDFEngine {
 	case "native", "chromium", "gotenberg":

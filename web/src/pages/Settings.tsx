@@ -252,13 +252,27 @@ function Catalog() {
 // ---------- Templates ----------
 const LABEL_KEYS = ['invoice', 'invoice_number', 'issue_date', 'due_date', 'period', 'po_number', 'bill_to', 'description', 'unit', 'quantity', 'unit_price', 'discount', 'tax', 'amount', 'subtotal', 'total', 'amount_paid', 'balance_due', 'notes', 'terms', 'payment_details', 'tax_id', 'page', 'paid_stamp', 'hour', 'hours', 'day', 'days', 'month', 'months']
 
+function WordUpload({ templateId, onDone, label = '+ Upload Word template' }: { templateId?: number; onDone: (t: InvoiceTemplate, ph: string[]) => void; label?: string }) {
+  const toast = useToast()
+  const [busy, setBusy] = useState(false)
+  return (
+    <label className="btn sm">{busy ? 'Uploading…' : label}<input type="file" accept=".docx" style={{ display: 'none' }} onChange={async e => {
+      const f = e.target.files?.[0]; if (!f) return
+      const fd = new FormData(); fd.append('file', f); setBusy(true)
+      try { const r = await api.post<{ template: InvoiceTemplate; placeholders: string[] }>(templateId ? `${V1}/templates/${templateId}/docx` : `${V1}/templates/docx`, fd); toast(`Word template saved (${r.placeholders.length} placeholders found)`, 'success'); onDone(r.template, r.placeholders) } catch (err) { toast((err as Error).message, 'error') } finally { setBusy(false); e.target.value = '' }
+    }} /></label>
+  )
+}
+
 function Templates() {
   const toast = useToast()
   const { data, reload } = useAsync(() => api.get<InvoiceTemplate[]>(`${V1}/templates`))
+  const { data: keys } = useAsync(() => api.get<{ Key: string; Description: string }[]>(`${V1}/templates/placeholders`))
   const [sel, setSel] = useState<InvoiceTemplate | null>(null)
-  const [tab, setTab] = useState<'design' | 'labels' | 'html'>('design')
+  const [tab, setTab] = useState<'design' | 'labels' | 'html' | 'word'>('design')
   const [previewKey, setPreviewKey] = useState(0)
   const [del, setDel] = useState<InvoiceTemplate | null>(null)
+  const [found, setFound] = useState<string[]>([])
   useEffect(() => { if (data && !sel) setSel(data[0] || null) }, [data, sel])
   const save = async () => { if (!sel) return; try { const saved = sel.id ? await api.put<InvoiceTemplate>(`${V1}/templates/${sel.id}`, sel) : await api.post<InvoiceTemplate>(`${V1}/templates`, sel); setSel(saved); reload(); setPreviewKey(k => k + 1); toast('Template saved', 'success') } catch (e) { toast((e as Error).message, 'error') } }
   const loadDefaultHTML = async () => { const html = await api.getText(`${V1}/templates/default-html`); setSel(s => s ? { ...s, html } : s) }
@@ -266,11 +280,22 @@ function Templates() {
   const previewUrl = sel?.id ? `${V1}/templates/${sel.id}/preview?layout=${sel.layout}&accent=${encodeURIComponent(sel.accent_color)}&k=${previewKey}` : ''
   return (
     <div className="grid" style={{ gridTemplateColumns: '220px 1fr 1fr' }}>
-      <Card title="Templates" actions={<button className="btn sm" onClick={() => setSel({ id: 0, name: 'New template', layout: 'classic', accent_color: '#2563eb', labels: {}, options: { hide_rate: false, hide_unit: false, show_quantity_total: false, signature_label: '', hide_logo: false }, html: '', is_default: false })}>+</button>} flush>
-        <table className="table"><tbody>{data.map(t => <tr key={t.id} className="clickable" onClick={() => { setSel(t); setPreviewKey(k => k + 1) }} style={sel?.id === t.id ? { background: 'var(--accent-soft)' } : {}}><td><span className="bold">{t.name}</span>{t.is_default && <span className="badge ok" style={{ marginLeft: 6 }}>default</span>}<div className="muted small">{t.layout}{t.html ? ' · custom HTML' : ''}</div></td></tr>)}</tbody></table>
+      <Card title="Templates" actions={<div className="row"><WordUpload onDone={(t, ph) => { reload(); setSel(t); setFound(ph); setTab('word'); setPreviewKey(k => k + 1) }} label="+ Word" /><button className="btn sm" title="New design template" onClick={() => setSel({ id: 0, name: 'New template', layout: 'classic', accent_color: '#2563eb', labels: {}, options: { hide_rate: false, hide_unit: false, show_quantity_total: false, signature_label: '', hide_logo: false }, html: '', is_default: false, kind: 'design', docx_path: '', docx_name: '' })}>+ Design</button></div>} flush>
+        <table className="table"><tbody>{data.map(t => <tr key={t.id} className="clickable" onClick={() => { setSel(t); setFound([]); setTab(t.kind === 'docx' ? 'word' : 'design'); setPreviewKey(k => k + 1) }} style={sel?.id === t.id ? { background: 'var(--accent-soft)' } : {}}><td><span className="bold">{t.name}</span>{t.is_default && <span className="badge ok" style={{ marginLeft: 6 }}>default</span>}<div className="muted small">{t.kind === 'docx' ? <span className="badge accent">Word</span> : t.layout}{t.html ? ' · custom HTML' : ''}</div></td></tr>)}</tbody></table>
+        <div className="muted small" style={{ padding: 12 }}>Word templates: a .docx with placeholders like <code>{'{{number}}'}</code>. Each client can pick its own template; otherwise the default applies. Download <a href="https://github.com/abjelosevic88/pocket-homelab-invoicing/tree/main/docs/templates" target="_blank" rel="noreferrer">sample templates</a>.</div>
       </Card>
       {sel && <Card title={sel.id ? `Edit "${sel.name}"` : 'New template'} actions={<div className="row">{sel.id > 0 && !sel.is_default && <button className="btn sm danger" onClick={() => setDel(sel)}>Delete</button>}<button className="btn sm primary" onClick={save}>Save</button></div>}>
-        <Tabs tabs={[{ id: 'design', label: 'Design' }, { id: 'labels', label: 'Labels / language' }, { id: 'html', label: 'HTML (advanced)' }]} value={tab} onChange={setTab} />
+        <Tabs tabs={sel.kind === 'docx' ? [{ id: 'word' as const, label: 'Word file' }, { id: 'labels' as const, label: 'Labels / language' }] : [{ id: 'design' as const, label: 'Design' }, { id: 'labels' as const, label: 'Labels / language' }, { id: 'html' as const, label: 'HTML (advanced)' }]} value={tab} onChange={setTab} />
+        {tab === 'word' && <div className="grid" style={{ gap: 12 }}>
+          <Field label="Name"><input value={sel.name} onChange={e => setSel({ ...sel, name: e.target.value })} /></Field>
+          <label className="check"><input type="checkbox" checked={sel.is_default} onChange={e => setSel({ ...sel, is_default: e.target.checked })} /> Use as default template</label>
+          <div className="row"><span className="muted small">File: <strong>{sel.docx_name || '—'}</strong></span>{sel.id > 0 && <a className="btn sm" href={`${V1}/templates/${sel.id}/docx`}>Download</a>}{sel.id > 0 && <WordUpload templateId={sel.id} label="Replace file" onDone={(t, ph) => { reload(); setSel(t); setFound(ph); setPreviewKey(k => k + 1) }} />}</div>
+          {found.length > 0 && <div className="callout small">Placeholders found in the file: {found.join(' ')}</div>}
+          <details><summary className="small bold" style={{ cursor: 'pointer' }}>Available placeholders</summary>
+            <table className="table small" style={{ marginTop: 8 }}><tbody>{keys?.map(k => <tr key={k.Key}><td className="mono">{'{{' + k.Key + '}}'}</td><td className="muted">{k.Description}</td></tr>)}</tbody></table>
+            <p className="muted small mt">Put <code>{'{{#items}}'}</code> in the first cell of a table row and <code>{'{{/items}}'}</code> in its last cell to repeat that row per line item. Sections like <code>{'{{#paid}} … {{/paid}}'}</code> show text conditionally; <code>{'{{^paid}}'}</code> is the inverse. PDF conversion uses the Gotenberg container (LibreOffice).</p>
+          </details>
+        </div>}
         {tab === 'design' && <div className="grid" style={{ gap: 12 }}>
           <Field label="Name"><input value={sel.name} onChange={e => setSel({ ...sel, name: e.target.value })} /></Field>
           <Field label="Layout"><select value={sel.layout} onChange={e => setSel({ ...sel, layout: e.target.value })}><option value="classic">Classic — header left, accent table</option><option value="modern">Modern — full-width coloured header</option><option value="minimal">Minimal — black & white, thin rules</option></select></Field>
@@ -293,7 +318,9 @@ function Templates() {
           <textarea className="mono" rows={24} value={sel.html} onChange={e => setSel({ ...sel, html: e.target.value })} placeholder="Leave empty to use the built-in HTML template" />
         </div>}
       </Card>}
-      {sel && sel.id > 0 && <Card title="Preview (sample data)" actions={<a className="btn sm" href={`${V1}/templates/${sel.id}/preview.pdf?layout=${sel.layout}&accent=${encodeURIComponent(sel.accent_color)}`} target="_blank" rel="noreferrer">Open PDF</a>} flush><div style={{ height: 760, overflow: 'hidden' }}><iframe key={previewKey} src={previewUrl} title="preview" style={{ width: '200%', height: 1520, border: 0, transform: 'scale(0.5)', transformOrigin: '0 0', background: '#fff' }} /></div></Card>}
+      {sel && sel.id > 0 && <Card title="Preview (sample data)" actions={<a className="btn sm" href={`${V1}/templates/${sel.id}/preview.pdf?layout=${sel.layout}&accent=${encodeURIComponent(sel.accent_color)}&k=${previewKey}`} target="_blank" rel="noreferrer">Open PDF</a>} flush>
+        {sel.kind === 'docx' ? <iframe key={previewKey} src={`${V1}/templates/${sel.id}/preview.pdf?k=${previewKey}`} title="preview" style={{ width: '100%', height: 760, border: 0, background: '#fff' }} /> : <div style={{ height: 760, overflow: 'hidden' }}><iframe key={previewKey} src={previewUrl} title="preview" style={{ width: '200%', height: 1520, border: 0, transform: 'scale(0.5)', transformOrigin: '0 0', background: '#fff' }} /></div>}
+      </Card>}
       {del && <Confirm title="Delete template?" message="Invoices using it fall back to the default template." onConfirm={async () => { await api.del(`${V1}/templates/${del.id}`); setDel(null); setSel(null); reload() }} onCancel={() => setDel(null)} />}
     </div>
   )

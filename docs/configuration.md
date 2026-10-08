@@ -37,7 +37,8 @@ API tokens (`Authorization: Bearer pi_…` or `X-API-Key`) work in every mode.
 |---|---|---|
 | `PDF_ENGINE` | `native` | `native` — pure Go renderer, embedded Unicode fonts, zero dependencies.<br>`chromium` — runs a headless Chromium binary (`CHROMIUM_PATH`) to print the HTML template. Use the `-chromium` image tag.<br>`gotenberg` — posts the HTML template to a [Gotenberg](https://gotenberg.dev) container (`GOTENBERG_URL`). |
 | `CHROMIUM_PATH` | `chromium` | Binary path for the chromium engine |
-| `GOTENBERG_URL` | `http://gotenberg:3000` | Gotenberg base URL |
+| `GOTENBERG_URL` | `http://gotenberg:3000` | Gotenberg base URL (also used for Word templates) |
+| `DOCX_CONVERTER` | `gotenberg` | How Word templates become PDFs: `gotenberg`, `libreoffice` (local `LIBREOFFICE_PATH`), or `none` (download the filled .docx only) |
 
 ## Currencies
 

@@ -123,6 +123,7 @@ export default function InvoiceDetail() {
             <div className="grid" style={{ gap: 8 }}>
               {inv.status === 'draft' && <Link className="btn" to={`/invoices/${inv.id}/edit`}>Edit invoice</Link>}
               {inv.status !== 'draft' && inv.status !== 'cancelled' && <Link className="btn" to={`/invoices/${inv.id}/edit`}>Edit (keeps status)</Link>}
+              <a className="btn" href={`${V1}/invoices/${inv.id}/docx`} title="Only works when the invoice (or its client) uses a Word template">Download as Word (.docx)</a>
               <button className="btn" onClick={copyLink}>Copy public link</button>
               <a className="btn" href={publicUrl} target="_blank" rel="noreferrer">Open public page</a>
               <button className="btn" onClick={dup}>Duplicate</button>

@@ -109,6 +109,8 @@ Body: `{name, client_id, status: active|paused, frequency: daily|weekly|biweekly
 | `GET/POST/PUT/DELETE /tax-rates` | |
 | `GET/POST/PUT/DELETE /products` | |
 | `GET/POST/PUT/DELETE /templates`, `GET /templates/{id}/preview[.pdf]?layout=&accent=&invoice_id=`, `GET /templates/default-html` | |
+| `POST /templates/docx` (multipart `file`, `name`, `is_default`), `POST /templates/{id}/docx` (replace file), `GET /templates/{id}/docx`, `GET /templates/placeholders` | Word templates |
+| `GET /invoices/{id}/docx[?template_id=]` | filled Word document |
 | `GET/POST/PUT/DELETE /webhooks`, `POST /webhooks/test` | |
 
 ## Reports

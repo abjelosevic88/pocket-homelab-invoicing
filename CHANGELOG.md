@@ -5,6 +5,7 @@ All notable changes to this project are documented here. Format follows [Keep a 
 ## [Unreleased]
 
 ### Added
+- Word (.docx) invoice templates: upload any number, assign per client or per invoice, global default; Mustache-style placeholders with table-row repetition; PDF via Gotenberg (LibreOffice) or a local `soffice`; download the filled .docx. Sample templates in docs/templates/.
 - Invoice attachments: upload your own PDFs per invoice, download via the public link, and choose whether emails carry the generated PDF, the uploaded files, or both.
 - Custom invoice fields (Settings → Invoicing), printed in the PDF header block (e.g. fiscal receipt numbers).
 - Base-currency total on invoices in other currencies, with a configurable sentence (`{rate}`, `{currency_name}`, `{total_base}` …).
