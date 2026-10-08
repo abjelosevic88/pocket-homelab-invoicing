@@ -3,17 +3,21 @@ package store
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"strings"
 )
 
-const invoiceCols = `i.id, i.number, i.client_id, c.name, i.status, i.issue_date, i.due_date, i.currency, i.exchange_rate, i.billing_mode, i.period_start, i.period_end, i.po_number, i.discount_type, i.discount_value, i.subtotal, i.discount_total, i.tax_total, i.total, i.amount_paid, i.notes, i.terms, i.footer, i.template_id, i.recurring_id, i.public_token, i.sent_at, i.viewed_at, i.paid_at, i.created_at, i.updated_at`
+const invoiceCols = `i.id, i.number, i.client_id, c.name, i.status, i.issue_date, i.due_date, i.currency, i.exchange_rate, i.billing_mode, i.period_start, i.period_end, i.po_number, i.discount_type, i.discount_value, i.subtotal, i.discount_total, i.tax_total, i.total, i.amount_paid, i.notes, i.terms, i.footer, i.template_id, i.recurring_id, i.public_token, i.sent_at, i.viewed_at, i.paid_at, i.created_at, i.updated_at, i.custom_fields`
 
 func scanInvoice(row interface{ Scan(...any) error }) (*Invoice, error) {
 	var inv Invoice
-	if err := row.Scan(&inv.ID, &inv.Number, &inv.ClientID, &inv.ClientName, &inv.Status, &inv.IssueDate, &inv.DueDate, &inv.Currency, &inv.ExchangeRate, &inv.BillingMode, &inv.PeriodStart, &inv.PeriodEnd, &inv.PONumber, &inv.DiscountType, &inv.DiscountValue, &inv.Subtotal, &inv.DiscountTotal, &inv.TaxTotal, &inv.Total, &inv.AmountPaid, &inv.Notes, &inv.Terms, &inv.Footer, &inv.TemplateID, &inv.RecurringID, &inv.PublicToken, &inv.SentAt, &inv.ViewedAt, &inv.PaidAt, &inv.CreatedAt, &inv.UpdatedAt); err != nil {
+	var cf string
+	if err := row.Scan(&inv.ID, &inv.Number, &inv.ClientID, &inv.ClientName, &inv.Status, &inv.IssueDate, &inv.DueDate, &inv.Currency, &inv.ExchangeRate, &inv.BillingMode, &inv.PeriodStart, &inv.PeriodEnd, &inv.PONumber, &inv.DiscountType, &inv.DiscountValue, &inv.Subtotal, &inv.DiscountTotal, &inv.TaxTotal, &inv.Total, &inv.AmountPaid, &inv.Notes, &inv.Terms, &inv.Footer, &inv.TemplateID, &inv.RecurringID, &inv.PublicToken, &inv.SentAt, &inv.ViewedAt, &inv.PaidAt, &inv.CreatedAt, &inv.UpdatedAt, &cf); err != nil {
 		return nil, err
 	}
+	inv.CustomFields = map[string]string{}
+	_ = json.Unmarshal([]byte(cf), &inv.CustomFields)
 	inv.Balance = inv.Total - inv.AmountPaid
 	if inv.Balance < 0.000001 && inv.Balance > -0.000001 {
 		inv.Balance = 0
@@ -125,7 +129,19 @@ func (s *Store) hydrateInvoice(ctx context.Context, inv *Invoice) (*Invoice, err
 		return nil, err
 	}
 	inv.Payments, err = s.ListPayments(ctx, PaymentFilter{InvoiceID: inv.ID})
+	if err != nil {
+		return nil, err
+	}
+	inv.Attachments, err = s.ListAttachments(ctx, inv.ID)
 	return inv, err
+}
+
+func marshalCF(m map[string]string) string {
+	if m == nil {
+		return "{}"
+	}
+	b, _ := json.Marshal(m)
+	return string(b)
 }
 
 // CreateInvoice inserts an invoice and its items.
@@ -134,9 +150,9 @@ func (s *Store) CreateInvoice(ctx context.Context, inv *Invoice) error {
 		inv.PublicToken = RandomToken(16)
 	}
 	return s.Tx(ctx, func(tx *sql.Tx) error {
-		res, err := tx.ExecContext(ctx, `INSERT INTO invoices (number, client_id, status, issue_date, due_date, currency, exchange_rate, billing_mode, period_start, period_end, po_number, discount_type, discount_value, subtotal, discount_total, tax_total, total, amount_paid, notes, terms, footer, template_id, recurring_id, public_token, sent_at, paid_at)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			inv.Number, inv.ClientID, inv.Status, inv.IssueDate, inv.DueDate, inv.Currency, inv.ExchangeRate, inv.BillingMode, inv.PeriodStart, inv.PeriodEnd, inv.PONumber, inv.DiscountType, inv.DiscountValue, inv.Subtotal, inv.DiscountTotal, inv.TaxTotal, inv.Total, inv.AmountPaid, inv.Notes, inv.Terms, inv.Footer, inv.TemplateID, inv.RecurringID, inv.PublicToken, inv.SentAt, inv.PaidAt)
+		res, err := tx.ExecContext(ctx, `INSERT INTO invoices (number, client_id, status, issue_date, due_date, currency, exchange_rate, billing_mode, period_start, period_end, po_number, discount_type, discount_value, subtotal, discount_total, tax_total, total, amount_paid, notes, terms, footer, template_id, recurring_id, public_token, sent_at, paid_at, custom_fields)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			inv.Number, inv.ClientID, inv.Status, inv.IssueDate, inv.DueDate, inv.Currency, inv.ExchangeRate, inv.BillingMode, inv.PeriodStart, inv.PeriodEnd, inv.PONumber, inv.DiscountType, inv.DiscountValue, inv.Subtotal, inv.DiscountTotal, inv.TaxTotal, inv.Total, inv.AmountPaid, inv.Notes, inv.Terms, inv.Footer, inv.TemplateID, inv.RecurringID, inv.PublicToken, inv.SentAt, inv.PaidAt, marshalCF(inv.CustomFields))
 		if err != nil {
 			return err
 		}
@@ -163,8 +179,8 @@ func insertItems(ctx context.Context, tx *sql.Tx, inv *Invoice) error {
 // UpdateInvoice replaces an invoice and its items.
 func (s *Store) UpdateInvoice(ctx context.Context, inv *Invoice) error {
 	return s.Tx(ctx, func(tx *sql.Tx) error {
-		_, err := tx.ExecContext(ctx, `UPDATE invoices SET number=?, client_id=?, status=?, issue_date=?, due_date=?, currency=?, exchange_rate=?, billing_mode=?, period_start=?, period_end=?, po_number=?, discount_type=?, discount_value=?, subtotal=?, discount_total=?, tax_total=?, total=?, amount_paid=?, notes=?, terms=?, footer=?, template_id=?, sent_at=?, viewed_at=?, paid_at=?, updated_at=? WHERE id=?`,
-			inv.Number, inv.ClientID, inv.Status, inv.IssueDate, inv.DueDate, inv.Currency, inv.ExchangeRate, inv.BillingMode, inv.PeriodStart, inv.PeriodEnd, inv.PONumber, inv.DiscountType, inv.DiscountValue, inv.Subtotal, inv.DiscountTotal, inv.TaxTotal, inv.Total, inv.AmountPaid, inv.Notes, inv.Terms, inv.Footer, inv.TemplateID, inv.SentAt, inv.ViewedAt, inv.PaidAt, Now(), inv.ID)
+		_, err := tx.ExecContext(ctx, `UPDATE invoices SET number=?, client_id=?, status=?, issue_date=?, due_date=?, currency=?, exchange_rate=?, billing_mode=?, period_start=?, period_end=?, po_number=?, discount_type=?, discount_value=?, subtotal=?, discount_total=?, tax_total=?, total=?, amount_paid=?, notes=?, terms=?, footer=?, template_id=?, sent_at=?, viewed_at=?, paid_at=?, custom_fields=?, updated_at=? WHERE id=?`,
+			inv.Number, inv.ClientID, inv.Status, inv.IssueDate, inv.DueDate, inv.Currency, inv.ExchangeRate, inv.BillingMode, inv.PeriodStart, inv.PeriodEnd, inv.PONumber, inv.DiscountType, inv.DiscountValue, inv.Subtotal, inv.DiscountTotal, inv.TaxTotal, inv.Total, inv.AmountPaid, inv.Notes, inv.Terms, inv.Footer, inv.TemplateID, inv.SentAt, inv.ViewedAt, inv.PaidAt, marshalCF(inv.CustomFields), Now(), inv.ID)
 		if err != nil {
 			return err
 		}

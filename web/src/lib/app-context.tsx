@@ -1,6 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react'
 import { api, V1 } from './api'
-import { registerCurrencies } from './format'
+import { registerCurrencies, registerNumberFormat } from './format'
 import type { Currency, Settings, User } from './types'
 
 interface AuthStatus { needs_setup: boolean; setup_complete: boolean; auth_mode: string; authenticated: boolean; user: User | null; version: string; company_name: string }
@@ -35,6 +35,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (st.authenticated) {
       const [s, c] = await Promise.all([api.get<Settings>(`${V1}/settings`), api.get<Currency[]>(`${V1}/currencies`)])
       setSettings(s)
+      registerNumberFormat(s.number_format)
       setCurrencies(c)
       registerCurrencies(c)
     }

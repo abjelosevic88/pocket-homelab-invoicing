@@ -7,16 +7,17 @@ import (
 	"errors"
 )
 
-const templateCols = `id, name, layout, accent_color, labels, html, is_default, created_at, updated_at`
+const templateCols = `id, name, layout, accent_color, labels, options, html, is_default, created_at, updated_at`
 
 func scanTemplate(row interface{ Scan(...any) error }) (*InvoiceTemplate, error) {
 	var t InvoiceTemplate
-	var labels string
-	if err := row.Scan(&t.ID, &t.Name, &t.Layout, &t.AccentColor, &labels, &t.HTML, &t.IsDefault, &t.CreatedAt, &t.UpdatedAt); err != nil {
+	var labels, options string
+	if err := row.Scan(&t.ID, &t.Name, &t.Layout, &t.AccentColor, &labels, &options, &t.HTML, &t.IsDefault, &t.CreatedAt, &t.UpdatedAt); err != nil {
 		return nil, err
 	}
 	t.Labels = map[string]string{}
 	_ = json.Unmarshal([]byte(labels), &t.Labels)
+	_ = json.Unmarshal([]byte(options), &t.Options)
 	return &t, nil
 }
 
@@ -55,20 +56,21 @@ func (s *Store) GetDefaultTemplate(ctx context.Context) (*InvoiceTemplate, error
 // SaveTemplate creates or updates a template.
 func (s *Store) SaveTemplate(ctx context.Context, t *InvoiceTemplate) error {
 	labels, _ := json.Marshal(t.Labels)
+	options, _ := json.Marshal(t.Options)
 	if t.IsDefault {
 		if _, err := s.DB.ExecContext(ctx, `UPDATE invoice_templates SET is_default = 0`); err != nil {
 			return err
 		}
 	}
 	if t.ID == 0 {
-		res, err := s.DB.ExecContext(ctx, `INSERT INTO invoice_templates (name, layout, accent_color, labels, html, is_default) VALUES (?, ?, ?, ?, ?, ?)`, t.Name, t.Layout, t.AccentColor, string(labels), t.HTML, t.IsDefault)
+		res, err := s.DB.ExecContext(ctx, `INSERT INTO invoice_templates (name, layout, accent_color, labels, options, html, is_default) VALUES (?, ?, ?, ?, ?, ?, ?)`, t.Name, t.Layout, t.AccentColor, string(labels), string(options), t.HTML, t.IsDefault)
 		if err != nil {
 			return err
 		}
 		t.ID, _ = res.LastInsertId()
 		return nil
 	}
-	_, err := s.DB.ExecContext(ctx, `UPDATE invoice_templates SET name=?, layout=?, accent_color=?, labels=?, html=?, is_default=?, updated_at=? WHERE id=?`, t.Name, t.Layout, t.AccentColor, string(labels), t.HTML, t.IsDefault, Now(), t.ID)
+	_, err := s.DB.ExecContext(ctx, `UPDATE invoice_templates SET name=?, layout=?, accent_color=?, labels=?, options=?, html=?, is_default=?, updated_at=? WHERE id=?`, t.Name, t.Layout, t.AccentColor, string(labels), string(options), t.HTML, t.IsDefault, Now(), t.ID)
 	return err
 }
 

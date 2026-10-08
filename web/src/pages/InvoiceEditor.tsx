@@ -53,7 +53,7 @@ export default function InvoiceEditor() {
       api.get<Invoice>(`${V1}/invoices/${id}`).then(i => { setInv(i); setItems((i.items || []).map(it => ({ ...it, key: keySeq++ }))) })
     } else {
       const issue = today()
-      setInv({ client_id: Number(sp.get('client_id')) || 0, issue_date: issue, due_date: addDays(issue, settings.default_due_days), currency: settings.base_currency, exchange_rate: 0, billing_mode: settings.default_billing_mode || 'hourly', discount_type: 'none', discount_value: 0, notes: settings.default_notes, terms: settings.default_terms.replace('{due_days}', String(settings.default_due_days)), footer: settings.default_footer, po_number: '', period_start: '', period_end: '', template_id: null, status: 'draft' })
+      setInv({ client_id: Number(sp.get('client_id')) || 0, issue_date: issue, due_date: addDays(issue, settings.default_due_days), currency: settings.base_currency, exchange_rate: 0, billing_mode: settings.default_billing_mode || 'hourly', discount_type: 'none', discount_value: 0, notes: settings.default_notes, terms: settings.default_terms.replace('{due_days}', String(settings.default_due_days)), footer: settings.default_footer, po_number: '', period_start: '', period_end: '', template_id: null, status: 'draft', custom_fields: {} })
       setItems([newItem(unitForBilling(settings.default_billing_mode || 'hourly'), settings.default_tax_rate, settings.default_hourly_rate)])
     }
   }, [id, settings, sp])
@@ -126,6 +126,7 @@ export default function InvoiceEditor() {
             <Field label="Due date"><input type="date" value={inv.due_date} onChange={e => set('due_date', e.target.value)} /></Field>
             <Field label="Service period from" help="Optional; shown on the invoice"><input type="date" value={inv.period_start || ''} onChange={e => set('period_start', e.target.value)} /></Field>
             <Field label="Service period to"><input type="date" value={inv.period_end || ''} onChange={e => set('period_end', e.target.value)} /></Field>
+            {(settings.custom_fields || []).map(f => <Field key={f.key} label={f.label}><input value={inv.custom_fields?.[f.key] || ''} onChange={e => set('custom_fields', { ...(inv.custom_fields || {}), [f.key]: e.target.value })} /></Field>)}
           </div>
         </Card>
         <Card title="Billing & currency">

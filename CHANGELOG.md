@@ -4,6 +4,19 @@ All notable changes to this project are documented here. Format follows [Keep a 
 
 ## [Unreleased]
 
+### Added
+- Invoice attachments: upload your own PDFs per invoice, download via the public link, and choose whether emails carry the generated PDF, the uploaded files, or both.
+- Custom invoice fields (Settings → Invoicing), printed in the PDF header block (e.g. fiscal receipt numbers).
+- Base-currency total on invoices in other currencies, with a configurable sentence (`{rate}`, `{currency_name}`, `{total_base}` …).
+- Per-currency payment details (different IBAN for EUR and USD invoices).
+- Number format setting (`1.234,56`, `1 234,56`, …) applied to PDFs and the UI.
+- Template options: hide rate/unit columns, summed quantity in totals ("100 hours"), signature line, hide logo.
+- Exchange-rate refresh falls back to EUR cross-rates when the provider does not know the base currency (BAM, RSD …).
+- `scripts/import_invoiceninja.py` and docs/migrating-from-invoice-ninja.md.
+
+### Changed
+- Payment terms of 0 days are allowed (due on receipt).
+
 ## [0.1.0] - 2026-10-08
 
 ### Added

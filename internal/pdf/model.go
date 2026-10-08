@@ -37,6 +37,9 @@ type Line struct {
 	Total       string
 }
 
+// KV is a label/value pair.
+type KV struct{ Label, Value string }
+
 // TaxLine is one tax rate subtotal.
 type TaxLine struct {
 	Label  string
@@ -75,7 +78,13 @@ type Document struct {
 	Terms            string
 	Footer           string
 	PaymentDetails   string
-	BaseCurrencyNote string
+	BaseCurrencyNote string // sentence about the base-currency conversion
+	BaseTotalLabel   string // e.g. "Total in BAM"
+	BaseTotal        string // formatted total in base currency ("" when same currency)
+	QuantityTotal    string // summed quantity, e.g. "21 days"
+	CustomFields     []KV   // user-defined fields shown in the meta block
+	SignatureLabel   string // prints a signature line when non-empty
+	ShowRate         bool
 
 	LogoPath    string
 	LogoDataURL string
@@ -112,6 +121,8 @@ var DefaultLabels = map[string]string{
 	"tax_id":          "Tax ID",
 	"page":            "Page",
 	"paid_stamp":      "PAID",
+	"total_in":        "Total in",
+	"quantity_total":  "Total",
 	"hour":            "hour",
 	"hours":           "hours",
 	"day":             "day",
@@ -177,7 +188,11 @@ func Build(in BuildInput) *Document {
 		symPos = "after"
 		cur.Symbol = strings.TrimSpace(cur.Symbol)
 	}
-	m := func(v float64) string { return money.Format(v, cur.Decimals, cur.Symbol, symPos) }
+	style := money.StyleFor(st.NumberFormat)
+	if cur.Name == "" {
+		cur.Name = cur.Code
+	}
+	m := func(v float64) string { return money.FormatStyle(v, cur.Decimals, cur.Symbol, symPos, style) }
 
 	d := &Document{
 		Number:         inv.Number,
@@ -209,6 +224,22 @@ func Build(in BuildInput) *Document {
 		for k, v := range in.Template.Labels {
 			d.Labels[k] = v
 		}
+		d.ShowRate = !in.Template.Options.HideRate
+		d.SignatureLabel = in.Template.Options.SignatureLabel
+		if in.Template.Options.HideLogo {
+			d.LogoPath, d.LogoDataURL = "", ""
+		}
+	}
+	if pd, ok := st.PaymentDetailsByCurrency[inv.Currency]; ok && strings.TrimSpace(pd) != "" {
+		d.PaymentDetails = pd
+	}
+	for _, def := range st.CustomFields {
+		if !def.ShowOnPDF {
+			continue
+		}
+		if v := strings.TrimSpace(inv.CustomFields[def.Key]); v != "" {
+			d.CustomFields = append(d.CustomFields, KV{Label: def.Label, Value: v})
+		}
 	}
 	d.Title = d.Label("invoice")
 	if inv.PeriodStart != nil && *inv.PeriodStart != "" {
@@ -226,7 +257,16 @@ func Build(in BuildInput) *Document {
 	}
 
 	anyTax, anyDisc := false, false
+	var qtySum float64
+	qtyUnit := ""
+	sameUnit := true
 	for _, it := range inv.Items {
+		qtySum += it.Quantity
+		if qtyUnit == "" {
+			qtyUnit = it.Unit
+		} else if qtyUnit != it.Unit {
+			sameUnit = false
+		}
 		if it.TaxRate > 0 {
 			anyTax = true
 		}
@@ -246,6 +286,18 @@ func Build(in BuildInput) *Document {
 	d.ShowTax = d.ShowTax && anyTax
 	d.ShowDiscount = anyDisc
 	d.ShowUnit = true
+	if in.Template != nil {
+		d.ShowUnit = !in.Template.Options.HideUnit
+		if in.Template.Options.ShowQuantityTotal && sameUnit && len(inv.Items) > 0 {
+			d.QuantityTotal = trimNum(qtySum) + " " + unitLabel(d, qtyUnit, qtySum)
+		}
+	}
+	if !d.ShowUnit {
+		// fold the unit into the quantity column: "21 days"
+		for i := range d.Lines {
+			d.Lines[i].Quantity = d.Lines[i].Quantity + " " + d.Lines[i].Unit
+		}
+	}
 	d.Subtotal = m(inv.Subtotal)
 	if inv.DiscountTotal > 0 {
 		d.DiscountLabel = d.Label("discount")
@@ -268,16 +320,38 @@ func Build(in BuildInput) *Document {
 	d.AmountPaid = m(inv.AmountPaid)
 	d.Balance = m(inv.Total - inv.AmountPaid)
 	d.ShowPaid = inv.AmountPaid > 0
-	if inv.Currency != st.BaseCurrency && inv.ExchangeRate != 1 && inv.ExchangeRate > 0 {
+	if inv.Currency != st.BaseCurrency && inv.ExchangeRate > 0 && st.ShowBaseTotal {
 		bc := in.BaseCurrency
 		bpos := "before"
 		if strings.HasSuffix(bc.Symbol, " ") {
 			bpos = "after"
 			bc.Symbol = strings.TrimSpace(bc.Symbol)
 		}
-		d.BaseCurrencyNote = fmt.Sprintf("≈ %s (1 %s = %s %s)", money.Format(inv.Total*inv.ExchangeRate, bc.Decimals, bc.Symbol, bpos), inv.Currency, trimNum(inv.ExchangeRate), st.BaseCurrency)
+		totalBase := money.FormatStyle(money.Round(inv.Total*inv.ExchangeRate, bc.Decimals), bc.Decimals, bc.Symbol, bpos, style)
+		d.BaseTotalLabel = d.Label("total_in") + " " + st.BaseCurrency
+		d.BaseTotal = totalBase
+		rateStr := strings.Replace(trimNum(inv.ExchangeRate), ".", style.Decimal, 1)
+		note := st.BaseTotalNote
+		if note == "" {
+			note = "Exchange rate 1 {currency} = {rate} {base}. Total in {base}: {total_base}."
+		}
+		r := strings.NewReplacer("{rate}", rateStr, "{currency}", inv.Currency, "{currency_name}", proseName(cur.Name), "{base}", st.BaseCurrency, "{base_name}", proseName(bc.Name), "{total_base}", totalBase, "{total}", d.Total)
+		d.BaseCurrencyNote = r.Replace(note)
 	}
 	return d
+}
+
+// proseName lower-cases a currency name for use mid-sentence while keeping
+// acronyms: "US Dollar" -> "US dollar", "Euro" -> "euro".
+func proseName(name string) string {
+	words := strings.Fields(name)
+	for i, w := range words {
+		if len(w) <= 3 && strings.ToUpper(w) == w {
+			continue
+		}
+		words[i] = strings.ToLower(w)
+	}
+	return strings.Join(words, " ")
 }
 
 func toLineItems(items []store.InvoiceItem) []money.LineItem {

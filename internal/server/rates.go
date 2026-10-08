@@ -31,8 +31,29 @@ func (s *Server) refreshRates(ctx context.Context) (int, error) {
 		return 0, nil
 	}
 	rates, err := s.rates.Fetch(ctx, st.BaseCurrency, quotes)
+	source := s.rates.Name()
 	if err != nil {
-		return 0, fmt.Errorf("fetch rates: %w", err)
+		// Provider doesn't know the base (e.g. BAM, RSD): fall back to EUR rates and
+		// convert through a stored base→EUR rate (pegged currencies make this exact).
+		baseToEUR, ok := s.store.GetRate(ctx, st.BaseCurrency, "EUR")
+		if !ok || st.BaseCurrency == "EUR" {
+			return 0, fmt.Errorf("fetch rates: %w (tip: add a manual %s→EUR rate and refresh again to derive the rest)", err, st.BaseCurrency)
+		}
+		eurQuotes := make([]string, 0, len(quotes))
+		for _, q := range quotes {
+			if q != "EUR" {
+				eurQuotes = append(eurQuotes, q)
+			}
+		}
+		eurRates, err2 := s.rates.Fetch(ctx, "EUR", eurQuotes)
+		if err2 != nil {
+			return 0, fmt.Errorf("fetch rates via EUR: %w", err2)
+		}
+		rates = map[string]float64{}
+		for q, r := range eurRates {
+			rates[q] = r * baseToEUR // base→quote = base→EUR × EUR→quote
+		}
+		source = s.rates.Name() + " via EUR"
 	}
 	existing, _ := s.store.ListRates(ctx, st.BaseCurrency)
 	manual := map[string]bool{}
@@ -47,7 +68,7 @@ func (s *Server) refreshRates(ctx context.Context) (int, error) {
 			continue
 		}
 		// store as quote->base (how many base units per 1 quote unit) AND base->quote for convenience
-		if err := s.store.UpsertRate(ctx, store.ExchangeRate{Base: st.BaseCurrency, Quote: quote, Rate: rate, Source: s.rates.Name()}); err != nil {
+		if err := s.store.UpsertRate(ctx, store.ExchangeRate{Base: st.BaseCurrency, Quote: quote, Rate: rate, Source: source}); err != nil {
 			return n, err
 		}
 		n++

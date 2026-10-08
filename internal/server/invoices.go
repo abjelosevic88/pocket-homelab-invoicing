@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -37,6 +38,7 @@ type invoiceInput struct {
 	Items         []store.InvoiceItem `json:"items"`
 	TimeEntryIDs  []int64             `json:"time_entry_ids"`
 	ExpenseIDs    []int64             `json:"expense_ids"`
+	CustomFields  map[string]string   `json:"custom_fields"`
 }
 
 func emptyToNil(p *string) *string {
@@ -90,6 +92,14 @@ func (s *Server) applyInput(ctx context.Context, inv *store.Invoice, in invoiceI
 	inv.TemplateID = in.TemplateID
 	if inv.TemplateID != nil && *inv.TemplateID == 0 {
 		inv.TemplateID = nil
+	}
+	if in.CustomFields != nil {
+		inv.CustomFields = map[string]string{}
+		for k, v := range in.CustomFields {
+			if strings.TrimSpace(v) != "" {
+				inv.CustomFields[k] = strings.TrimSpace(v)
+			}
+		}
 	}
 
 	// Exchange rate to base currency: explicit > stored > 1
@@ -360,6 +370,7 @@ func (s *Server) handleDeleteInvoice(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err, "delete invoice")
 		return
 	}
+	s.removeAttachmentFiles(id)
 	s.store.LogActivity(r.Context(), "invoice", id, "deleted", "Invoice "+inv.Number+" deleted")
 	s.hooks.Emit("invoice.deleted", map[string]any{"id": id, "number": inv.Number})
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
@@ -532,9 +543,27 @@ func (s *Server) sendInvoiceEmail(ctx context.Context, inv *store.Invoice, to, s
 		subject = strings.ReplaceAll(subject, k, v)
 		body = strings.ReplaceAll(body, k, v)
 	}
-	pdfBytes, err := s.renderPDF(ctx, inv)
-	if err != nil {
-		return err
+	var attachments []mailer.Attachment
+	mode := st.EmailAttachmentMode
+	if mode == "" {
+		mode = "generated"
+	}
+	if mode == "generated" || mode == "both" || len(inv.Attachments) == 0 {
+		pdfBytes, err := s.renderPDF(ctx, inv)
+		if err != nil {
+			return err
+		}
+		attachments = append(attachments, mailer.Attachment{Filename: safeFilename(inv.Number) + ".pdf", ContentType: "application/pdf", Data: pdfBytes})
+	}
+	if mode == "uploaded" || mode == "both" {
+		for _, a := range inv.Attachments {
+			data, err := os.ReadFile(s.attachmentPath(&a))
+			if err != nil {
+				s.log.Warn("email: attachment missing", "file", a.Filename, "err", err)
+				continue
+			}
+			attachments = append(attachments, mailer.Attachment{Filename: a.Filename, ContentType: a.ContentType, Data: data})
+		}
 	}
 	cfg := mailer.Config{Host: st.SMTPHost, Port: st.SMTPPort, User: st.SMTPUser, Password: st.SMTPPassword, From: st.SMTPFrom, FromName: st.SMTPFromName, TLS: st.SMTPTLS, BCC: st.SMTPBCC}
 	if cfg.FromName == "" {
@@ -546,7 +575,7 @@ func (s *Server) sendInvoiceEmail(ctx context.Context, inv *store.Invoice, to, s
 			recipients = append(recipients, a)
 		}
 	}
-	err = mailer.Send(cfg, mailer.Message{To: recipients, Subject: subject, Body: body, Attachments: []mailer.Attachment{{Filename: safeFilename(inv.Number) + ".pdf", ContentType: "application/pdf", Data: pdfBytes}}})
+	err = mailer.Send(cfg, mailer.Message{To: recipients, Subject: subject, Body: body, Attachments: attachments})
 	status, errMsg := "sent", ""
 	if err != nil {
 		status, errMsg = "failed", err.Error()

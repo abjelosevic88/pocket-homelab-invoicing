@@ -47,6 +47,8 @@
   .section { margin-bottom: 18px; }
   .section p { margin: 0; white-space: pre-wrap; }
   .footer { margin-top: 40px; padding-top: 12px; border-top: 1px solid var(--line); font-size: 9pt; color: var(--muted); text-align: center; }
+  .signature { margin: 40px 0 0 auto; width: 220px; text-align: center; color: var(--muted); font-size: 9.5pt; }
+  .signature .line { border-top: 1px solid var(--text); margin-bottom: 4px; }
   .stamp { position: absolute; right: 60px; top: 320px; border: 4px solid #16a34a; color: #16a34a; font-weight: 800; font-size: 32pt; padding: 6px 20px; transform: rotate(-14deg); opacity: .75; border-radius: 8px; }
   .page { position: relative; }
 </style>
@@ -89,6 +91,7 @@
         <tr><td>{{.Label "due_date"}}</td><td>{{.DueDate}}</td></tr>
         {{if .Period}}<tr><td>{{.Label "period"}}</td><td>{{.Period}}</td></tr>{{end}}
         {{if .PONumber}}<tr><td>{{.Label "po_number"}}</td><td>{{.PONumber}}</td></tr>{{end}}
+        {{range .CustomFields}}<tr><td>{{.Label}}</td><td>{{.Value}}</td></tr>{{end}}
         <tr class="balance"><td>{{.Label "balance_due"}}</td><td>{{.Balance}}</td></tr>
       </table>
     </div>
@@ -100,7 +103,7 @@
         <th>{{.Label "description"}}</th>
         {{if .ShowUnit}}<th>{{.Label "unit"}}</th>{{end}}
         <th class="num">{{.Label "quantity"}}</th>
-        <th class="num">{{.Label "unit_price"}}</th>
+        {{if .ShowRate}}<th class="num">{{.Label "unit_price"}}</th>{{end}}
         {{if .ShowDiscount}}<th class="num">{{.Label "discount"}}</th>{{end}}
         {{if .ShowTax}}<th class="num">{{.Label "tax"}}</th>{{end}}
         <th class="num">{{.Label "amount"}}</th>
@@ -113,7 +116,7 @@
         <td>{{.Description}}</td>
         {{if $d.ShowUnit}}<td class="muted">{{.Unit}}</td>{{end}}
         <td class="num">{{.Quantity}}</td>
-        <td class="num">{{.UnitPrice}}</td>
+        {{if $d.ShowRate}}<td class="num">{{.UnitPrice}}</td>{{end}}
         {{if $d.ShowDiscount}}<td class="num">{{.Discount}}</td>{{end}}
         {{if $d.ShowTax}}<td class="num">{{.TaxRate}}</td>{{end}}
         <td class="num">{{.Total}}</td>
@@ -124,19 +127,22 @@
 
   <div class="totals">
     <table>
+      {{if .QuantityTotal}}<tr><td>{{.Label "quantity"}}</td><td class="num">{{.QuantityTotal}}</td></tr>{{end}}
       <tr><td>{{.Label "subtotal"}}</td><td class="num">{{.Subtotal}}</td></tr>
       {{if .Discount}}<tr><td>{{.DiscountLabel}}</td><td class="num">{{.Discount}}</td></tr>{{end}}
       {{range .Taxes}}<tr><td>{{.Label}}</td><td class="num">{{.Amount}}</td></tr>{{end}}
       <tr class="grand"><td>{{.Label "total"}}</td><td class="num">{{.Total}}</td></tr>
       {{if .ShowPaid}}<tr><td>{{.Label "amount_paid"}}</td><td class="num">-{{.AmountPaid}}</td></tr>{{end}}
       <tr class="balance"><td>{{.Label "balance_due"}}</td><td class="num">{{.Balance}}</td></tr>
-      {{if .BaseCurrencyNote}}<tr class="note"><td colspan="2">{{.BaseCurrencyNote}}</td></tr>{{end}}
+      {{if .BaseTotal}}<tr class="grand"><td>{{.BaseTotalLabel}}</td><td class="num">{{.BaseTotal}}</td></tr>{{end}}
     </table>
   </div>
+  {{if .BaseCurrencyNote}}<div class="section"><p>{{.BaseCurrencyNote}}</p></div>{{end}}
 
   {{if .PaymentDetails}}<div class="section"><div class="label">{{.Label "payment_details"}}</div><p>{{.PaymentDetails}}</p></div>{{end}}
   {{if .Notes}}<div class="section"><div class="label">{{.Label "notes"}}</div><p>{{.Notes}}</p></div>{{end}}
   {{if .Terms}}<div class="section"><div class="label">{{.Label "terms"}}</div><p>{{.Terms}}</p></div>{{end}}
+  {{if .SignatureLabel}}<div class="signature"><div class="line"></div>{{.SignatureLabel}}</div>{{end}}
   {{if .Footer}}<div class="footer">{{.Footer}}</div>{{end}}
 </div>
 </body>

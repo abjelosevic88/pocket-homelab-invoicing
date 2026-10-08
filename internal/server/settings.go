@@ -51,15 +51,52 @@ func (s *Server) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 	if st.HoursPerDay <= 0 {
 		st.HoursPerDay = 8
 	}
-	if st.DefaultDueDays <= 0 {
-		st.DefaultDueDays = 14
+	if st.DefaultDueDays < 0 {
+		st.DefaultDueDays = 0 // 0 = due on receipt
 	}
+	if _, ok := money.Styles[st.NumberFormat]; !ok {
+		st.NumberFormat = "1,234.56"
+	}
+	switch st.EmailAttachmentMode {
+	case "generated", "uploaded", "both":
+	default:
+		st.EmailAttachmentMode = "generated"
+	}
+	cleaned := st.CustomFields[:0]
+	for _, f := range st.CustomFields {
+		f.Label = strings.TrimSpace(f.Label)
+		if f.Label == "" {
+			continue
+		}
+		if f.Key == "" {
+			f.Key = slugify(f.Label)
+		}
+		cleaned = append(cleaned, f)
+	}
+	st.CustomFields = cleaned
 	_ = s.store.SetCurrencyEnabled(ctx, st.BaseCurrency, true)
 	if err := s.store.SaveSettings(ctx, st); err != nil {
 		s.fail(w, err, "save settings")
 		return
 	}
 	writeJSON(w, http.StatusOK, st)
+}
+
+func slugify(v string) string {
+	var b strings.Builder
+	for _, r := range strings.ToLower(v) {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9':
+			b.WriteRune(r)
+		case r == ' ', r == '-', r == '_', r == '/':
+			b.WriteByte('_')
+		}
+	}
+	out := strings.Trim(b.String(), "_")
+	if out == "" {
+		out = "field"
+	}
+	return out
 }
 
 func (s *Server) handleUploadLogo(w http.ResponseWriter, r *http.Request) {
