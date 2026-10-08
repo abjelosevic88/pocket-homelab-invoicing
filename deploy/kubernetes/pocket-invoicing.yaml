@@ -1,0 +1,112 @@
+# kubectl apply -f deploy/kubernetes/pocket-invoicing.yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: pocket-invoicing
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pocket-invoicing-data
+  namespace: pocket-invoicing
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pocket-invoicing-config
+  namespace: pocket-invoicing
+data:
+  BASE_URL: "https://invoices.example.com"
+  TZ: "UTC"
+  AUTH_MODE: "local"
+  PDF_ENGINE: "native"
+  EXCHANGE_RATE_PROVIDER: "frankfurter"
+  LOG_FORMAT: "json"
+  SECURE_COOKIES: "true"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pocket-invoicing
+  namespace: pocket-invoicing
+spec:
+  replicas: 1            # SQLite: keep a single replica
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels: { app: pocket-invoicing }
+  template:
+    metadata:
+      labels: { app: pocket-invoicing }
+    spec:
+      securityContext:
+        fsGroup: 1000
+      containers:
+        - name: app
+          image: ghcr.io/abjelosevic88/pocket-homelab-invoicing:latest
+          ports:
+            - containerPort: 8080
+              name: http
+          envFrom:
+            - configMapRef:
+                name: pocket-invoicing-config
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          readinessProbe:
+            httpGet: { path: /readyz, port: http }
+            initialDelaySeconds: 5
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits: { memory: 256Mi }
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            allowPrivilegeEscalation: false
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: pocket-invoicing-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pocket-invoicing
+  namespace: pocket-invoicing
+spec:
+  selector: { app: pocket-invoicing }
+  ports:
+    - port: 80
+      targetPort: http
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: pocket-invoicing
+  namespace: pocket-invoicing
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt   # adjust / remove
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts: [invoices.example.com]
+      secretName: pocket-invoicing-tls
+  rules:
+    - host: invoices.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: pocket-invoicing
+                port: { number: 80 }

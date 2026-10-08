@@ -1,0 +1,15 @@
+# Add these labels to the `app` service in docker-compose.yml when using Traefik.
+services:
+  app:
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.invoicing.rule=Host(`invoices.example.com`)
+      - traefik.http.routers.invoicing.entrypoints=websecure
+      - traefik.http.routers.invoicing.tls.certresolver=letsencrypt
+      - traefik.http.services.invoicing.loadbalancer.server.port=8080
+      # Optional Authentik/Authelia middleware (then set AUTH_MODE=proxy):
+      # - traefik.http.routers.invoicing.middlewares=authelia@docker
+    networks: [proxy]
+networks:
+  proxy:
+    external: true

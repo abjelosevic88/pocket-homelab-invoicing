@@ -1,0 +1,28 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>pocket-invoicing</Name>
+  <Repository>ghcr.io/abjelosevic88/pocket-homelab-invoicing:latest</Repository>
+  <Registry>https://github.com/abjelosevic88/pocket-homelab-invoicing/pkgs/container/pocket-homelab-invoicing</Registry>
+  <Network>bridge</Network>
+  <Shell>sh</Shell>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/abjelosevic88/pocket-homelab-invoicing/issues</Support>
+  <Project>https://github.com/abjelosevic88/pocket-homelab-invoicing</Project>
+  <Overview>Self-hosted invoicing for freelancers and homelabbers. Hourly, daily, monthly-retainer and fixed-price billing, multi-currency with automatic exchange rates, PDF templates, recurring invoices, time tracking, expenses, reports, API &amp; webhooks. Single binary, single SQLite file.</Overview>
+  <Category>Tools: Productivity: Other:</Category>
+  <WebUI>http://[IP]:[PORT:8080]</WebUI>
+  <TemplateURL>https://raw.githubusercontent.com/abjelosevic88/pocket-homelab-invoicing/main/deploy/unraid/pocket-invoicing.xml</TemplateURL>
+  <Icon>https://raw.githubusercontent.com/abjelosevic88/pocket-homelab-invoicing/main/web/public/favicon.svg</Icon>
+  <ExtraParams>--health-cmd "curl -fsS http://localhost:8080/healthz || exit 1"</ExtraParams>
+  <DonateText/>
+  <Config Name="WebUI port" Target="8080" Default="8080" Mode="tcp" Description="HTTP port" Type="Port" Display="always" Required="true" Mask="false">8080</Config>
+  <Config Name="Data" Target="/data" Default="/mnt/user/appdata/pocket-invoicing" Mode="rw" Description="SQLite database, uploads and backups" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/pocket-invoicing</Config>
+  <Config Name="BASE_URL" Target="BASE_URL" Default="" Mode="" Description="Public URL used in emails and client links, e.g. https://invoices.example.com" Type="Variable" Display="always" Required="false" Mask="false"></Config>
+  <Config Name="TZ" Target="TZ" Default="UTC" Mode="" Description="Timezone" Type="Variable" Display="always" Required="false" Mask="false">UTC</Config>
+  <Config Name="AUTH_MODE" Target="AUTH_MODE" Default="local" Mode="" Description="local | proxy | none" Type="Variable" Display="advanced" Required="false" Mask="false">local</Config>
+  <Config Name="PDF_ENGINE" Target="PDF_ENGINE" Default="native" Mode="" Description="native | chromium | gotenberg" Type="Variable" Display="advanced" Required="false" Mask="false">native</Config>
+  <Config Name="EXCHANGE_RATE_PROVIDER" Target="EXCHANGE_RATE_PROVIDER" Default="frankfurter" Mode="" Description="frankfurter (ECB, free) or none" Type="Variable" Display="advanced" Required="false" Mask="false">frankfurter</Config>
+  <Config Name="ADMIN_EMAIL" Target="ADMIN_EMAIL" Default="" Mode="" Description="Optional: create the admin account without the setup wizard" Type="Variable" Display="advanced" Required="false" Mask="false"></Config>
+  <Config Name="ADMIN_PASSWORD" Target="ADMIN_PASSWORD" Default="" Mode="" Description="Password for ADMIN_EMAIL" Type="Variable" Display="advanced" Required="false" Mask="true"></Config>
+  <Config Name="PUID" Target="PUID" Default="99" Mode="" Description="Not used (runs as uid 1000); chown the data folder to 1000 if needed" Type="Variable" Display="advanced-hide" Required="false" Mask="false">99</Config>
+</Container>

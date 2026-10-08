@@ -1,0 +1,26 @@
+# Bare-metal install without Docker:
+#   sudo useradd -r -s /usr/sbin/nologin -d /var/lib/pocket-invoicing pocket-invoicing
+#   sudo mkdir -p /var/lib/pocket-invoicing && sudo chown pocket-invoicing: /var/lib/pocket-invoicing
+#   sudo cp pocket-invoicing /usr/local/bin/ && sudo cp .env.example /etc/pocket-invoicing.env
+#   sudo cp pocket-invoicing.service /etc/systemd/system/ && sudo systemctl enable --now pocket-invoicing
+[Unit]
+Description=Pocket Invoicing
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=pocket-invoicing
+Group=pocket-invoicing
+EnvironmentFile=-/etc/pocket-invoicing.env
+Environment=DATA_DIR=/var/lib/pocket-invoicing
+ExecStart=/usr/local/bin/pocket-invoicing
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/pocket-invoicing
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

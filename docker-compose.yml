@@ -1,0 +1,36 @@
+# Pocket Invoicing — minimal homelab deployment.
+#   docker compose up -d
+#   open http://<host>:8080 and complete the first-run setup
+services:
+  app:
+    image: ghcr.io/abjelosevic88/pocket-homelab-invoicing:latest
+    # build: .                       # uncomment to build from source instead
+    container_name: pocket-invoicing
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      TZ: ${TZ:-UTC}
+      BASE_URL: ${BASE_URL:-http://localhost:8080}   # used in emails & public links
+      # ADMIN_EMAIL: you@example.com                  # optional: skip the setup wizard
+      # ADMIN_PASSWORD: change-me-please
+      # AUTH_MODE: proxy                              # behind Authelia/Authentik: trust Remote-User header
+      # PDF_ENGINE: native                            # native | chromium | gotenberg
+      # EXCHANGE_RATE_PROVIDER: frankfurter           # or "none" for fully offline
+      # LOG_LEVEL: info
+    volumes:
+      - ./data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # Optional: Gotenberg renders the customisable HTML templates to PDF.
+  # Enable with: docker compose --profile gotenberg up -d  (and set PDF_ENGINE=gotenberg on app)
+  gotenberg:
+    image: gotenberg/gotenberg:8
+    container_name: pocket-invoicing-gotenberg
+    restart: unless-stopped
+    profiles: ["gotenberg"]
+    command: ["gotenberg", "--chromium-disable-javascript=true", "--api-timeout=60s"]
