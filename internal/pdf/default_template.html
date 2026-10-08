@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>{{.Title}} {{.Number}}</title>
+<style>
+  :root { --accent: {{.AccentColor}}; --text: #111827; --muted: #6b7280; --line: #e5e7eb; }
+  * { box-sizing: border-box; }
+  @page { size: A4; margin: 18mm; }
+  html, body { margin: 0; padding: 0; }
+  body { font-family: "DejaVu Sans", "Helvetica Neue", Arial, sans-serif; color: var(--text); font-size: 10.5pt; line-height: 1.45; background: #fff; }
+  .page { max-width: 800px; margin: 0 auto; padding: 32px; }
+  @media print { .page { padding: 0; max-width: none; } .no-print { display: none !important; } }
+  .header { display: flex; justify-content: space-between; align-items: flex-start; gap: 24px; margin-bottom: 36px; }
+  .layout-modern .header { background: var(--accent); color: #fff; margin: -32px -32px 36px; padding: 28px 32px; }
+  .layout-modern .header .muted, .layout-modern .header .title { color: rgba(255,255,255,.9); }
+  .brand img { max-height: 64px; max-width: 220px; margin-bottom: 10px; display: block; }
+  .brand .name { font-size: 16pt; font-weight: 700; }
+  .muted { color: var(--muted); }
+  .title { font-size: 28pt; font-weight: 800; color: var(--accent); letter-spacing: .02em; text-align: right; line-height: 1; }
+  .layout-minimal .title { color: var(--text); }
+  .number { text-align: right; font-size: 12pt; margin-top: 6px; }
+  .parties { display: flex; justify-content: space-between; gap: 24px; margin-bottom: 28px; }
+  .parties .block { flex: 1; }
+  .label { font-size: 8pt; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
+  .to .name { font-weight: 700; font-size: 12pt; }
+  .meta { flex: 1; }
+  .meta table { margin-left: auto; border-collapse: collapse; }
+  .meta td { padding: 3px 0 3px 18px; text-align: right; }
+  .meta td:first-child { color: var(--muted); }
+  .meta tr.balance td { font-weight: 700; font-size: 13pt; color: var(--accent); padding-top: 10px; }
+  table.items { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+  table.items th { background: var(--accent); color: #fff; font-size: 8pt; letter-spacing: .06em; text-transform: uppercase; padding: 8px 8px; text-align: left; }
+  .layout-minimal table.items th { background: none; color: var(--muted); border-bottom: 2px solid var(--text); }
+  table.items td { padding: 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  table.items tr:nth-child(even) td { background: #f9fafb; }
+  .layout-minimal table.items tr:nth-child(even) td { background: none; }
+  .num { text-align: right; white-space: nowrap; }
+  .totals { display: flex; justify-content: flex-end; margin-bottom: 28px; }
+  .totals table { border-collapse: collapse; min-width: 300px; }
+  .totals td { padding: 5px 8px; }
+  .totals td:first-child { color: var(--muted); }
+  .totals tr.grand td { font-weight: 700; font-size: 12pt; color: var(--text); }
+  .totals tr.balance td { background: var(--accent); color: #fff; font-weight: 700; font-size: 12pt; }
+  .layout-minimal .totals tr.balance td { background: none; color: var(--text); border-top: 2px solid var(--text); }
+  .totals tr.note td { font-size: 8pt; color: var(--muted); text-align: right; }
+  .section { margin-bottom: 18px; }
+  .section p { margin: 0; white-space: pre-wrap; }
+  .footer { margin-top: 40px; padding-top: 12px; border-top: 1px solid var(--line); font-size: 9pt; color: var(--muted); text-align: center; }
+  .stamp { position: absolute; right: 60px; top: 320px; border: 4px solid #16a34a; color: #16a34a; font-weight: 800; font-size: 32pt; padding: 6px 20px; transform: rotate(-14deg); opacity: .75; border-radius: 8px; }
+  .page { position: relative; }
+</style>
+</head>
+<body class="layout-{{.Layout}}">
+<div class="page">
+  {{if eq .Status "paid"}}<div class="stamp">{{.Label "paid_stamp"}}</div>{{end}}
+  <div class="header">
+    <div class="brand">
+      {{if .LogoDataURL}}<img src="{{.LogoDataURL}}" alt="">{{end}}
+      <div class="name">{{.From.Name}}</div>
+      <div class="muted">
+        {{range .From.Lines}}{{.}}<br>{{end}}
+        {{if .From.Email}}{{.From.Email}}<br>{{end}}
+        {{if .From.Phone}}{{.From.Phone}}<br>{{end}}
+        {{if .From.Website}}{{.From.Website}}<br>{{end}}
+        {{if .From.TaxID}}{{.Label "tax_id"}}: {{.From.TaxID}}{{end}}
+      </div>
+    </div>
+    <div>
+      <div class="title">{{.Title}}</div>
+      <div class="number">{{.Number}}</div>
+    </div>
+  </div>
+
+  <div class="parties">
+    <div class="block to">
+      <div class="label">{{.Label "bill_to"}}</div>
+      <div class="name">{{.To.Name}}</div>
+      <div class="muted">
+        {{if .To.Contact}}{{.To.Contact}}<br>{{end}}
+        {{range .To.Lines}}{{.}}<br>{{end}}
+        {{if .To.Email}}{{.To.Email}}<br>{{end}}
+        {{if .To.TaxID}}{{.Label "tax_id"}}: {{.To.TaxID}}{{end}}
+      </div>
+    </div>
+    <div class="block meta">
+      <table>
+        <tr><td>{{.Label "issue_date"}}</td><td>{{.IssueDate}}</td></tr>
+        <tr><td>{{.Label "due_date"}}</td><td>{{.DueDate}}</td></tr>
+        {{if .Period}}<tr><td>{{.Label "period"}}</td><td>{{.Period}}</td></tr>{{end}}
+        {{if .PONumber}}<tr><td>{{.Label "po_number"}}</td><td>{{.PONumber}}</td></tr>{{end}}
+        <tr class="balance"><td>{{.Label "balance_due"}}</td><td>{{.Balance}}</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <table class="items">
+    <thead>
+      <tr>
+        <th>{{.Label "description"}}</th>
+        {{if .ShowUnit}}<th>{{.Label "unit"}}</th>{{end}}
+        <th class="num">{{.Label "quantity"}}</th>
+        <th class="num">{{.Label "unit_price"}}</th>
+        {{if .ShowDiscount}}<th class="num">{{.Label "discount"}}</th>{{end}}
+        {{if .ShowTax}}<th class="num">{{.Label "tax"}}</th>{{end}}
+        <th class="num">{{.Label "amount"}}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {{$d := .}}
+      {{range .Lines}}
+      <tr>
+        <td>{{.Description}}</td>
+        {{if $d.ShowUnit}}<td class="muted">{{.Unit}}</td>{{end}}
+        <td class="num">{{.Quantity}}</td>
+        <td class="num">{{.UnitPrice}}</td>
+        {{if $d.ShowDiscount}}<td class="num">{{.Discount}}</td>{{end}}
+        {{if $d.ShowTax}}<td class="num">{{.TaxRate}}</td>{{end}}
+        <td class="num">{{.Total}}</td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+
+  <div class="totals">
+    <table>
+      <tr><td>{{.Label "subtotal"}}</td><td class="num">{{.Subtotal}}</td></tr>
+      {{if .Discount}}<tr><td>{{.DiscountLabel}}</td><td class="num">{{.Discount}}</td></tr>{{end}}
+      {{range .Taxes}}<tr><td>{{.Label}}</td><td class="num">{{.Amount}}</td></tr>{{end}}
+      <tr class="grand"><td>{{.Label "total"}}</td><td class="num">{{.Total}}</td></tr>
+      {{if .ShowPaid}}<tr><td>{{.Label "amount_paid"}}</td><td class="num">-{{.AmountPaid}}</td></tr>{{end}}
+      <tr class="balance"><td>{{.Label "balance_due"}}</td><td class="num">{{.Balance}}</td></tr>
+      {{if .BaseCurrencyNote}}<tr class="note"><td colspan="2">{{.BaseCurrencyNote}}</td></tr>{{end}}
+    </table>
+  </div>
+
+  {{if .PaymentDetails}}<div class="section"><div class="label">{{.Label "payment_details"}}</div><p>{{.PaymentDetails}}</p></div>{{end}}
+  {{if .Notes}}<div class="section"><div class="label">{{.Label "notes"}}</div><p>{{.Notes}}</p></div>{{end}}
+  {{if .Terms}}<div class="section"><div class="label">{{.Label "terms"}}</div><p>{{.Terms}}</p></div>{{end}}
+  {{if .Footer}}<div class="footer">{{.Footer}}</div>{{end}}
+</div>
+</body>
+</html>

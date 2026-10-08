@@ -1,0 +1,16 @@
+# Caddy — automatic HTTPS
+invoices.example.com {
+    reverse_proxy pocket-invoicing:8080
+}
+
+# With Authelia forward-auth (set AUTH_MODE=proxy on the app):
+# invoices.example.com {
+#     forward_auth authelia:9091 {
+#         uri /api/authz/forward-auth
+#         copy_headers Remote-User Remote-Email Remote-Name
+#     }
+#     reverse_proxy pocket-invoicing:8080
+# }
+# Note: keep /i/* (public invoice links) reachable without auth if clients need them:
+# @public path /i/* /api/public/*
+# handle @public { reverse_proxy pocket-invoicing:8080 }

@@ -1,0 +1,8 @@
+# Variant with headless Chromium for HTML-template PDF rendering (PDF_ENGINE=chromium).
+# ~250 MB larger than the default image. Only needed if you customise the HTML template.
+ARG BASE=ghcr.io/abjelosevic88/pocket-homelab-invoicing:latest
+FROM ${BASE}
+USER root
+RUN apk add --no-cache chromium font-dejavu font-liberation
+ENV PDF_ENGINE=chromium CHROMIUM_PATH=/usr/bin/chromium-browser
+USER app
