@@ -116,6 +116,135 @@ func (s *Server) handleReportTime(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"from": from, "to": to, "rows": list})
 }
 
+// handleReportYears lists years that have invoices (for filters).
+func (s *Server) handleReportYears(w http.ResponseWriter, r *http.Request) {
+	years, err := s.store.RevenueByYear(r.Context())
+	if err != nil {
+		s.fail(w, err, "years")
+		return
+	}
+	out := []string{}
+	for _, y := range years {
+		out = append(out, y.Year)
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+// handleReportIncomeTax estimates the owner's income tax for a year.
+func (s *Server) handleReportIncomeTax(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	st, err := s.store.GetSettings(ctx)
+	if err != nil {
+		s.fail(w, err, "settings")
+		return
+	}
+	year := qInt(r, "year", time.Now().Year())
+	months, err := s.store.RevenueByMonth(ctx, fmt.Sprintf("%d-01-01", year), fmt.Sprintf("%d-12-31", year))
+	if err != nil {
+		s.fail(w, err, "revenue")
+		return
+	}
+	byMonth := map[string]store.MonthlyRevenue{}
+	for _, m := range months {
+		byMonth[m.Month] = m
+	}
+	rate := st.IncomeTaxRate / 100
+	now := time.Now()
+	type row struct {
+		Month         string  `json:"month"`
+		Income        float64 `json:"income"`
+		Expenses      float64 `json:"expenses"`
+		Taxable       float64 `json:"taxable"`
+		Tax           float64 `json:"tax"`
+		Contributions float64 `json:"contributions"`
+		Net           float64 `json:"net"`
+		Elapsed       bool    `json:"elapsed"`
+	}
+	rows := make([]row, 0, 12)
+	var tot row
+	for m := 1; m <= 12; m++ {
+		key := fmt.Sprintf("%d-%02d", year, m)
+		mr := byMonth[key]
+		income := mr.Paid
+		if !st.IncomeTaxByPaymentDate {
+			income = mr.Invoiced
+		}
+		taxable := income
+		if st.IncomeTaxBasis == "profit" {
+			taxable -= mr.Expenses
+		}
+		if taxable < 0 {
+			taxable = 0
+		}
+		elapsed := year < now.Year() || (year == now.Year() && m <= int(now.Month()))
+		contrib := 0.0
+		if elapsed {
+			contrib = st.ContributionsMonthly
+		}
+		rw := row{Month: key, Income: income, Expenses: mr.Expenses, Taxable: taxable, Tax: taxable * rate, Contributions: contrib, Elapsed: elapsed}
+		rw.Net = income - mr.Expenses - rw.Tax - contrib
+		rows = append(rows, rw)
+		tot.Income += income
+		tot.Expenses += mr.Expenses
+		tot.Taxable += taxable
+		tot.Contributions += contrib
+	}
+	// yearly deduction and minimum apply to the year as a whole
+	yearTaxable := tot.Taxable - st.IncomeTaxDeduction
+	if yearTaxable < 0 {
+		yearTaxable = 0
+	}
+	tot.Taxable = yearTaxable
+	tot.Tax = yearTaxable * rate
+	if st.IncomeTaxMinYearly > 0 && tot.Tax < st.IncomeTaxMinYearly {
+		tot.Tax = st.IncomeTaxMinYearly
+	}
+	tot.Net = tot.Income - tot.Expenses - tot.Tax - tot.Contributions
+	tot.Month = fmt.Sprint(year)
+
+	years, _ := s.store.RevenueByYear(ctx)
+	type ySum struct {
+		Year          string  `json:"year"`
+		Income        float64 `json:"income"`
+		Expenses      float64 `json:"expenses"`
+		Taxable       float64 `json:"taxable"`
+		Tax           float64 `json:"tax"`
+		Contributions float64 `json:"contributions"`
+		Net           float64 `json:"net"`
+	}
+	var ys []ySum
+	for _, y := range years {
+		inc := y.Paid
+		if !st.IncomeTaxByPaymentDate {
+			inc = y.Invoiced
+		}
+		taxable := inc
+		if st.IncomeTaxBasis == "profit" {
+			taxable -= y.Expenses
+		}
+		taxable -= st.IncomeTaxDeduction
+		if taxable < 0 {
+			taxable = 0
+		}
+		tax := taxable * rate
+		if st.IncomeTaxMinYearly > 0 && tax < st.IncomeTaxMinYearly {
+			tax = st.IncomeTaxMinYearly
+		}
+		months := 12.0
+		var yi int
+		fmt.Sscanf(y.Year, "%d", &yi)
+		if yi == now.Year() {
+			months = float64(now.Month())
+		}
+		contrib := st.ContributionsMonthly * months
+		ys = append(ys, ySum{Year: y.Year, Income: inc, Expenses: y.Expenses, Taxable: taxable, Tax: tax, Contributions: contrib, Net: inc - y.Expenses - tax - contrib})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"year": year, "rows": rows, "total": tot, "years": ys,
+		"settings": map[string]any{"rate": st.IncomeTaxRate, "basis": st.IncomeTaxBasis, "by_payment_date": st.IncomeTaxByPaymentDate, "min_yearly": st.IncomeTaxMinYearly, "deduction": st.IncomeTaxDeduction, "contributions_monthly": st.ContributionsMonthly, "label": st.IncomeTaxLabel},
+	})
+}
+
 func f2s(v float64) string { return strconv.FormatFloat(v, 'f', 2, 64) }
 
 // handleExportCSV exports invoices, payments, time or expenses as CSV.

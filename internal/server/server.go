@@ -195,6 +195,8 @@ func (s *Server) Router() http.Handler {
 			r.Get("/reports/tax", s.handleReportTax)
 			r.Get("/reports/currencies", s.handleReportCurrencies)
 			r.Get("/reports/time", s.handleReportTime)
+			r.Get("/reports/income-tax", s.handleReportIncomeTax)
+			r.Get("/reports/years", s.handleReportYears)
 			r.Get("/reports/export.csv", s.handleExportCSV)
 
 			r.Get("/tokens", s.handleListTokens)
