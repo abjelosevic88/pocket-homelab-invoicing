@@ -52,7 +52,7 @@ export default function Layout() {
   return (
     <div className="app">
       <aside className={`sidebar ${open ? 'open' : ''}`} onClick={() => setOpen(false)}>
-        <div className="brand"><span className="logo">₪</span><span>{settings?.company_name || 'Pocket Invoicing'}</span></div>
+        <div className="brand" title={settings?.company_name}><span className="logo">₪</span><span className="brand-name">{settings?.brand_name || settings?.company_name || 'Pocket Invoicing'}</span></div>
         <nav>
           {nav.map((n, i) => 'section' in n && n.section
             ? <div key={i} className="section">{n.section}</div>

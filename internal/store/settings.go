@@ -10,6 +10,7 @@ import (
 // Settings is the application-wide configuration stored in the DB.
 type Settings struct {
 	CompanyName    string `json:"company_name"`
+	BrandName      string `json:"brand_name"` // short name shown in the app sidebar (defaults to company name)
 	CompanyEmail   string `json:"company_email"`
 	CompanyPhone   string `json:"company_phone"`
 	CompanyWebsite string `json:"company_website"`

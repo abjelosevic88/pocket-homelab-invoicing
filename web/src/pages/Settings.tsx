@@ -64,7 +64,8 @@ function Company() {
     <div className="grid cols-2" style={{ gridTemplateColumns: '2fr 1fr' }}>
       <Card title="Business details">
         <div className="form-grid">
-          <Field label="Company / your name" className="full"><input value={s.company_name} onChange={set('company_name')} /></Field>
+          <Field label="Company / your name (printed on invoices)" className="full"><input value={s.company_name} onChange={set('company_name')} /></Field>
+          <Field label="Short name" help="Shown in the app sidebar and browser tab" className="full"><input value={s.brand_name || ''} onChange={set('brand_name')} placeholder={s.company_name} /></Field>
           <Field label="Email"><input value={s.company_email} onChange={set('company_email')} /></Field>
           <Field label="Phone"><input value={s.company_phone} onChange={set('company_phone')} /></Field>
           <Field label="Website"><input value={s.company_website} onChange={set('company_website')} /></Field>
