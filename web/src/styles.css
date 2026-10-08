@@ -203,7 +203,7 @@ table.table tfoot td { font-weight: 600; background: var(--surface-2); }
 .timer-pill { display: inline-flex; align-items: center; gap: 8px; background: var(--success-soft); color: var(--success); padding: 4px 10px 4px 12px; border-radius: 999px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .timer-pill .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--success); animation: blink 1.2s infinite; }
 @keyframes blink { 50% { opacity: .3; } }
-.hbar { display: grid; grid-template-columns: minmax(120px, 1fr) 3fr auto; gap: 6px 12px; align-items: center; font-size: 13px; }
+.hbar { display: grid; grid-template-columns: minmax(200px, 1.6fr) 3fr auto; gap: 6px 12px; align-items: center; font-size: 13px; }
 .hbar .track { height: 10px; background: var(--surface-2); border-radius: 5px; overflow: hidden; }
 .hbar .track > div { height: 100%; background: var(--accent); border-radius: 5px; }
 .hbar .val { font-variant-numeric: tabular-nums; white-space: nowrap; }
