@@ -306,3 +306,120 @@ func (s *Store) Dashboard(ctx context.Context) (DashboardStats, error) {
 	}
 	return d, nil
 }
+
+// YearRevenue is revenue grouped by calendar year (base currency).
+type YearRevenue struct {
+	Year     string  `json:"year"`
+	Invoiced float64 `json:"invoiced"`
+	Paid     float64 `json:"paid"`
+	Expenses float64 `json:"expenses"`
+	Count    int     `json:"count"`
+}
+
+// RevenueByYear aggregates all years.
+func (s *Store) RevenueByYear(ctx context.Context) ([]YearRevenue, error) {
+	years := map[string]*YearRevenue{}
+	get := func(y string) *YearRevenue {
+		if v, ok := years[y]; ok {
+			return v
+		}
+		v := &YearRevenue{Year: y}
+		years[y] = v
+		return v
+	}
+	rows, err := s.DB.QueryContext(ctx, `SELECT substr(issue_date,1,4), SUM(total * exchange_rate), COUNT(1) FROM invoices WHERE status NOT IN ('draft','cancelled') GROUP BY 1`)
+	if err != nil {
+		return nil, err
+	}
+	for rows.Next() {
+		var y string
+		var v float64
+		var n int
+		if err := rows.Scan(&y, &v, &n); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		r := get(y)
+		r.Invoiced, r.Count = v, n
+	}
+	rows.Close()
+	rows, err = s.DB.QueryContext(ctx, `SELECT substr(p.date,1,4), SUM(p.applied_amount * i.exchange_rate) FROM payments p JOIN invoices i ON i.id = p.invoice_id GROUP BY 1`)
+	if err != nil {
+		return nil, err
+	}
+	for rows.Next() {
+		var y string
+		var v float64
+		if err := rows.Scan(&y, &v); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		get(y).Paid = v
+	}
+	rows.Close()
+	rows, err = s.DB.QueryContext(ctx, `SELECT substr(date,1,4), SUM(amount * exchange_rate) FROM expenses GROUP BY 1`)
+	if err != nil {
+		return nil, err
+	}
+	for rows.Next() {
+		var y string
+		var v float64
+		if err := rows.Scan(&y, &v); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		get(y).Expenses = v
+	}
+	rows.Close()
+	out := make([]YearRevenue, 0, len(years))
+	for _, v := range years {
+		out = append(out, *v)
+	}
+	for i := 1; i < len(out); i++ {
+		for j := i; j > 0 && out[j].Year < out[j-1].Year; j-- {
+			out[j], out[j-1] = out[j-1], out[j]
+		}
+	}
+	return out, nil
+}
+
+// Lifetime holds all-time totals.
+type Lifetime struct {
+	PaidTotal      float64            `json:"paid_total"`
+	InvoicedTotal  float64            `json:"invoiced_total"`
+	InvoiceCount   int                `json:"invoice_count"`
+	PaidCount      int                `json:"paid_count"`
+	FirstInvoice   string             `json:"first_invoice"`
+	PaidByCurrency map[string]float64 `json:"paid_by_currency"` // native amounts
+	MonthsActive   int                `json:"months_active"`
+}
+
+// LifetimeStats computes all-time figures.
+func (s *Store) LifetimeStats(ctx context.Context) (Lifetime, error) {
+	var l Lifetime
+	l.PaidByCurrency = map[string]float64{}
+	var first *string
+	if err := s.DB.QueryRowContext(ctx, `SELECT COALESCE(SUM(total * exchange_rate),0), COUNT(1), MIN(issue_date), COUNT(DISTINCT substr(issue_date,1,7)) FROM invoices WHERE status NOT IN ('draft','cancelled')`).Scan(&l.InvoicedTotal, &l.InvoiceCount, &first, &l.MonthsActive); err != nil {
+		return l, err
+	}
+	if first != nil {
+		l.FirstInvoice = *first
+	}
+	if err := s.DB.QueryRowContext(ctx, `SELECT COALESCE(SUM(p.applied_amount * i.exchange_rate),0), COUNT(DISTINCT p.invoice_id) FROM payments p JOIN invoices i ON i.id = p.invoice_id`).Scan(&l.PaidTotal, &l.PaidCount); err != nil {
+		return l, err
+	}
+	rows, err := s.DB.QueryContext(ctx, `SELECT i.currency, SUM(p.applied_amount) FROM payments p JOIN invoices i ON i.id = p.invoice_id GROUP BY i.currency`)
+	if err != nil {
+		return l, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var c string
+		var v float64
+		if err := rows.Scan(&c, &v); err != nil {
+			return l, err
+		}
+		l.PaidByCurrency[c] = v
+	}
+	return l, rows.Err()
+}
