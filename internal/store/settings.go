@@ -52,6 +52,15 @@ type Settings struct {
 	BaseTotalNote            string            `json:"base_total_note"`             // sentence printed under the totals; placeholders {rate} {currency} {currency_name} {base} {total_base}
 	EmailAttachmentMode      string            `json:"email_attachment_mode"`       // generated | uploaded | both
 
+	// Income tax estimate (for the owner's own tax return; not printed on invoices)
+	IncomeTaxRate          float64 `json:"income_tax_rate"`            // percent, e.g. 10
+	IncomeTaxBasis         string  `json:"income_tax_basis"`           // revenue (gross received) | profit (received - expenses)
+	IncomeTaxByPaymentDate bool    `json:"income_tax_by_payment_date"` // cash basis (payments) vs invoice date
+	IncomeTaxMinYearly     float64 `json:"income_tax_min_yearly"`      // minimum yearly tax (e.g. 600 KM for "mali preduzetnik")
+	IncomeTaxDeduction     float64 `json:"income_tax_deduction"`       // yearly allowance subtracted from the base
+	ContributionsMonthly   float64 `json:"contributions_monthly"`      // fixed monthly contributions (doprinosi)
+	IncomeTaxLabel         string  `json:"income_tax_label"`           // e.g. "Porez na dohodak (RS)"
+
 	SMTPHost         string `json:"smtp_host"`
 	SMTPPort         int    `json:"smtp_port"`
 	SMTPUser         string `json:"smtp_user"`

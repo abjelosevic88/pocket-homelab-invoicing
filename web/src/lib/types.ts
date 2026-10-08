@@ -35,6 +35,7 @@ export interface Settings {
   base_currency: string; locale: string; date_format: string; timezone: string; invoice_number_format: string; invoice_next_seq: number; invoice_seq_reset_yearly: boolean; invoice_seq_year: number; default_due_days: number; default_notes: string; default_terms: string; default_footer: string; default_billing_mode: string;
   default_hourly_rate: number; default_daily_rate: number; default_monthly_rate: number; default_tax_rate: number; hours_per_day: number; time_rounding_minutes: number; show_tax_column: boolean; payment_details: string;
   payment_details_by_currency: Record<string, string> | null; number_format: string; custom_fields: CustomFieldDef[] | null; show_base_total: boolean; base_total_note: string; email_attachment_mode: string;
+  income_tax_rate: number; income_tax_basis: string; income_tax_by_payment_date: boolean; income_tax_min_yearly: number; income_tax_deduction: number; contributions_monthly: number; income_tax_label: string;
   smtp_host: string; smtp_port: number; smtp_user: string; smtp_password: string; smtp_from: string; smtp_from_name: string; smtp_tls: string; smtp_bcc: string; email_subject: string; email_body: string; reminder_days: string; reminders_enabled: boolean; setup_complete: boolean;
 }
 export interface DashboardStats { outstanding: number; outstanding_count: number; overdue: number; overdue_count: number; paid_this_month: number; paid_this_year: number; invoiced_this_year: number; draft_count: number; unbilled_minutes: number; unbilled_expenses: number; active_clients: number }

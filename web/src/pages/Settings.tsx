@@ -205,19 +205,42 @@ function Currencies() {
 }
 
 // ---------- Taxes ----------
+function IncomeTaxSettings() {
+  const { s, set, save, busy } = useSettingsForm()
+  if (!s) return <Loading />
+  return (
+    <Card title="Income tax estimate (your own tax, not shown on invoices)">
+      <p className="muted small">Used by Reports → Income tax to estimate what you owe per month and year. Examples for Republika Srpska: regular SP = 10% of income with fixed monthly contributions; "mali preduzetnik" = 2% of gross income with a 600 KM yearly minimum.</p>
+      <div className="form-grid">
+        <Field label="Label"><input value={s.income_tax_label} onChange={set('income_tax_label')} placeholder="Porez na dohodak" /></Field>
+        <Field label="Rate (%)"><input type="number" step="0.01" value={s.income_tax_rate} onChange={set('income_tax_rate')} /></Field>
+        <Field label="Tax base"><select value={s.income_tax_basis} onChange={set('income_tax_basis')}><option value="revenue">Gross income (received)</option><option value="profit">Income minus expenses</option></select></Field>
+        <Field label="Count income by"><select value={s.income_tax_by_payment_date ? 'payment' : 'invoice'} onChange={e => set('income_tax_by_payment_date')({ target: { type: 'checkbox', checked: e.target.value === 'payment' } } as unknown as React.ChangeEvent<HTMLInputElement>)}><option value="payment">Payment date (cash basis)</option><option value="invoice">Invoice date</option></select></Field>
+        <Field label="Fixed monthly contributions" help="Doprinosi, in base currency; shown as a separate line"><input type="number" step="0.01" value={s.contributions_monthly} onChange={set('contributions_monthly')} /></Field>
+        <Field label="Minimum yearly tax" help="0 = none"><input type="number" step="0.01" value={s.income_tax_min_yearly} onChange={set('income_tax_min_yearly')} /></Field>
+        <Field label="Yearly deduction / allowance" help="Subtracted from the yearly base before applying the rate"><input type="number" step="0.01" value={s.income_tax_deduction} onChange={set('income_tax_deduction')} /></Field>
+      </div>
+      <SaveBar onSave={save} busy={busy} />
+    </Card>
+  )
+}
+
 function Taxes() {
   const toast = useToast()
   const { data, reload } = useAsync(() => api.get<TaxRate[]>(`${V1}/tax-rates`))
   const [form, setForm] = useState({ name: '', rate: '', is_default: false })
   const add = async () => { try { await api.post(`${V1}/tax-rates`, { name: form.name, rate: parseFloat(form.rate) || 0, is_default: form.is_default }); setForm({ name: '', rate: '', is_default: false }); reload(); toast('Tax rate added', 'success') } catch (e) { toast((e as Error).message, 'error') } }
   return (
-    <Card title="Tax rates" flush>
+    <div className="grid">
+    <Card title="Tax rates (applied to invoice lines)" flush>
       <table className="table"><thead><tr><th>Name</th><th className="num">Rate</th><th>Default</th><th></th></tr></thead>
         <tbody>{data?.map(t => <tr key={t.id}><td>{t.name}</td><td className="num">{t.rate}%</td><td>{t.is_default ? <span className="badge ok">default</span> : <button className="link-btn small" onClick={async () => { await api.put(`${V1}/tax-rates/${t.id}`, { ...t, is_default: true }); reload() }}>make default</button>}</td><td className="actions"><button className="btn ghost sm" onClick={async () => { await api.del(`${V1}/tax-rates/${t.id}`); reload() }}>✕</button></td></tr>)}
           <tr><td><input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="VAT 20%" /></td><td><input value={form.rate} onChange={e => setForm({ ...form, rate: e.target.value })} placeholder="20" style={{ width: 90 }} /></td><td><label className="check"><input type="checkbox" checked={form.is_default} onChange={e => setForm({ ...form, is_default: e.target.checked })} /> default</label></td><td className="actions"><button className="btn sm primary" onClick={add} disabled={!form.rate}>Add</button></td></tr>
         </tbody></table>
       {!data?.length && <div className="callout" style={{ margin: 12 }}>Tip: add a 0% rate named "Reverse charge" for cross-border B2B invoices.</div>}
     </Card>
+    <IncomeTaxSettings />
+    </div>
   )
 }
 
