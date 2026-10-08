@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/abjelosevic88/pocket-homelab-invoicing/internal/docx"
 	"github.com/abjelosevic88/pocket-homelab-invoicing/internal/mailer"
 	"github.com/abjelosevic88/pocket-homelab-invoicing/internal/money"
 	"github.com/abjelosevic88/pocket-homelab-invoicing/internal/pdf"
@@ -394,12 +395,122 @@ func (s *Server) handleListTemplates(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err, "list templates")
 		return
 	}
+	for i := range list {
+		decorateTemplate(&list[i])
+	}
 	writeJSON(w, http.StatusOK, list)
 }
 
 func (s *Server) handleDefaultTemplateHTML(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	_, _ = w.Write([]byte(pdf.DefaultTemplateHTML()))
+}
+
+func (s *Server) docxTemplatePath(t *store.InvoiceTemplate) string {
+	return filepath.Join(s.cfg.DataDir, "templates", filepath.Base(t.DocxPath))
+}
+
+func (s *Server) handlePlaceholders(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, pdf.DataKeys)
+}
+
+// handleUploadDocxTemplate creates (POST /templates/docx) or replaces (POST /templates/{id}/docx)
+// a Word template. Multipart fields: file (.docx), name (optional), is_default (optional).
+func (s *Server) handleUploadDocxTemplate(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	if err := r.ParseMultipartForm(20 << 20); err != nil {
+		writeErr(w, http.StatusBadRequest, "invalid upload")
+		return
+	}
+	f, hdr, err := r.FormFile("file")
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, "missing 'file' (.docx)")
+		return
+	}
+	defer f.Close()
+	if !strings.EqualFold(filepath.Ext(hdr.Filename), ".docx") {
+		writeErr(w, http.StatusBadRequest, "only .docx files are supported (save .doc/.odt as Word Document first)")
+		return
+	}
+	data, err := io.ReadAll(io.LimitReader(f, 20<<20))
+	if err != nil {
+		s.fail(w, err, "read upload")
+		return
+	}
+	placeholders, err := docx.Placeholders(data)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	// smoke-test the template against sample data so broken loops surface now
+	if _, err := docx.Fill(data, pdf.Build(sampleBuildInput()).Data); err != nil {
+		writeErr(w, http.StatusBadRequest, "template cannot be filled: "+err.Error())
+		return
+	}
+	var t *store.InvoiceTemplate
+	if id := idParam(r, "id"); id > 0 {
+		t, err = s.store.GetTemplate(ctx, id)
+		if err != nil {
+			s.fail(w, err, "get template")
+			return
+		}
+		if t.DocxPath != "" {
+			_ = os.Remove(s.docxTemplatePath(t))
+		}
+	} else {
+		t = &store.InvoiceTemplate{Name: strings.TrimSuffix(hdr.Filename, filepath.Ext(hdr.Filename)), Layout: "classic", AccentColor: "#2563eb", Labels: map[string]string{}}
+	}
+	if n := strings.TrimSpace(r.FormValue("name")); n != "" {
+		t.Name = n
+	}
+	if v := r.FormValue("is_default"); v == "1" || v == "true" {
+		t.IsDefault = true
+	}
+	dir := filepath.Join(s.cfg.DataDir, "templates")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		s.fail(w, err, "mkdir templates")
+		return
+	}
+	stored := store.RandomToken(8) + "__" + safeFilename(filepath.Base(hdr.Filename))
+	if err := os.WriteFile(filepath.Join(dir, stored), data, 0o644); err != nil {
+		s.fail(w, err, "save template")
+		return
+	}
+	t.Kind = "docx"
+	t.DocxPath = stored
+	if err := s.store.SaveTemplate(ctx, t); err != nil {
+		s.fail(w, err, "save template")
+		return
+	}
+	saved, _ := s.store.GetTemplate(ctx, t.ID)
+	writeJSON(w, http.StatusCreated, map[string]any{"template": decorateTemplate(saved), "placeholders": placeholders})
+}
+
+func decorateTemplate(t *store.InvoiceTemplate) *store.InvoiceTemplate {
+	if t != nil && t.DocxPath != "" {
+		if i := strings.Index(t.DocxPath, "__"); i >= 0 {
+			t.DocxName = t.DocxPath[i+2:]
+		} else {
+			t.DocxName = t.DocxPath
+		}
+	}
+	return t
+}
+
+func (s *Server) handleDownloadDocxTemplate(w http.ResponseWriter, r *http.Request) {
+	t, err := s.store.GetTemplate(r.Context(), idParam(r, "id"))
+	if err != nil {
+		s.fail(w, err, "get template")
+		return
+	}
+	if t.DocxPath == "" {
+		writeErr(w, http.StatusNotFound, "no Word file on this template")
+		return
+	}
+	decorateTemplate(t)
+	w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, t.DocxName))
+	http.ServeFile(w, r, s.docxTemplatePath(t))
 }
 
 func (s *Server) handleSaveTemplate(w http.ResponseWriter, r *http.Request) {
@@ -409,6 +520,11 @@ func (s *Server) handleSaveTemplate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	t.ID = idParam(r, "id")
+	if t.ID > 0 {
+		if existing, err := s.store.GetTemplate(r.Context(), t.ID); err == nil {
+			t.Kind, t.DocxPath = existing.Kind, existing.DocxPath // file is managed by the upload endpoint
+		}
+	}
 	if strings.TrimSpace(t.Name) == "" {
 		writeErr(w, http.StatusBadRequest, "name is required")
 		return
@@ -437,6 +553,9 @@ func (s *Server) handleSaveTemplate(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleDeleteTemplate(w http.ResponseWriter, r *http.Request) {
+	if t, err := s.store.GetTemplate(r.Context(), idParam(r, "id")); err == nil && t.DocxPath != "" && !t.IsDefault {
+		_ = os.Remove(s.docxTemplatePath(t))
+	}
 	if err := s.store.DeleteTemplate(r.Context(), idParam(r, "id")); err != nil {
 		s.fail(w, err, "delete template")
 		return
@@ -521,9 +640,19 @@ func (s *Server) handlePreviewTemplatePDF(w http.ResponseWriter, r *http.Request
 		s.fail(w, err, "preview")
 		return
 	}
-	b, err := s.pdf.Render(r.Context(), doc, tpl.HTML, logo, logoType)
+	var b []byte
+	if tpl.Kind == "docx" {
+		filled, ferr := s.fillDocx(tpl, doc)
+		if ferr != nil {
+			writeErr(w, http.StatusBadRequest, ferr.Error())
+			return
+		}
+		b, err = s.docx.Convert(r.Context(), filled)
+	} else {
+		b, err = s.pdf.Render(r.Context(), doc, tpl.HTML, logo, logoType)
+	}
 	if err != nil {
-		s.fail(w, err, "render")
+		writeErr(w, http.StatusBadGateway, err.Error())
 		return
 	}
 	w.Header().Set("Content-Type", "application/pdf")

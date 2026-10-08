@@ -4,12 +4,12 @@ export interface ExchangeRate { base: string; quote: string; rate: number; sourc
 export interface TaxRate { id: number; name: string; rate: number; is_default: boolean }
 export interface Client {
   id: number; name: string; contact_name: string; email: string; phone: string; address1: string; address2: string; city: string; state: string; postal_code: string; country: string; tax_id: string; website: string;
-  currency: string; billing_mode: string; default_rate: number; payment_terms_days: number; notes: string; archived: boolean; created_at: string; updated_at: string;
+  currency: string; billing_mode: string; default_rate: number; payment_terms_days: number; template_id: number | null; notes: string; archived: boolean; created_at: string; updated_at: string;
   invoice_count?: number; outstanding: number; total_billed: number;
 }
 export interface Product { id: number; name: string; description: string; unit: string; unit_price: number; currency: string; tax_rate: number; archived: boolean }
 export interface TemplateOptions { hide_rate: boolean; hide_unit: boolean; show_quantity_total: boolean; signature_label: string; hide_logo: boolean }
-export interface InvoiceTemplate { id: number; name: string; layout: string; accent_color: string; labels: Record<string, string>; options: TemplateOptions; html: string; is_default: boolean }
+export interface InvoiceTemplate { id: number; name: string; layout: string; accent_color: string; labels: Record<string, string>; options: TemplateOptions; html: string; is_default: boolean; kind: 'design' | 'docx'; docx_path: string; docx_name: string }
 export interface Attachment { id: number; invoice_id: number; filename: string; content_type: string; size: number; created_at: string }
 export interface CustomFieldDef { key: string; label: string; show_on_pdf: boolean }
 export interface InvoiceItem { id?: number; description: string; unit: string; quantity: number; unit_price: number; tax_rate: number; discount: number; line_total?: number }

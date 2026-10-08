@@ -21,6 +21,7 @@ import (
 
 	"github.com/abjelosevic88/pocket-homelab-invoicing/internal/config"
 	"github.com/abjelosevic88/pocket-homelab-invoicing/internal/currency"
+	"github.com/abjelosevic88/pocket-homelab-invoicing/internal/docx"
 	"github.com/abjelosevic88/pocket-homelab-invoicing/internal/pdf"
 	"github.com/abjelosevic88/pocket-homelab-invoicing/internal/store"
 	"github.com/abjelosevic88/pocket-homelab-invoicing/internal/webhook"
@@ -35,6 +36,7 @@ type Server struct {
 	store    *store.Store
 	log      *slog.Logger
 	pdf      pdf.Engine
+	docx     docx.Converter
 	rates    currency.Provider
 	hooks    *webhook.Dispatcher
 	webFS    fs.FS
@@ -51,6 +53,7 @@ func New(cfg *config.Config, st *store.Store, log *slog.Logger, webFS fs.FS) *Se
 		store:   st,
 		log:     log,
 		pdf:     pdf.NewEngine(cfg.PDFEngine, cfg.ChromiumPath, cfg.GotenbergURL),
+		docx:    docx.NewConverter(cfg.DocxConverter, cfg.GotenbergURL, cfg.LibreOfficePath),
 		rates:   currency.New(cfg.ExchangeRateProvider),
 		hooks:   webhook.New(st, log),
 		webFS:   webFS,
@@ -127,6 +130,10 @@ func (s *Server) Router() http.Handler {
 
 			r.Get("/templates", s.handleListTemplates)
 			r.Get("/templates/default-html", s.handleDefaultTemplateHTML)
+			r.Get("/templates/placeholders", s.handlePlaceholders)
+			r.Post("/templates/docx", s.handleUploadDocxTemplate)
+			r.Post("/templates/{id}/docx", s.handleUploadDocxTemplate)
+			r.Get("/templates/{id}/docx", s.handleDownloadDocxTemplate)
 			r.Post("/templates", s.handleSaveTemplate)
 			r.Put("/templates/{id}", s.handleSaveTemplate)
 			r.Delete("/templates/{id}", s.handleDeleteTemplate)
@@ -151,6 +158,7 @@ func (s *Server) Router() http.Handler {
 			r.Post("/invoices/{id}/duplicate", s.handleDuplicateInvoice)
 			r.Get("/invoices/{id}/pdf", s.handleInvoicePDF)
 			r.Get("/invoices/{id}/html", s.handleInvoiceHTML)
+			r.Get("/invoices/{id}/docx", s.handleInvoiceDocx)
 			r.Get("/invoices/{id}/emails", s.handleInvoiceEmails)
 			r.Get("/invoices/{id}/attachments", s.handleListAttachments)
 			r.Post("/invoices/{id}/attachments", s.handleUploadAttachment)

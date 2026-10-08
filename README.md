@@ -25,7 +25,7 @@ Pocket Invoicing is an Invoice-Ninja-style app trimmed down to what a one-person
 | **Time tracking** | Start/stop timer, manual entries, rounding (e.g. 15 min), bill unbilled time as hours *or* days in one click, grouped per entry / day / project / total. |
 | **Recurring invoices** | Weekly → yearly schedules, "every N" intervals, end date or max occurrences, `{month}` / `{period}` placeholders, optional auto-send. Missed runs catch up after downtime. |
 | **Multi-currency** | Invoice each client in its own currency. Rates from the ECB (free, no key) or entered manually. Payments can arrive in a third currency. Reports convert everything to your base currency at the rate locked on each invoice. 56 currencies seeded, add your own (incl. crypto). |
-| **PDF & templates** | Three built-in layouts (Classic, Modern, Minimal), accent colour, logo, per-template label overrides for localisation (RECHNUNG / FAKTURA / …), optional custom HTML template. Pure-Go PDF engine by default; Chromium or Gotenberg optional. |
+| **PDF & templates** | Three built-in layouts (Classic, Modern, Minimal), accent colour, logo, per-template label overrides for localisation (RECHNUNG / FAKTURA / …), optional custom HTML template. **Word templates:** upload any `.docx` with `{{placeholders}}`, keep several, assign per client, converted by Gotenberg. Pure-Go PDF engine by default. |
 | **Payments** | Partial payments, multiple methods, references. Status flow draft → sent → viewed → partial → paid, with automatic overdue marking. |
 | **Client portal link** | Every invoice has a share link (`/i/<token>`) with web view, PDF download and view tracking. No client accounts needed. |
 | **Email** | SMTP with PDF attachment, test button, BCC yourself, automatic payment reminders (e.g. 3, 7, 14 days after due). |
@@ -124,7 +124,7 @@ Details and examples: [docs/billing-modes.md](docs/billing-modes.md).
 - **Chromium / Gotenberg engines:** render the customisable HTML template (Go `html/template`). Use `ghcr.io/…:latest-chromium` or `docker compose --profile gotenberg up -d`.
 - Localise labels per template: Settings → Templates → Labels.
 
-See [docs/templates.md](docs/templates.md).
+See [docs/templates.md](docs/templates.md) and, for Word templates, [docs/word-templates.md](docs/word-templates.md) (samples in `docs/templates/`).
 
 ## API & webhooks
 

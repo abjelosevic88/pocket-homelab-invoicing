@@ -85,6 +85,7 @@ type Document struct {
 	CustomFields     []KV   // user-defined fields shown in the meta block
 	SignatureLabel   string // prints a signature line when non-empty
 	ShowRate         bool
+	Data             map[string]any // flat placeholder data for Word templates (see DataKeys)
 
 	LogoPath    string
 	LogoDataURL string
@@ -339,6 +340,76 @@ func Build(in BuildInput) *Document {
 		d.BaseCurrencyNote = r.Replace(note)
 	}
 	return d
+}
+
+// buildData flattens the document into snake_case placeholders for Word templates.
+func buildData(d *Document, in BuildInput) map[string]any {
+	inv, st, c := in.Invoice, in.Settings, in.Client
+	if c == nil {
+		c = &store.Client{}
+	}
+	items := make([]map[string]any, 0, len(d.Lines))
+	for i, l := range d.Lines {
+		it := inv.Items[i]
+		items = append(items, map[string]any{
+			"n": fmt.Sprint(i + 1), "description": l.Description, "unit": l.Unit, "quantity": trimNum(it.Quantity), "quantity_unit": trimNum(it.Quantity) + " " + unitLabel(d, it.Unit, it.Quantity),
+			"unit_price": l.UnitPrice, "discount": l.Discount, "tax_rate": l.TaxRate, "amount": l.Total,
+		})
+	}
+	taxes := make([]map[string]any, 0, len(d.Taxes))
+	for _, t := range d.Taxes {
+		taxes = append(taxes, map[string]any{"label": t.Label, "amount": t.Amount})
+	}
+	customList := make([]map[string]any, 0, len(d.CustomFields))
+	custom := map[string]any{}
+	for _, kv := range d.CustomFields {
+		customList = append(customList, map[string]any{"label": kv.Label, "value": kv.Value})
+	}
+	for _, def := range st.CustomFields {
+		custom[def.Key] = inv.CustomFields[def.Key]
+	}
+	ps, pe := "", ""
+	if inv.PeriodStart != nil {
+		ps = fmtDate(st.DateFormat, *inv.PeriodStart)
+	}
+	if inv.PeriodEnd != nil {
+		pe = fmtDate(st.DateFormat, *inv.PeriodEnd)
+	}
+	return map[string]any{
+		"title": d.Title, "number": d.Number, "status": d.Status, "issue_date": d.IssueDate, "due_date": d.DueDate, "period": d.Period, "period_start": ps, "period_end": pe,
+		"po_number": d.PONumber, "currency": d.Currency, "currency_name": in.Currency.Name, "currency_symbol": strings.TrimSpace(in.Currency.Symbol), "base_currency": st.BaseCurrency, "billing_mode": d.BillingMode,
+		"exchange_rate": strings.Replace(trimNum(inv.ExchangeRate), ".", money.StyleFor(st.NumberFormat).Decimal, 1),
+		"company":       map[string]any{"name": st.CompanyName, "email": st.CompanyEmail, "phone": st.CompanyPhone, "website": st.CompanyWebsite, "address1": st.Address1, "address2": st.Address2, "city": st.City, "state": st.State, "postal_code": st.PostalCode, "country": st.Country, "tax_id": st.TaxID, "address": strings.Join(d.From.Lines, ", ")},
+		"client":        map[string]any{"name": c.Name, "contact": c.ContactName, "email": c.Email, "phone": c.Phone, "address1": c.Address1, "address2": c.Address2, "city": c.City, "state": c.State, "postal_code": c.PostalCode, "country": c.Country, "tax_id": c.TaxID, "website": c.Website, "address": strings.Join(d.To.Lines, ", ")},
+		"items":         items, "taxes": taxes, "custom_fields": customList, "custom": custom,
+		"subtotal": d.Subtotal, "discount_label": d.DiscountLabel, "discount": d.Discount, "tax_total": fmtMoney(in, inv.TaxTotal), "total": d.Total, "amount_paid": d.AmountPaid, "balance": d.Balance,
+		"quantity_total": d.QuantityTotal, "total_in_base": d.BaseTotal, "base_total_label": d.BaseTotalLabel, "base_note": d.BaseCurrencyNote,
+		"notes": d.Notes, "terms": d.Terms, "footer": d.Footer, "payment_details": d.PaymentDetails, "public_url": d.PublicURL, "paid": inv.Status == "paid",
+		"has_discount": d.Discount != "", "has_tax": len(d.Taxes) > 0, "has_payments": d.ShowPaid, "is_foreign_currency": d.BaseTotal != "",
+	}
+}
+
+func fmtMoney(in BuildInput, v float64) string {
+	cur := in.Currency
+	pos := "before"
+	if strings.HasSuffix(cur.Symbol, " ") {
+		pos = "after"
+	}
+	return money.FormatStyle(v, cur.Decimals, strings.TrimSpace(cur.Symbol), pos, money.StyleFor(in.Settings.NumberFormat))
+}
+
+// DataKeys documents the placeholders available to Word templates.
+var DataKeys = []struct{ Key, Description string }{
+	{"number", "Invoice number"}, {"issue_date", "Issue date"}, {"due_date", "Due date"}, {"period", "Service period (start – end)"}, {"period_start", "Service period start"}, {"period_end", "Service period end"},
+	{"po_number", "PO / reference"}, {"currency", "Currency code, e.g. EUR"}, {"currency_name", "Currency name"}, {"currency_symbol", "Currency symbol"}, {"base_currency", "Base currency code"}, {"exchange_rate", "Rate to base currency"}, {"status", "draft / sent / paid …"},
+	{"company.name", "Your company name"}, {"company.address", "Your address on one line"}, {"company.address1 / address2 / city / postal_code / state / country", "Address parts"}, {"company.email / phone / website / tax_id", "Contact details"},
+	{"client.name", "Client name"}, {"client.contact", "Contact person"}, {"client.address", "Client address on one line"}, {"client.address1 / address2 / city / postal_code / state / country", "Address parts"}, {"client.email / phone / tax_id / website", "Client contact details"},
+	{"#items … /items", "Repeat a table row per line item; inside: n, description, unit, quantity, quantity_unit, unit_price, discount, tax_rate, amount"},
+	{"#taxes … /taxes", "Repeat per tax rate; inside: label, amount"}, {"#custom_fields … /custom_fields", "Repeat per custom field; inside: label, value"}, {"custom.<key>", "A custom field by its key, e.g. custom.pfr_broj_racuna"},
+	{"subtotal", "Subtotal"}, {"discount", "Document discount amount (with minus)"}, {"discount_label", "Discount label"}, {"tax_total", "Total tax"}, {"total", "Grand total"}, {"amount_paid", "Amount paid"}, {"balance", "Balance due"}, {"quantity_total", "Summed quantity, e.g. 21 days"},
+	{"total_in_base", "Total converted to base currency"}, {"base_total_label", "e.g. Total in BAM"}, {"base_note", "The configured base-currency sentence"},
+	{"payment_details", "Payment details for this currency"}, {"notes", "Notes"}, {"terms", "Terms"}, {"footer", "Footer"}, {"public_url", "Public link"},
+	{"#paid … /paid", "Section shown only when paid (also: has_discount, has_tax, has_payments, is_foreign_currency, po_number, notes …)"}, {"^paid … /paid", "Inverted section: shown when NOT paid"},
 }
 
 // proseName lower-cases a currency name for use mid-sentence while keeping

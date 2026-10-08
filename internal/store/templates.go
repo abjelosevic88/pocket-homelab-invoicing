@@ -7,13 +7,16 @@ import (
 	"errors"
 )
 
-const templateCols = `id, name, layout, accent_color, labels, options, html, is_default, created_at, updated_at`
+const templateCols = `id, name, layout, accent_color, labels, options, html, is_default, created_at, updated_at, kind, docx_path`
 
 func scanTemplate(row interface{ Scan(...any) error }) (*InvoiceTemplate, error) {
 	var t InvoiceTemplate
 	var labels, options string
-	if err := row.Scan(&t.ID, &t.Name, &t.Layout, &t.AccentColor, &labels, &options, &t.HTML, &t.IsDefault, &t.CreatedAt, &t.UpdatedAt); err != nil {
+	if err := row.Scan(&t.ID, &t.Name, &t.Layout, &t.AccentColor, &labels, &options, &t.HTML, &t.IsDefault, &t.CreatedAt, &t.UpdatedAt, &t.Kind, &t.DocxPath); err != nil {
 		return nil, err
+	}
+	if t.Kind == "" {
+		t.Kind = "design"
 	}
 	t.Labels = map[string]string{}
 	_ = json.Unmarshal([]byte(labels), &t.Labels)
@@ -48,7 +51,7 @@ func (s *Store) GetTemplate(ctx context.Context, id int64) (*InvoiceTemplate, er
 func (s *Store) GetDefaultTemplate(ctx context.Context) (*InvoiceTemplate, error) {
 	t, err := scanTemplate(s.DB.QueryRowContext(ctx, `SELECT `+templateCols+` FROM invoice_templates ORDER BY is_default DESC, id LIMIT 1`))
 	if errors.Is(err, sql.ErrNoRows) {
-		return &InvoiceTemplate{Name: "Classic", Layout: "classic", AccentColor: "#2563eb", Labels: map[string]string{}}, nil
+		return &InvoiceTemplate{Name: "Classic", Layout: "classic", AccentColor: "#2563eb", Labels: map[string]string{}, Kind: "design"}, nil
 	}
 	return t, err
 }
@@ -63,14 +66,20 @@ func (s *Store) SaveTemplate(ctx context.Context, t *InvoiceTemplate) error {
 		}
 	}
 	if t.ID == 0 {
-		res, err := s.DB.ExecContext(ctx, `INSERT INTO invoice_templates (name, layout, accent_color, labels, options, html, is_default) VALUES (?, ?, ?, ?, ?, ?, ?)`, t.Name, t.Layout, t.AccentColor, string(labels), string(options), t.HTML, t.IsDefault)
+		if t.Kind == "" {
+			t.Kind = "design"
+		}
+		res, err := s.DB.ExecContext(ctx, `INSERT INTO invoice_templates (name, layout, accent_color, labels, options, html, is_default, kind, docx_path) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, t.Name, t.Layout, t.AccentColor, string(labels), string(options), t.HTML, t.IsDefault, t.Kind, t.DocxPath)
 		if err != nil {
 			return err
 		}
 		t.ID, _ = res.LastInsertId()
 		return nil
 	}
-	_, err := s.DB.ExecContext(ctx, `UPDATE invoice_templates SET name=?, layout=?, accent_color=?, labels=?, options=?, html=?, is_default=?, updated_at=? WHERE id=?`, t.Name, t.Layout, t.AccentColor, string(labels), string(options), t.HTML, t.IsDefault, Now(), t.ID)
+	if t.Kind == "" {
+		t.Kind = "design"
+	}
+	_, err := s.DB.ExecContext(ctx, `UPDATE invoice_templates SET name=?, layout=?, accent_color=?, labels=?, options=?, html=?, is_default=?, kind=?, docx_path=?, updated_at=? WHERE id=?`, t.Name, t.Layout, t.AccentColor, string(labels), string(options), t.HTML, t.IsDefault, t.Kind, t.DocxPath, Now(), t.ID)
 	return err
 }
 

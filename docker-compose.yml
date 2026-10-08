@@ -15,7 +15,9 @@ services:
       # ADMIN_EMAIL: you@example.com                  # optional: skip the setup wizard
       # ADMIN_PASSWORD: change-me-please
       # AUTH_MODE: proxy                              # behind Authelia/Authentik: trust Remote-User header
-      # PDF_ENGINE: native                            # native | chromium | gotenberg
+      # PDF_ENGINE: native                            # native | chromium | gotenberg (design/HTML templates)
+      # DOCX_CONVERTER: gotenberg                     # Word templates -> PDF (gotenberg | libreoffice | none)
+      GOTENBERG_URL: http://gotenberg:3000
       # EXCHANGE_RATE_PROVIDER: frankfurter           # or "none" for fully offline
       # LOG_LEVEL: info
     volumes:
@@ -26,11 +28,11 @@ services:
       timeout: 5s
       retries: 3
 
-  # Optional: Gotenberg renders the customisable HTML templates to PDF.
-  # Enable with: docker compose --profile gotenberg up -d  (and set PDF_ENGINE=gotenberg on app)
+  # Gotenberg converts Word (.docx) templates and custom HTML templates to PDF.
+  # Not needed if you only use the built-in design templates (native engine) —
+  # remove it to save ~700 MB, or keep it for Word templates.
   gotenberg:
     image: gotenberg/gotenberg:8
     container_name: pocket-invoicing-gotenberg
     restart: unless-stopped
-    profiles: ["gotenberg"]
-    command: ["gotenberg", "--chromium-disable-javascript=true", "--api-timeout=60s"]
+    command: ["gotenberg", "--chromium-disable-javascript=true", "--api-timeout=120s"]

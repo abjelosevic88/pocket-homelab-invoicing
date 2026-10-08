@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/abjelosevic88/pocket-homelab-invoicing/internal/docx"
 	"github.com/abjelosevic88/pocket-homelab-invoicing/internal/mailer"
 	"github.com/abjelosevic88/pocket-homelab-invoicing/internal/money"
 	"github.com/abjelosevic88/pocket-homelab-invoicing/internal/numbering"
@@ -423,6 +424,9 @@ func (s *Server) buildDocument(ctx context.Context, inv *store.Invoice, template
 	if templateID != nil && *templateID > 0 {
 		tpl, _ = s.store.GetTemplate(ctx, *templateID)
 	}
+	if tpl == nil && client != nil && client.TemplateID != nil && *client.TemplateID > 0 {
+		tpl, _ = s.store.GetTemplate(ctx, *client.TemplateID) // per-client default
+	}
 	if tpl == nil {
 		tpl, _ = s.store.GetDefaultTemplate(ctx)
 	}
@@ -445,7 +449,59 @@ func (s *Server) renderPDF(ctx context.Context, inv *store.Invoice) ([]byte, err
 		return nil, err
 	}
 	s.pdfCount.Add(1)
+	if tpl.Kind == "docx" {
+		filled, err := s.fillDocx(tpl, doc)
+		if err != nil {
+			return nil, err
+		}
+		return s.docx.Convert(ctx, filled)
+	}
 	return s.pdf.Render(ctx, doc, tpl.HTML, logo, logoType)
+}
+
+// fillDocx renders a Word template with the document data.
+func (s *Server) fillDocx(tpl *store.InvoiceTemplate, doc *pdf.Document) ([]byte, error) {
+	if tpl.DocxPath == "" {
+		return nil, fmt.Errorf("template %q has no Word file uploaded", tpl.Name)
+	}
+	b, err := os.ReadFile(s.docxTemplatePath(tpl))
+	if err != nil {
+		return nil, fmt.Errorf("read template file: %w", err)
+	}
+	return docx.Fill(b, doc.Data)
+}
+
+func (s *Server) handleInvoiceDocx(w http.ResponseWriter, r *http.Request) {
+	inv, err := s.store.GetInvoice(r.Context(), idParam(r, "id"))
+	if err != nil {
+		s.fail(w, err, "get invoice")
+		return
+	}
+	doc, tpl, _, _, err := s.buildDocument(r.Context(), inv, inv.TemplateID)
+	if err != nil {
+		s.fail(w, err, "build document")
+		return
+	}
+	if tpl.Kind != "docx" {
+		if id := qInt64(r, "template_id"); id > 0 {
+			tpl, err = s.store.GetTemplate(r.Context(), id)
+			if err != nil {
+				s.fail(w, err, "get template")
+				return
+			}
+		} else {
+			writeErr(w, http.StatusBadRequest, "this invoice does not use a Word template; pass ?template_id=<id of a Word template>")
+			return
+		}
+	}
+	filled, err := s.fillDocx(tpl, doc)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s.docx"`, safeFilename(inv.Number)))
+	_, _ = w.Write(filled)
 }
 
 func (s *Server) handleInvoicePDF(w http.ResponseWriter, r *http.Request) {

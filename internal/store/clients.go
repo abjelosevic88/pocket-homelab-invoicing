@@ -5,11 +5,11 @@ import (
 	"strings"
 )
 
-const clientCols = `c.id, c.name, c.contact_name, c.email, c.phone, c.address1, c.address2, c.city, c.state, c.postal_code, c.country, c.tax_id, c.website, c.currency, c.billing_mode, c.default_rate, c.payment_terms_days, c.notes, c.archived, c.created_at, c.updated_at`
+const clientCols = `c.id, c.name, c.contact_name, c.email, c.phone, c.address1, c.address2, c.city, c.state, c.postal_code, c.country, c.tax_id, c.website, c.currency, c.billing_mode, c.default_rate, c.payment_terms_days, c.notes, c.archived, c.created_at, c.updated_at, c.template_id`
 
 func scanClient(row interface{ Scan(...any) error }, withStats bool) (*Client, error) {
 	var c Client
-	dest := []any{&c.ID, &c.Name, &c.ContactName, &c.Email, &c.Phone, &c.Address1, &c.Address2, &c.City, &c.State, &c.PostalCode, &c.Country, &c.TaxID, &c.Website, &c.Currency, &c.BillingMode, &c.DefaultRate, &c.PaymentTermsDays, &c.Notes, &c.Archived, &c.CreatedAt, &c.UpdatedAt}
+	dest := []any{&c.ID, &c.Name, &c.ContactName, &c.Email, &c.Phone, &c.Address1, &c.Address2, &c.City, &c.State, &c.PostalCode, &c.Country, &c.TaxID, &c.Website, &c.Currency, &c.BillingMode, &c.DefaultRate, &c.PaymentTermsDays, &c.Notes, &c.Archived, &c.CreatedAt, &c.UpdatedAt, &c.TemplateID}
 	if withStats {
 		dest = append(dest, &c.InvoiceCount, &c.Outstanding, &c.TotalBilled)
 	}
@@ -63,9 +63,9 @@ func (s *Store) GetClient(ctx context.Context, id int64) (*Client, error) {
 
 // CreateClient inserts a client.
 func (s *Store) CreateClient(ctx context.Context, c *Client) error {
-	res, err := s.DB.ExecContext(ctx, `INSERT INTO clients (name, contact_name, email, phone, address1, address2, city, state, postal_code, country, tax_id, website, currency, billing_mode, default_rate, payment_terms_days, notes, archived)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		c.Name, c.ContactName, c.Email, c.Phone, c.Address1, c.Address2, c.City, c.State, c.PostalCode, c.Country, c.TaxID, c.Website, c.Currency, c.BillingMode, c.DefaultRate, c.PaymentTermsDays, c.Notes, c.Archived)
+	res, err := s.DB.ExecContext(ctx, `INSERT INTO clients (name, contact_name, email, phone, address1, address2, city, state, postal_code, country, tax_id, website, currency, billing_mode, default_rate, payment_terms_days, notes, archived, template_id)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		c.Name, c.ContactName, c.Email, c.Phone, c.Address1, c.Address2, c.City, c.State, c.PostalCode, c.Country, c.TaxID, c.Website, c.Currency, c.BillingMode, c.DefaultRate, c.PaymentTermsDays, c.Notes, c.Archived, c.TemplateID)
 	if err != nil {
 		return err
 	}
@@ -75,8 +75,8 @@ func (s *Store) CreateClient(ctx context.Context, c *Client) error {
 
 // UpdateClient updates a client.
 func (s *Store) UpdateClient(ctx context.Context, c *Client) error {
-	_, err := s.DB.ExecContext(ctx, `UPDATE clients SET name=?, contact_name=?, email=?, phone=?, address1=?, address2=?, city=?, state=?, postal_code=?, country=?, tax_id=?, website=?, currency=?, billing_mode=?, default_rate=?, payment_terms_days=?, notes=?, archived=?, updated_at=? WHERE id=?`,
-		c.Name, c.ContactName, c.Email, c.Phone, c.Address1, c.Address2, c.City, c.State, c.PostalCode, c.Country, c.TaxID, c.Website, c.Currency, c.BillingMode, c.DefaultRate, c.PaymentTermsDays, c.Notes, c.Archived, Now(), c.ID)
+	_, err := s.DB.ExecContext(ctx, `UPDATE clients SET name=?, contact_name=?, email=?, phone=?, address1=?, address2=?, city=?, state=?, postal_code=?, country=?, tax_id=?, website=?, currency=?, billing_mode=?, default_rate=?, payment_terms_days=?, notes=?, archived=?, template_id=?, updated_at=? WHERE id=?`,
+		c.Name, c.ContactName, c.Email, c.Phone, c.Address1, c.Address2, c.City, c.State, c.PostalCode, c.Country, c.TaxID, c.Website, c.Currency, c.BillingMode, c.DefaultRate, c.PaymentTermsDays, c.Notes, c.Archived, c.TemplateID, Now(), c.ID)
 	return err
 }
 

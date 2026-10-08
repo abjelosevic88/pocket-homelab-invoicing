@@ -66,6 +66,7 @@ type Client struct {
 	BillingMode      string  `json:"billing_mode"`
 	DefaultRate      float64 `json:"default_rate"`
 	PaymentTermsDays int     `json:"payment_terms_days"`
+	TemplateID       *int64  `json:"template_id"`
 	Notes            string  `json:"notes"`
 	Archived         bool    `json:"archived"`
 	CreatedAt        string  `json:"created_at"`
@@ -99,6 +100,9 @@ type InvoiceTemplate struct {
 	Labels      map[string]string `json:"labels"`
 	Options     TemplateOptions   `json:"options"`
 	HTML        string            `json:"html"`
+	Kind        string            `json:"kind"`      // design | docx
+	DocxPath    string            `json:"docx_path"` // stored file name for kind == docx
+	DocxName    string            `json:"docx_name"` // original upload name (derived)
 	IsDefault   bool              `json:"is_default"`
 	CreatedAt   string            `json:"created_at"`
 	UpdatedAt   string            `json:"updated_at"`
