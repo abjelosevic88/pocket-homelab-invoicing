@@ -31,7 +31,7 @@ export function RevenueChart({ months, code }: { months: MonthlyRevenue[]; code:
 
 export function HBars({ rows, code }: { rows: { label: string; value: number; sub?: string }[]; code: string }) {
   const max = Math.max(1, ...rows.map(r => r.value))
-  return <div className="hbar">{rows.map(r => <><span key={r.label + 'l'} className="bold" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.label}{r.sub && <span className="muted small"> · {r.sub}</span>}</span><div key={r.label + 't'} className="track"><div style={{ width: `${(r.value / max) * 100}%` }} /></div><span key={r.label + 'v'} className="val">{money(r.value, code)}</span></>)}</div>
+  return <div className="hbar">{rows.map(r => <><span key={r.label + 'l'} style={{ minWidth: 0 }}><div className="bold" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.label}</div>{r.sub && <div className="muted small">{r.sub}</div>}</span><div key={r.label + 't'} className="track"><div style={{ width: `${(r.value / max) * 100}%` }} /></div><span key={r.label + 'v'} className="val">{money(r.value, code)}</span></>)}</div>
 }
 
 export default function Dashboard() {
