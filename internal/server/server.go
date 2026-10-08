@@ -83,6 +83,7 @@ func (s *Server) Router() http.Handler {
 	// Public (unauthenticated) invoice views
 	r.Get("/i/{token}", s.handlePublicInvoice)
 	r.Get("/i/{token}/pdf", s.handlePublicInvoicePDF)
+	r.Get("/i/{token}/files/{aid}", s.handlePublicAttachment)
 	r.Get("/api/public/invoices/{token}", s.handlePublicInvoiceJSON)
 
 	r.Route("/api/v1", func(r chi.Router) {
@@ -151,6 +152,10 @@ func (s *Server) Router() http.Handler {
 			r.Get("/invoices/{id}/pdf", s.handleInvoicePDF)
 			r.Get("/invoices/{id}/html", s.handleInvoiceHTML)
 			r.Get("/invoices/{id}/emails", s.handleInvoiceEmails)
+			r.Get("/invoices/{id}/attachments", s.handleListAttachments)
+			r.Post("/invoices/{id}/attachments", s.handleUploadAttachment)
+			r.Get("/attachments/{aid}", s.handleDownloadAttachment)
+			r.Delete("/attachments/{aid}", s.handleDeleteAttachment)
 
 			r.Get("/payments", s.handleListPayments)
 			r.Post("/payments", s.handleCreatePayment)

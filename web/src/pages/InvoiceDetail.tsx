@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api, V1 } from '../lib/api'
 import { useApp } from '../lib/app-context'
-import { fmtDate, fmtDateTime, money, PAYMENT_METHODS, today } from '../lib/format'
+import { fileSize, fmtDate, fmtDateTime, money, PAYMENT_METHODS, today } from '../lib/format'
 import type { Activity, Invoice, Payment } from '../lib/types'
 import { Badge, Card, Confirm, Field, Loading, Modal, PageHeader, useAsync, useToast } from '../components/ui'
 
@@ -94,6 +94,7 @@ export default function InvoiceDetail() {
               <div style={{ flex: 1 }}>
                 {inv.period_start && <div className="muted small">Service period: {fmtDate(inv.period_start)} – {fmtDate(inv.period_end)}</div>}
                 {inv.po_number && <div className="muted small">PO: {inv.po_number}</div>}
+                {(settings?.custom_fields || []).filter(f => inv.custom_fields?.[f.key]).map(f => <div key={f.key} className="muted small">{f.label}: {inv.custom_fields[f.key]}</div>)}
                 <div className="muted small">Billing mode: {inv.billing_mode}</div>
               </div>
               <div className="totals-box">
@@ -108,6 +109,9 @@ export default function InvoiceDetail() {
             </div>
           </Card>
           {(inv.notes || inv.terms) && <Card><div className="grid cols-2">{inv.notes && <div><div className="muted small bold">NOTES</div><p style={{ whiteSpace: 'pre-wrap' }}>{inv.notes}</p></div>}{inv.terms && <div><div className="muted small bold">TERMS</div><p style={{ whiteSpace: 'pre-wrap' }}>{inv.terms}</p></div>}</div></Card>}
+          <Card title="Attachments" actions={<label className="btn sm">+ Upload<input type="file" multiple style={{ display: 'none' }} onChange={async e => { if (!e.target.files?.length) return; const fd = new FormData(); for (const f of Array.from(e.target.files)) fd.append('file', f); try { await api.post(`${V1}/invoices/${inv.id}/attachments`, fd); toast('Uploaded', 'success'); reload(); reloadAct() } catch (err) { toast((err as Error).message, 'error') } }} /></label>} flush>
+            {!inv.attachments?.length ? <div className="empty muted">No files attached. Upload your own PDF (e.g. a signed or fiscalised version); emails can send it instead of the generated PDF (Settings → Invoicing).</div> : <table className="table"><tbody>{inv.attachments.map(a => <tr key={a.id}><td><a href={`${V1}/attachments/${a.id}`} target="_blank" rel="noreferrer">{a.filename}</a><div className="muted small">{fileSize(a.size)} · {fmtDateTime(a.created_at)}</div></td><td className="actions"><a className="btn ghost sm" href={`${V1}/attachments/${a.id}?download=1`}>↓</a><button className="btn ghost sm" onClick={async () => { if (!confirm(`Remove ${a.filename}?`)) return; await api.del(`${V1}/attachments/${a.id}`); reload() }}>✕</button></td></tr>)}</tbody></table>}
+          </Card>
           <Card title="Payments" actions={['sent', 'viewed', 'partial', 'overdue'].includes(inv.status) ? <button className="btn sm" onClick={() => setModal('payment')}>+ Add</button> : undefined} flush>
             {inv.amount_paid > 0 && <div style={{ padding: '12px 16px 0' }}><div className="progress"><div style={{ width: `${paidPct}%` }} /></div><div className="muted small mt" style={{ marginTop: 6 }}>{paidPct.toFixed(0)}% paid</div></div>}
             {!inv.payments?.length ? <div className="empty muted">No payments recorded.</div> : <table className="table"><thead><tr><th>Date</th><th>Method</th><th>Reference</th><th className="num">Amount</th><th></th></tr></thead>

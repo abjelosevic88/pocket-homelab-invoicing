@@ -97,10 +97,38 @@ type InvoiceTemplate struct {
 	Layout      string            `json:"layout"`
 	AccentColor string            `json:"accent_color"`
 	Labels      map[string]string `json:"labels"`
+	Options     TemplateOptions   `json:"options"`
 	HTML        string            `json:"html"`
 	IsDefault   bool              `json:"is_default"`
 	CreatedAt   string            `json:"created_at"`
 	UpdatedAt   string            `json:"updated_at"`
+}
+
+// TemplateOptions are layout switches that apply to every PDF engine.
+type TemplateOptions struct {
+	HideRate          bool   `json:"hide_rate"`           // hide the unit price column
+	HideUnit          bool   `json:"hide_unit"`           // hide the unit column (quantity shows "21 days")
+	ShowQuantityTotal bool   `json:"show_quantity_total"` // print the summed quantity in the totals row
+	SignatureLabel    string `json:"signature_label"`     // e.g. "Odgovorno lice" — prints a signature line
+	HideLogo          bool   `json:"hide_logo"`
+}
+
+// Attachment is a file stored alongside an invoice (e.g. a signed PDF).
+type Attachment struct {
+	ID          int64  `json:"id"`
+	InvoiceID   int64  `json:"invoice_id"`
+	Filename    string `json:"filename"`
+	StoredName  string `json:"-"`
+	ContentType string `json:"content_type"`
+	Size        int64  `json:"size"`
+	CreatedAt   string `json:"created_at"`
+}
+
+// CustomFieldDef describes a user-defined invoice field (Settings → Invoicing).
+type CustomFieldDef struct {
+	Key       string `json:"key"`
+	Label     string `json:"label"`
+	ShowOnPDF bool   `json:"show_on_pdf"`
 }
 
 // InvoiceItem is a single invoice line.
@@ -152,8 +180,11 @@ type Invoice struct {
 	CreatedAt     string  `json:"created_at"`
 	UpdatedAt     string  `json:"updated_at"`
 
-	Items    []InvoiceItem `json:"items,omitempty"`
-	Payments []Payment     `json:"payments,omitempty"`
+	CustomFields map[string]string `json:"custom_fields"`
+
+	Items       []InvoiceItem `json:"items,omitempty"`
+	Payments    []Payment     `json:"payments,omitempty"`
+	Attachments []Attachment  `json:"attachments,omitempty"`
 }
 
 // Payment records money received against an invoice.

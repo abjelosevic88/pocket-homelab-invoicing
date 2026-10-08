@@ -32,6 +32,7 @@ Pocket Invoicing is an Invoice-Ninja-style app trimmed down to what a one-person
 | **Expenses** | Track costs, re-bill them to clients, see net income. |
 | **Reports** | Revenue by month, by client, aging (outstanding by days overdue), tax summary by rate, currency breakdown, time summary. CSV exports for everything. |
 | **Catalog** | Products / rate cards for one-click line items. Tax rates with a default. |
+| **Local compliance** | Custom invoice fields (fiscal numbers), total in your base currency with a legal sentence, per-currency bank details, European number formats, signature line, attach your own signed PDF. |
 | **Automation** | REST API with personal access tokens, outgoing webhooks (HMAC-signed), Prometheus `/metrics`, `/healthz` + `/readyz`. |
 | **Ops-friendly** | Single static binary, embedded SPA, SQLite with WAL, `VACUUM INTO` backups from the UI/CLI/API, JSON export, structured logs, graceful shutdown, non-root container, dark mode. |
 
@@ -144,6 +145,10 @@ docker compose exec app pocket-invoicing backup -o /data/backups/nightly.db
 ```
 
 Restore = stop the container, replace `data/pocket-invoicing.db`, start. See [docs/backup.md](docs/backup.md).
+
+## Migrating from Invoice Ninja
+
+See [docs/migrating-from-invoice-ninja.md](docs/migrating-from-invoice-ninja.md): two SQL exports plus `scripts/import_invoiceninja.py` bring over clients, invoices, payments and attached documents.
 
 ## Development
 

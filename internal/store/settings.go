@@ -43,7 +43,13 @@ type Settings struct {
 	TimeRoundingMin    int     `json:"time_rounding_minutes"`
 	ShowTaxColumn      bool    `json:"show_tax_column"`
 
-	PaymentDetails string `json:"payment_details"` // bank account, IBAN, PayPal etc. shown on invoice
+	PaymentDetails           string            `json:"payment_details"`             // bank account, IBAN, PayPal etc. shown on invoice
+	PaymentDetailsByCurrency map[string]string `json:"payment_details_by_currency"` // optional per-currency override (e.g. USD IBAN)
+	NumberFormat             string            `json:"number_format"`               // "1,234.56" | "1.234,56" | "1 234,56" | "1'234.56"
+	CustomFields             []CustomFieldDef  `json:"custom_fields"`               // user-defined invoice fields
+	ShowBaseTotal            bool              `json:"show_base_total"`             // print the total converted to the base currency when currencies differ
+	BaseTotalNote            string            `json:"base_total_note"`             // sentence printed under the totals; placeholders {rate} {currency} {currency_name} {base} {total_base}
+	EmailAttachmentMode      string            `json:"email_attachment_mode"`       // generated | uploaded | both
 
 	SMTPHost         string `json:"smtp_host"`
 	SMTPPort         int    `json:"smtp_port"`

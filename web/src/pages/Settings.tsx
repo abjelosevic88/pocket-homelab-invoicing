@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { api, V1 } from '../lib/api'
 import { useApp } from '../lib/app-context'
 import { BILLING_MODES, fmtDateTime, money, UNITS } from '../lib/format'
-import type { APIToken, Currency, ExchangeRate, InvoiceTemplate, Product, Settings as S, TaxRate, User, Webhook } from '../lib/types'
+import type { APIToken, Currency, CustomFieldDef, ExchangeRate, InvoiceTemplate, Product, Settings as S, TaxRate, User, Webhook } from '../lib/types'
 import { Card, Confirm, Empty, Field, Loading, Modal, Tabs, useAsync, useToast } from '../components/ui'
 
 type Tab = 'company' | 'invoicing' | 'currencies' | 'taxes' | 'catalog' | 'templates' | 'email' | 'api' | 'webhooks' | 'users' | 'backup' | 'system'
@@ -57,7 +57,7 @@ function SaveBar({ onSave, busy }: { onSave: () => void; busy: boolean }) { retu
 function Company() {
   const { s, set, save, busy, setS } = useSettingsForm()
   const toast = useToast()
-  const { refresh } = useApp()
+  const { refresh, currencies } = useApp()
   if (!s) return <Loading />
   const upload = async (f: File) => { const fd = new FormData(); fd.append('logo', f); try { await api.post(`${V1}/settings/logo`, fd); await refresh(); toast('Logo uploaded', 'success') } catch (e) { toast((e as Error).message, 'error') } }
   return (
@@ -76,6 +76,7 @@ function Company() {
           <Field label="State / region"><input value={s.state} onChange={set('state')} /></Field>
           <Field label="Country"><input value={s.country} onChange={set('country')} /></Field>
           <Field label="Payment details (printed on every invoice)" className="full" help="Bank name, IBAN/BIC, PayPal, crypto address…"><textarea rows={4} value={s.payment_details} onChange={set('payment_details')} /></Field>
+          {currencies.filter(c => c.enabled).map(c => <Field key={c.code} label={`Payment details for ${c.code} invoices (optional override)`} className="full"><textarea rows={3} value={s.payment_details_by_currency?.[c.code] || ''} onChange={e => setS(x => x ? { ...x, payment_details_by_currency: { ...(x.payment_details_by_currency || {}), [c.code]: e.target.value } } : x)} placeholder={`Leave empty to use the default above`} /></Field>)}
         </div>
         <SaveBar onSave={save} busy={busy} />
       </Card>
@@ -98,8 +99,23 @@ function Company() {
 }
 
 // ---------- Invoicing ----------
+function CustomFieldsEditor({ value, onChange }: { value: CustomFieldDef[]; onChange: (v: CustomFieldDef[]) => void }) {
+  const upd = (i: number, p: Partial<CustomFieldDef>) => onChange(value.map((f, j) => j === i ? { ...f, ...p } : f))
+  return (
+    <div className="grid" style={{ gap: 8 }}>
+      {value.map((f, i) => <div key={i} className="row">
+        <input value={f.label} onChange={e => upd(i, { label: e.target.value })} placeholder="Label (e.g. PFR broj računa)" style={{ width: 260 }} />
+        <input value={f.key} onChange={e => upd(i, { key: e.target.value })} placeholder="key (auto)" className="mono" style={{ width: 160 }} />
+        <label className="check"><input type="checkbox" checked={f.show_on_pdf} onChange={e => upd(i, { show_on_pdf: e.target.checked })} /> show on PDF</label>
+        <button className="btn ghost sm" onClick={() => onChange(value.filter((_, j) => j !== i))}>✕</button>
+      </div>)}
+      <div><button className="btn sm" onClick={() => onChange([...value, { key: '', label: '', show_on_pdf: true }])}>+ Add field</button></div>
+    </div>
+  )
+}
+
 function Invoicing() {
-  const { s, set, save, busy } = useSettingsForm()
+  const { s, set, save, busy, setS } = useSettingsForm()
   const { data: next } = useAsync(() => api.get<{ number: string }>(`${V1}/invoices/next-number`))
   if (!s) return <Loading />
   return (
@@ -121,8 +137,22 @@ function Invoicing() {
           <Field label="Default tax rate (%)"><input type="number" step="0.01" value={s.default_tax_rate} onChange={set('default_tax_rate')} /></Field>
           <Field label="Hours per day" help="Used when billing tracked hours as days"><input type="number" step="0.5" value={s.hours_per_day} onChange={set('hours_per_day')} /></Field>
           <Field label="Round timer to (minutes)" help="1 = no rounding"><input type="number" value={s.time_rounding_minutes} onChange={set('time_rounding_minutes')} /></Field>
+          <Field label="Number format"><select value={s.number_format} onChange={set('number_format')}>{['1,234.56', '1.234,56', '1 234,56', "1'234.56", '1234.56'].map(f => <option key={f} value={f}>{f}</option>)}</select></Field>
+          <Field label="Email attachment" help="What to attach when emailing an invoice"><select value={s.email_attachment_mode} onChange={set('email_attachment_mode')}><option value="generated">Generated PDF</option><option value="uploaded">Uploaded files only (falls back to generated if none)</option><option value="both">Generated PDF + uploaded files</option></select></Field>
           <label className="check full"><input type="checkbox" checked={s.show_tax_column} onChange={set('show_tax_column')} /> Show tax column on invoices</label>
         </div>
+      </Card>
+      <Card title="Base currency total on invoices">
+        <div className="grid" style={{ gap: 12 }}>
+          <label className="check"><input type="checkbox" checked={s.show_base_total} onChange={set('show_base_total')} /> When an invoice is in another currency, also print the total in {s.base_currency}</label>
+          <Field label="Sentence printed under the totals" help="Placeholders: {rate} {currency} {currency_name} {base} {base_name} {total_base} {total}"><textarea rows={3} value={s.base_total_note} onChange={set('base_total_note')} /></Field>
+        </div>
+        <SaveBar onSave={save} busy={busy} />
+      </Card>
+      <Card title="Custom invoice fields" className="full">
+        <p className="muted small">Extra fields per invoice (e.g. fiscal receipt number, local invoice number, project code). They appear in the invoice editor and, if enabled, in the PDF header block.</p>
+        <CustomFieldsEditor value={s.custom_fields || []} onChange={v => setS(x => x ? { ...x, custom_fields: v } : x)} />
+        <SaveBar onSave={save} busy={busy} />
       </Card>
       <Card title="Default text" className="full" >
         <div className="form-grid cols-3">
@@ -235,7 +265,7 @@ function Templates() {
   const previewUrl = sel?.id ? `${V1}/templates/${sel.id}/preview?layout=${sel.layout}&accent=${encodeURIComponent(sel.accent_color)}&k=${previewKey}` : ''
   return (
     <div className="grid" style={{ gridTemplateColumns: '220px 1fr 1fr' }}>
-      <Card title="Templates" actions={<button className="btn sm" onClick={() => setSel({ id: 0, name: 'New template', layout: 'classic', accent_color: '#2563eb', labels: {}, html: '', is_default: false })}>+</button>} flush>
+      <Card title="Templates" actions={<button className="btn sm" onClick={() => setSel({ id: 0, name: 'New template', layout: 'classic', accent_color: '#2563eb', labels: {}, options: { hide_rate: false, hide_unit: false, show_quantity_total: false, signature_label: '', hide_logo: false }, html: '', is_default: false })}>+</button>} flush>
         <table className="table"><tbody>{data.map(t => <tr key={t.id} className="clickable" onClick={() => { setSel(t); setPreviewKey(k => k + 1) }} style={sel?.id === t.id ? { background: 'var(--accent-soft)' } : {}}><td><span className="bold">{t.name}</span>{t.is_default && <span className="badge ok" style={{ marginLeft: 6 }}>default</span>}<div className="muted small">{t.layout}{t.html ? ' · custom HTML' : ''}</div></td></tr>)}</tbody></table>
       </Card>
       {sel && <Card title={sel.id ? `Edit "${sel.name}"` : 'New template'} actions={<div className="row">{sel.id > 0 && !sel.is_default && <button className="btn sm danger" onClick={() => setDel(sel)}>Delete</button>}<button className="btn sm primary" onClick={save}>Save</button></div>}>
@@ -245,6 +275,12 @@ function Templates() {
           <Field label="Layout"><select value={sel.layout} onChange={e => setSel({ ...sel, layout: e.target.value })}><option value="classic">Classic — header left, accent table</option><option value="modern">Modern — full-width coloured header</option><option value="minimal">Minimal — black & white, thin rules</option></select></Field>
           <Field label="Accent colour"><div className="row"><input type="color" value={sel.accent_color} onChange={e => setSel({ ...sel, accent_color: e.target.value })} /><input value={sel.accent_color} onChange={e => setSel({ ...sel, accent_color: e.target.value })} style={{ width: 120 }} /></div></Field>
           <label className="check"><input type="checkbox" checked={sel.is_default} onChange={e => setSel({ ...sel, is_default: e.target.checked })} /> Use as default template</label>
+          <hr />
+          <label className="check"><input type="checkbox" checked={!!sel.options?.hide_rate} onChange={e => setSel({ ...sel, options: { ...sel.options, hide_rate: e.target.checked } })} /> Hide the rate (unit price) column</label>
+          <label className="check"><input type="checkbox" checked={!!sel.options?.hide_unit} onChange={e => setSel({ ...sel, options: { ...sel.options, hide_unit: e.target.checked } })} /> Hide the unit column (quantity shows as "21 days")</label>
+          <label className="check"><input type="checkbox" checked={!!sel.options?.show_quantity_total} onChange={e => setSel({ ...sel, options: { ...sel.options, show_quantity_total: e.target.checked } })} /> Show summed quantity in totals (e.g. "100 hours")</label>
+          <label className="check"><input type="checkbox" checked={!!sel.options?.hide_logo} onChange={e => setSel({ ...sel, options: { ...sel.options, hide_logo: e.target.checked } })} /> Hide logo</label>
+          <Field label="Signature line label" help="Leave empty for none, e.g. 'Odgovorno lice' or 'Authorised signature'"><input value={sel.options?.signature_label || ''} onChange={e => setSel({ ...sel, options: { ...sel.options, signature_label: e.target.value } })} /></Field>
           <p className="muted small">Design settings apply to all PDF engines. Save to refresh the preview.</p>
         </div>}
         {tab === 'labels' && <div>

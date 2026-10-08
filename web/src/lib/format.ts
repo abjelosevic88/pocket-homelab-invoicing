@@ -5,11 +5,23 @@ export function registerCurrencies(list: Currency[]) {
   for (const c of list) currencyCache.set(c.code, c)
 }
 
+const LOCALE_FOR_FORMAT: Record<string, { locale: string; grouping: boolean }> = {
+  '1,234.56': { locale: 'en-US', grouping: true },
+  '1.234,56': { locale: 'de-DE', grouping: true },
+  '1 234,56': { locale: 'fr-FR', grouping: true },
+  "1'234.56": { locale: 'de-CH', grouping: true },
+  '1234.56': { locale: 'en-US', grouping: false },
+}
+let numberStyle = LOCALE_FOR_FORMAT['1,234.56']
+export function registerNumberFormat(fmt: string | undefined) {
+  numberStyle = LOCALE_FOR_FORMAT[fmt || ''] || LOCALE_FOR_FORMAT['1,234.56']
+}
+
 export function money(amount: number | undefined | null, code: string, opts: { code?: boolean } = {}): string {
   const v = amount ?? 0
   const c = currencyCache.get(code)
   const decimals = c?.decimals ?? 2
-  const num = new Intl.NumberFormat(undefined, { minimumFractionDigits: decimals, maximumFractionDigits: decimals }).format(Math.abs(v))
+  const num = new Intl.NumberFormat(numberStyle.locale, { minimumFractionDigits: decimals, maximumFractionDigits: decimals, useGrouping: numberStyle.grouping }).format(Math.abs(v))
   const sign = v < 0 ? '-' : ''
   if (!c || opts.code) return `${sign}${num} ${code}`
   const sym = c.symbol
@@ -53,7 +65,13 @@ export function hoursDecimal(minutes: number): string {
 }
 
 export function num(v: number, max = 2): string {
-  return new Intl.NumberFormat(undefined, { maximumFractionDigits: max }).format(v)
+  return new Intl.NumberFormat(numberStyle.locale, { maximumFractionDigits: max, useGrouping: numberStyle.grouping }).format(v)
+}
+
+export function fileSize(n: number): string {
+  if (n < 1024) return `${n} B`
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`
+  return `${(n / 1024 / 1024).toFixed(1)} MB`
 }
 
 export function statusLabel(s: string): string {

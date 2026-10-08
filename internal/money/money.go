@@ -45,9 +45,37 @@ func Convert(amount, rate float64, decimals int) float64 {
 	return Mul(amount, rate, decimals)
 }
 
+// Style describes thousands/decimal separators.
+type Style struct{ Thousands, Decimal string }
+
+// Styles maps the settings value to separators.
+var Styles = map[string]Style{
+	"1,234.56": {",", "."},
+	"1.234,56": {".", ","},
+	"1 234,56": {" ", ","},
+	"1'234.56": {"'", "."},
+	"1234.56":  {"", "."},
+}
+
+// DefaultStyle is used when no number format is configured.
+var DefaultStyle = Styles["1,234.56"]
+
+// StyleFor returns the Style for a settings value (falls back to DefaultStyle).
+func StyleFor(name string) Style {
+	if st, ok := Styles[name]; ok {
+		return st
+	}
+	return DefaultStyle
+}
+
 // Format formats an amount with thousands separators and the given decimals,
 // e.g. Format(1234.5, 2, "€", "before") => "€1,234.50".
 func Format(amount float64, decimals int, symbol string, symbolPosition string) string {
+	return FormatStyle(amount, decimals, symbol, symbolPosition, DefaultStyle)
+}
+
+// FormatStyle is Format with explicit separators.
+func FormatStyle(amount float64, decimals int, symbol string, symbolPosition string, style Style) string {
 	neg := amount < 0
 	if neg {
 		amount = -amount
@@ -55,12 +83,12 @@ func Format(amount float64, decimals int, symbol string, symbolPosition string) 
 	s := decimal.NewFromFloat(amount).StringFixed(int32(decimals))
 	intPart, frac := s, ""
 	if i := strings.IndexByte(s, '.'); i >= 0 {
-		intPart, frac = s[:i], s[i:]
+		intPart, frac = s[:i], style.Decimal+s[i+1:]
 	}
 	var b strings.Builder
 	for i, r := range intPart {
 		if i > 0 && (len(intPart)-i)%3 == 0 {
-			b.WriteByte(',')
+			b.WriteString(style.Thousands)
 		}
 		b.WriteRune(r)
 	}

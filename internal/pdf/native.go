@@ -33,6 +33,20 @@ func parseHex(s string) rgb {
 	return rgb{int(v >> 16), int(v >> 8 & 0xff), int(v & 0xff)}
 }
 
+func firstLabel(d *Document, keys ...string) string {
+	for _, k := range keys {
+		if v, ok := d.Labels[k]; ok && v != "" {
+			return v
+		}
+	}
+	for _, k := range keys {
+		if v := DefaultLabels[k]; v != "" {
+			return v
+		}
+	}
+	return "Total"
+}
+
 // RenderNative renders the document with the pure-Go engine.
 func RenderNative(d *Document, logo []byte, logoType string) ([]byte, error) {
 	p := fpdf.New("P", "mm", "A4", "")
@@ -91,7 +105,7 @@ func RenderNative(d *Document, logo []byte, logoType string) ([]byte, error) {
 		}
 		p.SetFont("DejaVu", "B", 14)
 		p.SetTextColor(dark.r, dark.g, dark.b)
-		p.CellFormat(contentW/2, 7, d.From.Name, "", 1, "L", false, 0, "")
+		p.MultiCell(contentW/2-6, 7, d.From.Name, "", "L", false)
 		p.SetFont("DejaVu", "", 9)
 		p.SetTextColor(grey.r, grey.g, grey.b)
 		for _, l := range d.From.Lines {
@@ -158,6 +172,9 @@ func RenderNative(d *Document, logo []byte, logoType string) ([]byte, error) {
 	if d.PONumber != "" {
 		meta = append(meta, [2]string{d.Label("po_number"), d.PONumber})
 	}
+	for _, kv := range d.CustomFields {
+		meta = append(meta, [2]string{kv.Label, kv.Value})
+	}
 	meta = append(meta, [2]string{d.Label("balance_due"), d.Balance})
 	for i, kv := range meta {
 		p.SetX(left + contentW/2)
@@ -192,15 +209,22 @@ func RenderNative(d *Document, logo []byte, logoType string) ([]byte, error) {
 			align string
 		}{"unit", 18, "L"})
 	}
+	qtyW := 16.0
+	if !d.ShowUnit {
+		qtyW = 26
+	}
 	cols = append(cols, struct {
 		key   string
 		w     float64
 		align string
-	}{"quantity", 16, "R"}, struct {
-		key   string
-		w     float64
-		align string
-	}{"unit_price", 28, "R"})
+	}{"quantity", qtyW, "R"})
+	if d.ShowRate {
+		cols = append(cols, struct {
+			key   string
+			w     float64
+			align string
+		}{"unit_price", 28, "R"})
+	}
 	if d.ShowDiscount {
 		cols = append(cols, struct {
 			key   string
@@ -307,6 +331,9 @@ func RenderNative(d *Document, logo []byte, logoType string) ([]byte, error) {
 		p.SetTextColor(dark.r, dark.g, dark.b)
 		p.CellFormat(totalsW/2, 6, value, "", 1, "R", false, 0, "")
 	}
+	if d.QuantityTotal != "" {
+		row(firstLabel(d, "quantity_total", "quantity"), d.QuantityTotal, false, false)
+	}
 	row(d.Label("subtotal"), d.Subtotal, false, false)
 	if d.Discount != "" {
 		row(d.DiscountLabel, d.Discount, false, false)
@@ -319,11 +346,8 @@ func RenderNative(d *Document, logo []byte, logoType string) ([]byte, error) {
 		row(d.Label("amount_paid"), "-"+d.AmountPaid, false, false)
 	}
 	row(d.Label("balance_due"), d.Balance, true, d.Layout != "minimal")
-	if d.BaseCurrencyNote != "" {
-		p.SetX(tx)
-		p.SetFont("DejaVu", "", 7.5)
-		p.SetTextColor(grey.r, grey.g, grey.b)
-		p.CellFormat(totalsW, 5, d.BaseCurrencyNote, "", 1, "R", false, 0, "")
+	if d.BaseTotal != "" {
+		row(d.BaseTotalLabel, d.BaseTotal, true, false)
 	}
 	if d.Status == "paid" {
 		afterTotals := p.GetY()
@@ -358,9 +382,29 @@ func RenderNative(d *Document, logo []byte, logoType string) ([]byte, error) {
 		p.MultiCell(contentW, 4.5, body, "", "L", false)
 		p.Ln(3)
 	}
+	if d.BaseCurrencyNote != "" {
+		p.SetFont("DejaVu", "", 9)
+		p.SetTextColor(dark.r, dark.g, dark.b)
+		p.MultiCell(contentW, 4.5, d.BaseCurrencyNote, "", "L", false)
+		p.Ln(4)
+	}
 	section(d.Label("payment_details"), d.PaymentDetails)
 	section(d.Label("notes"), d.Notes)
 	section(d.Label("terms"), d.Terms)
+	if d.SignatureLabel != "" {
+		if p.GetY()+16 > 297-28 {
+			p.AddPage()
+		}
+		p.Ln(6)
+		x := left + contentW - 60
+		y := p.GetY()
+		p.SetDrawColor(dark.r, dark.g, dark.b)
+		p.Line(x, y, x+60, y)
+		p.SetXY(x, y+1)
+		p.SetFont("DejaVu", "", 9)
+		p.SetTextColor(grey.r, grey.g, grey.b)
+		p.CellFormat(60, 5, d.SignatureLabel, "", 1, "C", false, 0, "")
+	}
 
 	var buf bytes.Buffer
 	if err := p.Output(&buf); err != nil {
