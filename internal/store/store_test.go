@@ -120,6 +120,9 @@ func TestTemplatesAndSettings(t *testing.T) {
 		t.Fatal(err)
 	}
 	st2, _ := s.GetSettings(ctx)
+	if st2.IncomeTaxRate != 10 || st2.NumberFormat == "" || st2.EmailAttachmentMode != "generated" || !st2.IncomeTaxByPaymentDate {
+		t.Fatalf("defaults missing: %+v", st2)
+	}
 	if st2.CompanyName != "X" || st2.InvoiceNumberFmt == "" {
 		t.Fatalf("%+v", st2)
 	}
