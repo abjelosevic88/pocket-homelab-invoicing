@@ -34,7 +34,7 @@ def cell(content, width, align=None, shade=None, borders=True, bold=False, size=
     if shade: tcpr += f'<w:shd w:val="clear" w:color="auto" w:fill="{shade}"/>'
     if not borders: tcpr += '<w:tcBorders><w:top w:val="nil"/><w:left w:val="nil"/><w:bottom w:val="nil"/><w:right w:val="nil"/></w:tcBorders>'
     tcpr += '<w:tcMar><w:top w:w="60" w:type="dxa"/><w:left w:w="100" w:type="dxa"/><w:bottom w:w="60" w:type="dxa"/><w:right w:w="100" w:type="dxa"/></w:tcMar>'
-    if isinstance(content, str):
+    if isinstance(content, str) and not content.lstrip().startswith("<w:p"):
         content = para(run(content, bold=bold, size=size), align=align, space_after=0)
     return f"<w:tc><w:tcPr>{tcpr}</w:tcPr>{content}</w:tc>"
 

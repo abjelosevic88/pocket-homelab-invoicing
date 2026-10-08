@@ -287,10 +287,14 @@ func Build(in BuildInput) *Document {
 	d.ShowTax = d.ShowTax && anyTax
 	d.ShowDiscount = anyDisc
 	d.ShowUnit = true
+	quantityTotal := ""
+	if sameUnit && len(inv.Items) > 0 {
+		quantityTotal = trimNum(qtySum) + " " + unitLabel(d, qtyUnit, qtySum)
+	}
 	if in.Template != nil {
 		d.ShowUnit = !in.Template.Options.HideUnit
-		if in.Template.Options.ShowQuantityTotal && sameUnit && len(inv.Items) > 0 {
-			d.QuantityTotal = trimNum(qtySum) + " " + unitLabel(d, qtyUnit, qtySum)
+		if in.Template.Options.ShowQuantityTotal {
+			d.QuantityTotal = quantityTotal
 		}
 	}
 	if !d.ShowUnit {
@@ -339,6 +343,7 @@ func Build(in BuildInput) *Document {
 		r := strings.NewReplacer("{rate}", rateStr, "{currency}", inv.Currency, "{currency_name}", proseName(cur.Name), "{base}", st.BaseCurrency, "{base_name}", proseName(bc.Name), "{total_base}", totalBase, "{total}", d.Total)
 		d.BaseCurrencyNote = r.Replace(note)
 	}
+	d.Data = buildData(d, in)
 	return d
 }
 
@@ -383,10 +388,27 @@ func buildData(d *Document, in BuildInput) map[string]any {
 		"client":        map[string]any{"name": c.Name, "contact": c.ContactName, "email": c.Email, "phone": c.Phone, "address1": c.Address1, "address2": c.Address2, "city": c.City, "state": c.State, "postal_code": c.PostalCode, "country": c.Country, "tax_id": c.TaxID, "website": c.Website, "address": strings.Join(d.To.Lines, ", ")},
 		"items":         items, "taxes": taxes, "custom_fields": customList, "custom": custom,
 		"subtotal": d.Subtotal, "discount_label": d.DiscountLabel, "discount": d.Discount, "tax_total": fmtMoney(in, inv.TaxTotal), "total": d.Total, "amount_paid": d.AmountPaid, "balance": d.Balance,
-		"quantity_total": d.QuantityTotal, "total_in_base": d.BaseTotal, "base_total_label": d.BaseTotalLabel, "base_note": d.BaseCurrencyNote,
+		"quantity_total": quantityTotalFor(d, inv), "total_in_base": d.BaseTotal, "base_total_label": d.BaseTotalLabel, "base_note": d.BaseCurrencyNote,
 		"notes": d.Notes, "terms": d.Terms, "footer": d.Footer, "payment_details": d.PaymentDetails, "public_url": d.PublicURL, "paid": inv.Status == "paid",
 		"has_discount": d.Discount != "", "has_tax": len(d.Taxes) > 0, "has_payments": d.ShowPaid, "is_foreign_currency": d.BaseTotal != "",
 	}
+}
+
+// quantityTotalFor always returns the summed quantity when all lines share a unit
+// (Word templates decide themselves whether to print it).
+func quantityTotalFor(d *Document, inv *store.Invoice) string {
+	if len(inv.Items) == 0 {
+		return ""
+	}
+	var sum float64
+	unit := inv.Items[0].Unit
+	for _, it := range inv.Items {
+		if it.Unit != unit {
+			return ""
+		}
+		sum += it.Quantity
+	}
+	return trimNum(sum) + " " + unitLabel(d, unit, sum)
 }
 
 func fmtMoney(in BuildInput, v float64) string {

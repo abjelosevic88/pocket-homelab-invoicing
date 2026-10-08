@@ -40,5 +40,10 @@ func TestSampleTemplates(t *testing.T) {
 		if len(left) != 0 {
 			t.Fatalf("%s: unresolved placeholders %v", name, left)
 		}
+		if doc.Data["quantity_total"] != "21 days" || doc.Data["number"] != "INV-007-2026" || doc.Data["company"].(map[string]any)["name"] == "" {
+			t.Fatalf("data not built: %v", doc.Data)
+		}
+		txt := string(out)
+		_ = txt
 	}
 }
