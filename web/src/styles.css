@@ -70,12 +70,12 @@ hr { border: 0; border-top: 1px solid var(--border); margin: 16px 0; }
 .topbar .spacer { flex: 1; }
 .content { padding: 24px; max-width: 1280px; width: 100%; }
 .content.wide { max-width: none; }
-.menu-btn { display: none; }
+.topbar .menu-btn { display: none; }
 @media (max-width: 900px) {
   .sidebar { transform: translateX(-100%); }
   .sidebar.open { transform: none; box-shadow: 0 0 0 100vw rgba(0,0,0,.4); }
   .main { margin-left: 0; }
-  .menu-btn { display: inline-flex; }
+  .topbar .menu-btn { display: inline-flex; }
   .content { padding: 14px; }
 }
 
@@ -203,6 +203,10 @@ table.table tfoot td { font-weight: 600; background: var(--surface-2); }
 .timer-pill { display: inline-flex; align-items: center; gap: 8px; background: var(--success-soft); color: var(--success); padding: 4px 10px 4px 12px; border-radius: 999px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .timer-pill .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--success); animation: blink 1.2s infinite; }
 @keyframes blink { 50% { opacity: .3; } }
+.hbar { display: grid; grid-template-columns: minmax(120px, 1fr) 3fr auto; gap: 6px 12px; align-items: center; font-size: 13px; }
+.hbar .track { height: 10px; background: var(--surface-2); border-radius: 5px; overflow: hidden; }
+.hbar .track > div { height: 100%; background: var(--accent); border-radius: 5px; }
+.hbar .val { font-variant-numeric: tabular-nums; white-space: nowrap; }
 .bar-chart { display: flex; align-items: flex-end; gap: 6px; height: 180px; padding: 10px 0 0; }
 .bar-chart .col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; height: 100%; justify-content: flex-end; }
 .bar-chart .bars { display: flex; gap: 2px; align-items: flex-end; height: 100%; width: 100%; justify-content: center; }

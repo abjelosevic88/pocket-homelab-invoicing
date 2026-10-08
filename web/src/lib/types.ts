@@ -39,3 +39,6 @@ export interface Settings {
 }
 export interface DashboardStats { outstanding: number; outstanding_count: number; overdue: number; overdue_count: number; paid_this_month: number; paid_this_year: number; invoiced_this_year: number; draft_count: number; unbilled_minutes: number; unbilled_expenses: number; active_clients: number }
 export interface MonthlyRevenue { month: string; invoiced: number; paid: number; expenses: number; count: number }
+export interface YearRevenue { year: string; invoiced: number; paid: number; expenses: number; count: number }
+export interface Lifetime { paid_total: number; invoiced_total: number; invoice_count: number; paid_count: number; first_invoice: string; paid_by_currency: Record<string, number>; months_active: number }
+export interface ClientRevenue { client_id: number; client_name: string; currency: string; invoiced: number; paid: number; outstanding: number; count: number }

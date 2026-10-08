@@ -1,10 +1,11 @@
+import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { api, V1 } from '../lib/api'
 import { fmtDate, fmtDateTime, hours, money, monthLabel } from '../lib/format'
-import type { Activity, Currency, DashboardStats, Invoice, MonthlyRevenue, Recurring, TimeEntry } from '../lib/types'
+import type { Activity, ClientRevenue, Currency, DashboardStats, Invoice, Lifetime, MonthlyRevenue, Recurring, TimeEntry, YearRevenue } from '../lib/types'
 import { Badge, Card, Empty, Loading, PageHeader, useAsync } from '../components/ui'
 
-interface Dash { stats: DashboardStats; base_currency: Currency; revenue: MonthlyRevenue[]; recent: Invoice[]; overdue: Invoice[]; running_timer: TimeEntry | null; activity: Activity[]; upcoming_recurring: Recurring[] }
+interface Dash { stats: DashboardStats; base_currency: Currency; revenue: MonthlyRevenue[]; recent: Invoice[]; overdue: Invoice[]; running_timer: TimeEntry | null; activity: Activity[]; upcoming_recurring: Recurring[]; lifetime: Lifetime; by_year: YearRevenue[]; by_client: ClientRevenue[] }
 
 export function RevenueChart({ months, code }: { months: MonthlyRevenue[]; code: string }) {
   if (!months.length) return <Empty title="No revenue yet">Issue your first invoice to see the chart.</Empty>
@@ -28,13 +29,21 @@ export function RevenueChart({ months, code }: { months: MonthlyRevenue[]; code:
   )
 }
 
+export function HBars({ rows, code }: { rows: { label: string; value: number; sub?: string }[]; code: string }) {
+  const max = Math.max(1, ...rows.map(r => r.value))
+  return <div className="hbar">{rows.map(r => <><span key={r.label + 'l'} className="bold" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.label}{r.sub && <span className="muted small"> · {r.sub}</span>}</span><div key={r.label + 't'} className="track"><div style={{ width: `${(r.value / max) * 100}%` }} /></div><span key={r.label + 'v'} className="val">{money(r.value, code)}</span></>)}</div>
+}
+
 export default function Dashboard() {
-  const { data, loading, error } = useAsync(() => api.get<Dash>(`${V1}/dashboard`))
+  const [months, setMonths] = useState(12)
+  const { data, loading, error } = useAsync(() => api.get<Dash>(`${V1}/dashboard?months=${months}`), [months])
   const navigate = useNavigate()
-  if (loading || !data) return <Loading />
-  if (error) return <div className="callout danger">{error}</div>
-  const { stats, base_currency: bc } = data
+  if (loading && !data) return <Loading />
+  if (error || !data) return <div className="callout danger">{error}</div>
+  const { stats, base_currency: bc, lifetime: lt } = data
   const code = bc.code
+  const avgMonth = lt.months_active ? lt.paid_total / lt.months_active : 0
+  const bestYear = [...data.by_year].sort((a, b) => b.paid - a.paid)[0]
   return (
     <>
       <PageHeader title="Dashboard" sub={`All amounts in ${code} (base currency)`} actions={<>
@@ -47,8 +56,14 @@ export default function Dashboard() {
         <div className="card stat success"><div className="label">Paid this month</div><div className="value">{money(stats.paid_this_month, code)}</div><div className="hint">{money(stats.paid_this_year, code)} this year</div></div>
         <div className="card stat"><div className="label">Unbilled time</div><div className="value">{hours(stats.unbilled_minutes)}</div><div className="hint">{stats.unbilled_expenses > 0 ? `+ ${money(stats.unbilled_expenses, code)} expenses` : `${stats.draft_count} draft${stats.draft_count === 1 ? '' : 's'} waiting`}</div></div>
       </div>
+      <div className="grid cols-4 mb">
+        <div className="card stat success"><div className="label">Earned all time</div><div className="value">{money(lt.paid_total, code)}</div><div className="hint">{Object.entries(lt.paid_by_currency).map(([c, v]) => money(v, c)).join(' + ') || '—'}</div></div>
+        <div className="card stat"><div className="label">Invoiced all time</div><div className="value">{money(lt.invoiced_total, code)}</div><div className="hint">{lt.invoice_count} invoices since {fmtDate(lt.first_invoice)}</div></div>
+        <div className="card stat"><div className="label">Average per active month</div><div className="value">{money(avgMonth, code)}</div><div className="hint">{lt.months_active} months with invoices</div></div>
+        <div className="card stat"><div className="label">Best year</div><div className="value">{bestYear ? money(bestYear.paid, code) : '—'}</div><div className="hint">{bestYear ? `${bestYear.year} · ${bestYear.count} invoices` : ''}</div></div>
+      </div>
       <div className="grid cols-2 mb" style={{ gridTemplateColumns: '2fr 1fr' }}>
-        <Card title="Revenue (last 12 months)"><RevenueChart months={data.revenue} code={code} /></Card>
+        <Card title={`Revenue (last ${months} months)`} actions={<div className="btn-group">{[12, 24, 36].map(m => <button key={m} className={`btn sm ${months === m ? 'primary' : ''}`} onClick={() => setMonths(m)}>{m}m</button>)}</div>}><RevenueChart months={data.revenue} code={code} /></Card>
         <Card title="Needs attention" flush>
           {data.overdue.length === 0 && data.stats.draft_count === 0 ? <Empty title="All clear">No overdue invoices.</Empty> : (
             <table className="table">
@@ -61,6 +76,17 @@ export default function Dashboard() {
               </tbody>
             </table>
           )}
+        </Card>
+      </div>
+      <div className="grid cols-2 mb">
+        <Card title="Earned by year" flush>
+          {!data.by_year.length ? <Empty title="No invoices yet" /> : <table className="table"><thead><tr><th>Year</th><th className="num">Invoices</th><th className="num">Invoiced</th><th className="num">Received</th>{data.by_year.some(y => y.expenses) && <th className="num">Expenses</th>}</tr></thead>
+            <tbody>{data.by_year.map(y => <tr key={y.year}><td className="bold">{y.year}</td><td className="num">{y.count}</td><td className="num">{money(y.invoiced, code)}</td><td className="num">{money(y.paid, code)}</td>{data.by_year.some(x => x.expenses) && <td className="num">{money(y.expenses, code)}</td>}</tr>)}</tbody>
+            <tfoot><tr><td>Total</td><td className="num">{lt.invoice_count}</td><td className="num">{money(lt.invoiced_total, code)}</td><td className="num">{money(lt.paid_total, code)}</td>{data.by_year.some(x => x.expenses) && <td className="num">{money(data.by_year.reduce((a, y) => a + y.expenses, 0), code)}</td>}</tr></tfoot></table>}
+        </Card>
+        <Card title="Earned by client (all time)">
+          {!data.by_client.length ? <Empty title="No clients invoiced yet" /> : <HBars code={code} rows={data.by_client.map(c => ({ label: c.client_name, value: c.paid, sub: `${c.count} inv · ${c.currency}` }))} />}
+          <p className="muted small mt">Converted to {code} at each invoice's exchange rate. Details in <Link to="/reports">Reports</Link>.</p>
         </Card>
       </div>
       <div className="grid cols-2" style={{ gridTemplateColumns: '2fr 1fr' }}>

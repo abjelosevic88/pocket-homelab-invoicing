@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/abjelosevic88/pocket-homelab-invoicing/internal/store"
 )
@@ -18,6 +19,9 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 	}
 	st, _ := s.store.GetSettings(ctx)
 	from, to := dateRange(r)
+	if m := qInt(r, "months", 0); m > 0 {
+		from = time.Now().AddDate(0, -m+1, 0).Format("2006-01") + "-01"
+	}
 	revenue, _ := s.store.RevenueByMonth(ctx, from, to)
 	recent, _, _ := s.store.ListInvoices(ctx, store.InvoiceFilter{Limit: 8})
 	overdue, _, _ := s.store.ListInvoices(ctx, store.InvoiceFilter{Status: "overdue", Limit: 8})
@@ -33,9 +37,13 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+	lifetime, _ := s.store.LifetimeStats(ctx)
+	byYear, _ := s.store.RevenueByYear(ctx)
+	byClient, _ := s.store.RevenueByClient(ctx, "0000-01-01", "9999-12-31")
 	writeJSON(w, http.StatusOK, map[string]any{
 		"stats": stats, "base_currency": s.store.GetCurrency(ctx, st.BaseCurrency), "revenue": revenue,
 		"recent": recent, "overdue": overdue, "running_timer": running, "activity": activity, "upcoming_recurring": next,
+		"lifetime": lifetime, "by_year": byYear, "by_client": byClient,
 	})
 }
 
