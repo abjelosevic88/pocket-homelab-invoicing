@@ -30,7 +30,7 @@ Errors: `{"error": "message"}` with a 4xx/5xx status. Dates are `YYYY-MM-DD`; ti
 | PUT | `/clients/{id}` |
 | DELETE | `/clients/{id}` (archives if it has invoices) |
 
-Client fields: `name, contact_name, email, phone, address1, address2, city, state, postal_code, country, tax_id, website, currency, billing_mode (hourly|daily|monthly|fixed), default_rate, payment_terms_days, notes, archived`.
+Client fields: `name, contact_name, email, phone, address1, address2, city, state, postal_code, country, tax_id, website, currency, billing_mode (hourly|daily|monthly|fixed), default_rate, payment_terms_days, template_id, email_subject, email_body, email_cc, notes, archived`.
 
 ## Invoices
 | Method | Path | Notes |

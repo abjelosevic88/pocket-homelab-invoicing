@@ -67,6 +67,9 @@ type Client struct {
 	DefaultRate      float64 `json:"default_rate"`
 	PaymentTermsDays int     `json:"payment_terms_days"`
 	TemplateID       *int64  `json:"template_id"`
+	EmailSubject     string  `json:"email_subject"` // per-client override of the invoice email subject ("" = global)
+	EmailBody        string  `json:"email_body"`    // per-client override of the invoice email body ("" = global)
+	EmailCC          string  `json:"email_cc"`      // extra recipients, comma separated
 	Notes            string  `json:"notes"`
 	Archived         bool    `json:"archived"`
 	CreatedAt        string  `json:"created_at"`

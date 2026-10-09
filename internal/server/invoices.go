@@ -588,16 +588,31 @@ func (s *Server) sendInvoiceEmail(ctx context.Context, inv *store.Invoice, to, s
 		"{total}": money.Format(inv.Total, cur.Decimals, sym, pos), "{balance}": money.Format(inv.Total-inv.AmountPaid, cur.Decimals, sym, pos),
 		"{due_date}": inv.DueDate, "{issue_date}": inv.IssueDate, "{link}": s.cfg.BaseURL + "/i/" + inv.PublicToken,
 	}
+	// precedence: explicit override (dialog) > client template > global template
 	subject, body := st.EmailSubject, st.EmailBody
+	if client.EmailSubject != "" {
+		subject = client.EmailSubject
+	}
+	if client.EmailBody != "" {
+		body = client.EmailBody
+	}
 	if subjectOverride != "" {
 		subject = subjectOverride
 	}
 	if bodyOverride != "" {
 		body = bodyOverride
 	}
+	vars["{contact}"] = firstNonEmpty(client.ContactName, client.Name)
+	vars["{period}"] = ""
+	if inv.PeriodStart != nil && inv.PeriodEnd != nil {
+		vars["{period}"] = *inv.PeriodStart + " – " + *inv.PeriodEnd
+	}
 	for k, v := range vars {
 		subject = strings.ReplaceAll(subject, k, v)
 		body = strings.ReplaceAll(body, k, v)
+	}
+	if client.EmailCC != "" {
+		to = to + "," + client.EmailCC
 	}
 	var attachments []mailer.Attachment
 	mode := st.EmailAttachmentMode

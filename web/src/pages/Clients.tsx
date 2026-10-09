@@ -6,7 +6,7 @@ import { BILLING_MODES, money } from '../lib/format'
 import type { Client, InvoiceTemplate } from '../lib/types'
 import { Card, Empty, Field, Loading, Modal, PageHeader, useAsync, useDebounce, useToast } from '../components/ui'
 
-const blank = (currency: string, terms: number): Partial<Client> => ({ name: '', contact_name: '', email: '', phone: '', address1: '', address2: '', city: '', state: '', postal_code: '', country: '', tax_id: '', website: '', currency, billing_mode: 'hourly', default_rate: 0, payment_terms_days: terms, notes: '' })
+const blank = (currency: string, terms: number): Partial<Client> => ({ name: '', contact_name: '', email: '', phone: '', address1: '', address2: '', city: '', state: '', postal_code: '', country: '', tax_id: '', website: '', currency, billing_mode: 'hourly', default_rate: 0, payment_terms_days: terms, notes: '', email_subject: '', email_body: '', email_cc: '' })
 
 export function ClientForm({ initial, onSaved, onClose }: { initial?: Client; onSaved: (c: Client) => void; onClose: () => void }) {
   const { settings, currencies } = useApp()
@@ -46,6 +46,13 @@ export function ClientForm({ initial, onSaved, onClose }: { initial?: Client; on
         <Field label="Payment terms (days)" help="0 = due on receipt"><input type="number" value={c.payment_terms_days} onChange={set('payment_terms_days')} /></Field>
         <Field label="Invoice template" help="Used for this client's invoices unless an invoice picks another"><select value={c.template_id || ''} onChange={e => setC(x => ({ ...x, template_id: Number(e.target.value) || null }))}><option value="">Global default</option>{templates?.map(t => <option key={t.id} value={t.id}>{t.name}{t.kind === 'docx' ? ' (Word)' : ''}</option>)}</select></Field>
         <Field label="Internal notes" className="full"><textarea value={c.notes} onChange={set('notes')} /></Field>
+        <details className="full"><summary className="small bold" style={{ cursor: 'pointer' }}>Email template for this client (optional, overrides Settings → Email)</summary>
+          <div className="grid mt" style={{ gap: 12 }}>
+            <Field label="Subject"><input value={c.email_subject || ''} onChange={set('email_subject')} placeholder={settings?.email_subject} /></Field>
+            <Field label="Message" help="Placeholders: {number} {client} {contact} {company} {total} {balance} {due_date} {issue_date} {period} {link}"><textarea rows={7} value={c.email_body || ''} onChange={set('email_body')} placeholder={settings?.email_body} /></Field>
+            <Field label="Always CC" help="Comma separated"><input value={c.email_cc || ''} onChange={set('email_cc')} placeholder="accounting@client.example" /></Field>
+          </div>
+        </details>
       </div>
       <div className="form-actions"><button type="button" className="btn" onClick={onClose}>Cancel</button><button className="btn primary" disabled={busy}>{initial ? 'Save changes' : 'Create client'}</button></div>
     </form>
