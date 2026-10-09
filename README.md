@@ -19,7 +19,7 @@ Pocket Invoicing is an Invoice-Ninja-style app trimmed down to what a one-person
 
 ## Features
 
-| | |
+| Area | What you get |
 |---|---|
 | **Billing modes** | Hourly, daily, monthly retainer, fixed price, or per unit. Mix them on one invoice. |
 | **Time tracking** | Start/stop timer, manual entries, rounding (e.g. 15 min), bill unbilled time as hours *or* days in one click, grouped per entry / day / project / total. |
