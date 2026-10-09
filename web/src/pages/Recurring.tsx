@@ -30,7 +30,7 @@ function RecurringForm({ initial, clients, onSaved, onClose }: { initial?: Recur
     } catch (e) { toast((e as Error).message, 'error') } finally { setBusy(false) }
   }
   return (
-    <form onSubmit={submit}>
+    <form onSubmit={submit} noValidate>
       <div className="form-grid cols-3">
         <Field label="Client"><select value={r.client_id} onChange={e => onClient(Number(e.target.value))}>{clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></Field>
         <Field label="Profile name" className="full" help="Internal only"><input value={r.name} onChange={e => set('name', e.target.value)} placeholder="e.g. Acme hosting retainer" /></Field>
@@ -53,7 +53,7 @@ function RecurringForm({ initial, clients, onSaved, onClose }: { initial?: Recur
         <tbody>{items.map((it, i) => <tr key={i}>
           <td><input value={it.description} onChange={e => setItem(i, { description: e.target.value })} /></td>
           <td><select value={it.unit} onChange={e => setItem(i, { unit: e.target.value })}>{UNITS.map(u => <option key={u.value} value={u.value}>{u.label}</option>)}</select></td>
-          <td><input type="number" step="any" value={it.quantity} onChange={e => setItem(i, { quantity: parseFloat(e.target.value) || 0 })} /></td>
+          <td><input type="number" step="1" value={it.quantity} onChange={e => setItem(i, { quantity: parseFloat(e.target.value) || 0 })} /></td>
           <td><input type="number" step="0.01" value={it.unit_price} onChange={e => setItem(i, { unit_price: parseFloat(e.target.value) || 0 })} /></td>
           <td><select value={it.tax_rate} onChange={e => setItem(i, { tax_rate: parseFloat(e.target.value) })}>{!taxRates?.some(t => t.rate === it.tax_rate) && <option value={it.tax_rate}>{it.tax_rate}%</option>}{taxRates?.map(t => <option key={t.id} value={t.rate}>{t.name}</option>)}{!taxRates?.some(t => t.rate === 0) && <option value={0}>No tax</option>}</select></td>
           <td className="num">{money(totals.lines[i], r.currency!)}</td>
