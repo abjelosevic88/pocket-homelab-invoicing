@@ -112,6 +112,9 @@ hr { border: 0; border-top: 1px solid var(--border); margin: 16px 0; }
 .btn.danger:hover { background: var(--danger-soft); }
 .btn.ghost { border-color: transparent; background: transparent; }
 .btn.ghost:hover { background: var(--surface-2); }
+.btn.ghost.danger { border-color: transparent; }
+.btn.ghost.danger:hover { background: var(--danger-soft); }
+table.table .actions .btn + .btn { margin-left: 2px; }
 .btn.sm { padding: 4px 9px; font-size: 12.5px; }
 .btn.lg { padding: 10px 18px; font-size: 15px; }
 .btn.icon { padding: 6px 8px; }
