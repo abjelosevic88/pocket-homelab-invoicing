@@ -5,6 +5,7 @@ All notable changes to this project are documented here. Format follows [Keep a 
 ## [Unreleased]
 
 ### Added
+- Per-client email template (subject, message, always-CC) overriding the global one; new placeholders {contact} and {period}.
 - Income tax estimate: configurable rate, base (gross or profit), cash/invoice basis, yearly minimum, allowance and fixed monthly contributions (Settings → Taxes); Reports → Income tax with per-month and per-year breakdown; year selector on Reports.
 - Dashboard lifetime earnings, by-year and by-client views.
 - Word (.docx) invoice templates: upload any number, assign per client or per invoice, global default; Mustache-style placeholders with table-row repetition; PDF via Gotenberg (LibreOffice) or a local `soffice`; download the filled .docx. Sample templates in docs/templates/.

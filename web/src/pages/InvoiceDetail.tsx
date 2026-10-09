@@ -1,9 +1,9 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api, V1 } from '../lib/api'
 import { useApp } from '../lib/app-context'
 import { fileSize, fmtDate, fmtDateTime, money, PAYMENT_METHODS, today } from '../lib/format'
-import type { Activity, Invoice, Payment } from '../lib/types'
+import type { Activity, Client, Invoice, Payment } from '../lib/types'
 import { Badge, Card, Confirm, Field, Loading, Modal, PageHeader, useAsync, useToast } from '../components/ui'
 
 function PaymentForm({ inv, onDone }: { inv: Invoice; onDone: () => void }) {
@@ -34,9 +34,20 @@ function PaymentForm({ inv, onDone }: { inv: Invoice; onDone: () => void }) {
 function SendForm({ inv, onDone }: { inv: Invoice; onDone: () => void }) {
   const toast = useToast()
   const { settings } = useApp()
+  const { data: clientInfo } = useAsync(() => api.get<{ client: Client }>(`${V1}/clients/${inv.client_id}`), [inv.client_id])
+  const client = clientInfo?.client
   const [to, setTo] = useState('')
   const [subject, setSubject] = useState(settings?.email_subject || '')
   const [body, setBody] = useState(settings?.email_body || '')
+  const [source, setSource] = useState<'global' | 'client'>('global')
+  useEffect(() => {
+    if (!client) return
+    if (client.email_subject || client.email_body) {
+      setSubject(client.email_subject || settings?.email_subject || '')
+      setBody(client.email_body || settings?.email_body || '')
+      setSource('client')
+    }
+  }, [client, settings])
   const [busy, setBusy] = useState(false)
   const submit = async (e: React.FormEvent) => {
     e.preventDefault(); setBusy(true)
@@ -46,9 +57,10 @@ function SendForm({ inv, onDone }: { inv: Invoice; onDone: () => void }) {
     <form onSubmit={submit}>
       {!settings?.smtp_host && <div className="callout warn mb">SMTP is not configured. Set it up under <Link to="/settings/email">Settings → Email</Link>, or share the public link instead.</div>}
       <div className="grid" style={{ gap: 12 }}>
-        <Field label="To" help="Leave blank to use the client's email"><input value={to} onChange={e => setTo(e.target.value)} placeholder="client@example.com" /></Field>
+        <Field label="To" help={`Leave blank to use the client's email${client?.email ? ` (${client.email})` : ''}${client?.email_cc ? `, CC ${client.email_cc}` : ''}`}><input value={to} onChange={e => setTo(e.target.value)} placeholder="client@example.com" /></Field>
+        <div className="muted small">Template: {source === 'client' ? <>this client's own (<Link to={`/clients/${inv.client_id}`}>edit</Link>)</> : <>global default (<Link to="/settings/email">edit</Link>, or set one per client on the client page)</>}</div>
         <Field label="Subject"><input value={subject} onChange={e => setSubject(e.target.value)} /></Field>
-        <Field label="Message" help="Placeholders: {number} {client} {company} {total} {balance} {due_date} {link}"><textarea rows={8} value={body} onChange={e => setBody(e.target.value)} /></Field>
+        <Field label="Message" help="Placeholders: {number} {client} {contact} {company} {total} {balance} {due_date} {issue_date} {period} {link}"><textarea rows={8} value={body} onChange={e => setBody(e.target.value)} /></Field>
       </div>
       <div className="form-actions"><button className="btn primary" disabled={busy || !settings?.smtp_host}>Send with PDF attached</button></div>
     </form>
