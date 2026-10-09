@@ -49,13 +49,14 @@
   .footer { margin-top: 40px; padding-top: 12px; border-top: 1px solid var(--line); font-size: 9pt; color: var(--muted); text-align: center; }
   .signature { margin: 40px 0 0 auto; width: 220px; text-align: center; color: var(--muted); font-size: 9.5pt; }
   .signature .line { border-top: 1px solid var(--text); margin-bottom: 4px; }
-  .stamp { position: absolute; right: 60px; top: 320px; border: 4px solid #16a34a; color: #16a34a; font-weight: 800; font-size: 32pt; padding: 6px 20px; transform: rotate(-14deg); opacity: .75; border-radius: 8px; }
+  .totals { align-items: center; }
+  .totals.with-stamp { justify-content: space-between; }
+  .stamp { display: inline-block; border: 4px solid #16a34a; color: #16a34a; font-weight: 800; font-size: 28pt; letter-spacing: .05em; padding: 4px 22px; transform: rotate(-12deg); opacity: .8; border-radius: 8px; margin-left: 24px; }
   .page { position: relative; }
 </style>
 </head>
 <body class="layout-{{.Layout}}">
 <div class="page">
-  {{if eq .Status "paid"}}<div class="stamp">{{.Label "paid_stamp"}}</div>{{end}}
   <div class="header">
     <div class="brand">
       {{if .LogoDataURL}}<img src="{{.LogoDataURL}}" alt="">{{end}}
@@ -125,7 +126,8 @@
     </tbody>
   </table>
 
-  <div class="totals">
+  <div class="totals{{if eq .Status "paid"}} with-stamp{{end}}">
+    {{if eq .Status "paid"}}<div class="stamp">{{.Label "paid_stamp"}}</div>{{end}}
     <table>
       {{if .QuantityTotal}}<tr><td>{{.Label "quantity"}}</td><td class="num">{{.QuantityTotal}}</td></tr>{{end}}
       <tr><td>{{.Label "subtotal"}}</td><td class="num">{{.Subtotal}}</td></tr>
