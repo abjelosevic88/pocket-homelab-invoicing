@@ -62,7 +62,7 @@ function Company() {
   if (!s) return <Loading />
   const upload = async (f: File) => { const fd = new FormData(); fd.append('logo', f); try { await api.post(`${V1}/settings/logo`, fd); await refresh(); toast('Logo uploaded', 'success') } catch (e) { toast((e as Error).message, 'error') } }
   return (
-    <div className="grid cols-2" style={{ gridTemplateColumns: '2fr 1fr' }}>
+    <div className="grid split-2-1">
       <Card title="Business details">
         <div className="form-grid">
           <Field label="Company / your name (printed on invoices)" className="full"><input value={s.company_name} onChange={set('company_name')} /></Field>
@@ -310,7 +310,7 @@ function Templates() {
   if (!data) return <Loading />
   const previewUrl = sel?.id ? `${V1}/templates/${sel.id}/preview?layout=${sel.layout}&accent=${encodeURIComponent(sel.accent_color)}&k=${previewKey}` : ''
   return (
-    <div className="grid" style={{ gridTemplateColumns: '220px 1fr 1fr' }}>
+    <div className="grid split-tpl">
       <Card title="Templates" actions={<div className="row"><WordUpload onDone={(t, ph) => { reload(); setSel(t); setFound(ph); setTab('word'); setPreviewKey(k => k + 1) }} label="+ Word" /><button className="btn sm" title="New design template" onClick={() => setSel({ id: 0, name: 'New template', layout: 'classic', accent_color: '#2563eb', labels: {}, options: { hide_rate: false, hide_unit: false, show_quantity_total: false, signature_label: '', hide_logo: false }, html: '', is_default: false, kind: 'design', docx_path: '', docx_name: '' })}>+ Design</button></div>} flush>
         <table className="table"><tbody>{data.map(t => <tr key={t.id} className="clickable" onClick={() => { setSel(t); setFound([]); setTab(t.kind === 'docx' ? 'word' : 'design'); setPreviewKey(k => k + 1) }} style={sel?.id === t.id ? { background: 'var(--accent-soft)' } : {}}><td><span className="bold">{t.name}</span>{t.is_default && <span className="badge ok" style={{ marginLeft: 6 }}>default</span>}<div className="muted small">{t.kind === 'docx' ? <span className="badge accent">Word</span> : t.layout}{t.html ? ' · custom HTML' : ''}</div></td></tr>)}</tbody></table>
         <div className="muted small" style={{ padding: 12 }}>Word templates: a .docx with placeholders like <code>{'{{number}}'}</code>. Each client can pick its own template; otherwise the default applies. Download <a href="https://github.com/abjelosevic88/pocket-homelab-invoicing/tree/main/docs/templates" target="_blank" rel="noreferrer">sample templates</a>.</div>

@@ -72,7 +72,7 @@ export default function Layout() {
           <button className="btn ghost icon menu-btn" onClick={() => setOpen(o => !o)} aria-label="Menu">☰</button>
           <TimerWidget />
           <span className="spacer" />
-          <button className="btn primary sm" onClick={() => navigate('/invoices/new')}>+ New invoice</button>
+          <button className="btn primary sm topbar-new" onClick={() => navigate('/invoices/new')}>+ New invoice</button>
         </header>
         <main className="content"><Outlet /></main>
       </div>
