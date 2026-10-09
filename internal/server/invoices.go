@@ -103,10 +103,10 @@ func (s *Server) applyInput(ctx context.Context, inv *store.Invoice, in invoiceI
 		}
 	}
 
-	// Exchange rate to base currency: explicit > stored > 1
+	// Exchange rate to base currency: explicit > official rate on the issue date (CBBH) > stored > 1
 	inv.ExchangeRate = in.ExchangeRate
 	if inv.ExchangeRate <= 0 {
-		if r, ok := s.store.GetRate(ctx, inv.Currency, st.BaseCurrency); ok {
+		if r, _, ok := s.rateOn(ctx, inv.IssueDate, inv.Currency, st.BaseCurrency); ok {
 			inv.ExchangeRate = r
 		} else {
 			inv.ExchangeRate = 1

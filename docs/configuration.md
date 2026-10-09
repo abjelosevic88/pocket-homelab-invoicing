@@ -44,7 +44,7 @@ API tokens (`Authorization: Bearer pi_…` or `X-API-Key`) work in every mode.
 
 | Variable | Default | Description |
 |---|---|---|
-| `EXCHANGE_RATE_PROVIDER` | `frankfurter` | `frankfurter` — ECB reference rates from api.frankfurter.app (free, no key, ~30 currencies).<br>`none` — never call out; use manual rates only. |
+| `EXCHANGE_RATE_PROVIDER` | `frankfurter` | Default rate source; Settings → Currencies can override it.<br>`frankfurter` — ECB reference rates from api.frankfurter.app (free, no key, ~30 currencies).<br>`cbbh` — official daily list of the Central Bank of Bosnia and Herzegovina (middle rate, 17 currencies against BAM); invoices lock the rate valid on their issue date.<br>`none` — never call out; use manual rates only. |
 | `EXCHANGE_RATE_REFRESH` | `12h` | How often the scheduler refreshes rates |
 
 Manual rates entered in the UI are never overwritten by the provider. Currencies not covered by the ECB (e.g. RSD, BTC) need manual rates.

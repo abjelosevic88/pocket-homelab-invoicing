@@ -5,8 +5,34 @@ import (
 	"encoding/base64"
 	"fmt"
 
+	"github.com/abjelosevic88/pocket-homelab-invoicing/internal/currency"
 	"github.com/abjelosevic88/pocket-homelab-invoicing/internal/store"
 )
+
+// rateOn returns how many units of `to` one unit of `from` was worth on date, preferring
+// the provider's official list for that day when it supports dates (CBBH), otherwise the
+// stored rate. source describes where the number came from, for the UI and the log.
+func (s *Server) rateOn(ctx context.Context, date, from, to string) (rate float64, source string, ok bool) {
+	if from == to {
+		return 1, "", true
+	}
+	if h, isHist := s.provider(ctx).(currency.Historical); isHist {
+		if date == "" {
+			date = store.Today()
+		}
+		rates, listDate, err := h.FetchOn(ctx, date, from, []string{to})
+		if err == nil && rates[to] > 0 {
+			return rates[to], h.Name() + " " + listDate, true
+		}
+		if err != nil {
+			s.log.Warn("historical rate lookup failed, using stored rate", "provider", h.Name(), "date", date, "from", from, "to", to, "err", err)
+		}
+	}
+	if r, ok := s.store.GetRate(ctx, from, to); ok {
+		return r, "stored", true
+	}
+	return 0, "", false
+}
 
 func base64Encode(b []byte) string { return base64.StdEncoding.EncodeToString(b) }
 
@@ -30,8 +56,9 @@ func (s *Server) refreshRates(ctx context.Context) (int, error) {
 	if len(quotes) == 0 {
 		return 0, nil
 	}
-	rates, err := s.rates.Fetch(ctx, st.BaseCurrency, quotes)
-	source := s.rates.Name()
+	prov := s.provider(ctx)
+	rates, err := prov.Fetch(ctx, st.BaseCurrency, quotes)
+	source := prov.Name()
 	if err != nil {
 		// Provider doesn't know the base (e.g. BAM, RSD): fall back to EUR rates and
 		// convert through a stored base→EUR rate (pegged currencies make this exact).
@@ -45,7 +72,7 @@ func (s *Server) refreshRates(ctx context.Context) (int, error) {
 				eurQuotes = append(eurQuotes, q)
 			}
 		}
-		eurRates, err2 := s.rates.Fetch(ctx, "EUR", eurQuotes)
+		eurRates, err2 := prov.Fetch(ctx, "EUR", eurQuotes)
 		if err2 != nil {
 			return 0, fmt.Errorf("fetch rates via EUR: %w", err2)
 		}
@@ -53,7 +80,7 @@ func (s *Server) refreshRates(ctx context.Context) (int, error) {
 		for q, r := range eurRates {
 			rates[q] = r * baseToEUR // base→quote = base→EUR × EUR→quote
 		}
-		source = s.rates.Name() + " via EUR"
+		source = prov.Name() + " via EUR"
 	}
 	existing, _ := s.store.ListRates(ctx, st.BaseCurrency)
 	manual := map[string]bool{}
@@ -73,6 +100,6 @@ func (s *Server) refreshRates(ctx context.Context) (int, error) {
 		}
 		n++
 	}
-	s.log.Info("exchange rates refreshed", "base", st.BaseCurrency, "updated", n, "provider", s.rates.Name())
+	s.log.Info("exchange rates refreshed", "base", st.BaseCurrency, "updated", n, "provider", prov.Name())
 	return n, nil
 }
