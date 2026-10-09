@@ -617,9 +617,21 @@ func (s *Server) sendInvoiceEmail(ctx context.Context, inv *store.Invoice, to, s
 		body = bodyOverride
 	}
 	vars["{contact}"] = firstNonEmpty(client.ContactName, client.Name)
+	vars["{first_name}"] = strings.Fields(vars["{contact}"] + " ")[0]
+	vars["{number_short}"] = shortNumber(inv.Number)
 	vars["{period}"] = ""
 	if inv.PeriodStart != nil && inv.PeriodEnd != nil {
 		vars["{period}"] = *inv.PeriodStart + " – " + *inv.PeriodEnd
+	}
+	// {month}/{year}: the billed month (service period start), falling back to the issue date.
+	monthSrc := inv.IssueDate
+	if inv.PeriodStart != nil && *inv.PeriodStart != "" {
+		monthSrc = *inv.PeriodStart
+	}
+	vars["{month}"], vars["{year}"] = "", ""
+	if t, err := time.Parse("2006-01-02", monthSrc); err == nil {
+		vars["{month}"] = t.Month().String()
+		vars["{year}"] = t.Format("2006")
 	}
 	for k, v := range vars {
 		subject = strings.ReplaceAll(subject, k, v)
@@ -694,6 +706,25 @@ func (s *Server) handleSendInvoice(w http.ResponseWriter, r *http.Request) {
 	full, _ := s.store.GetInvoice(ctx, inv.ID)
 	s.hooks.Emit("invoice.sent", full)
 	writeJSON(w, http.StatusOK, full)
+}
+
+// shortNumber strips an alphabetic prefix such as "INV-" so that
+// "INV-005-2026" becomes "005-2026" (used by the {number_short} placeholder).
+func shortNumber(n string) string {
+	if i := strings.IndexAny(n, "-_/ "); i > 0 {
+		prefix := n[:i]
+		letters := true
+		for _, r := range prefix {
+			if (r < 'A' || r > 'Z') && (r < 'a' || r > 'z') {
+				letters = false
+				break
+			}
+		}
+		if letters && i+1 < len(n) {
+			return n[i+1:]
+		}
+	}
+	return n
 }
 
 func firstNonEmpty(v ...string) string {

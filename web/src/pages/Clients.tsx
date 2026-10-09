@@ -49,7 +49,7 @@ export function ClientForm({ initial, onSaved, onClose }: { initial?: Client; on
         <details className="full"><summary className="small bold" style={{ cursor: 'pointer' }}>Email template for this client (optional, overrides Settings → Email)</summary>
           <div className="grid mt" style={{ gap: 12 }}>
             <Field label="Subject"><input value={c.email_subject || ''} onChange={set('email_subject')} placeholder={settings?.email_subject} /></Field>
-            <Field label="Message" help="Placeholders: {number} {client} {contact} {company} {total} {balance} {due_date} {issue_date} {period} {link}"><textarea rows={7} value={c.email_body || ''} onChange={set('email_body')} placeholder={settings?.email_body} /></Field>
+            <Field label="Message" help="Placeholders: {number} {number_short} {client} {contact} {first_name} {company} {total} {balance} {due_date} {issue_date} {month} {year} {period} {link}"><textarea rows={7} value={c.email_body || ''} onChange={set('email_body')} placeholder={settings?.email_body} /></Field>
             <Field label="Always CC" help="Comma separated"><input value={c.email_cc || ''} onChange={set('email_cc')} placeholder="accounting@client.example" /></Field>
           </div>
         </details>

@@ -32,6 +32,8 @@ Errors: `{"error": "message"}` with a 4xx/5xx status. Dates are `YYYY-MM-DD`; ti
 
 Client fields: `name, contact_name, email, phone, address1, address2, city, state, postal_code, country, tax_id, website, currency, billing_mode (hourly|daily|monthly|fixed), default_rate, payment_terms_days, template_id, email_subject, email_body, email_cc, notes, archived`.
 
+`email_subject` / `email_body` (per client, and the global ones in settings) accept the placeholders `{number} {number_short} {client} {contact} {first_name} {company} {total} {balance} {due_date} {issue_date} {month} {year} {period} {link}`. `{month}`/`{year}` come from the service period start (or the issue date), `{first_name}` is the first word of the contact name, `{number_short}` drops an alphabetic prefix (`INV-005-2026` → `005-2026`).
+
 ## Invoices
 | Method | Path | Notes |
 |---|---|---|

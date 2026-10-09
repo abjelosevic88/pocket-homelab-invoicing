@@ -60,7 +60,7 @@ function SendForm({ inv, onDone }: { inv: Invoice; onDone: () => void }) {
         <Field label="To" help={`Leave blank to use the client's email${client?.email ? ` (${client.email})` : ''}${client?.email_cc ? `, CC ${client.email_cc}` : ''}`}><input value={to} onChange={e => setTo(e.target.value)} placeholder="client@example.com" /></Field>
         <div className="muted small">Template: {source === 'client' ? <>this client's own (<Link to={`/clients/${inv.client_id}`}>edit</Link>)</> : <>global default (<Link to="/settings/email">edit</Link>, or set one per client on the client page)</>}</div>
         <Field label="Subject"><input value={subject} onChange={e => setSubject(e.target.value)} /></Field>
-        <Field label="Message" help="Placeholders: {number} {client} {contact} {company} {total} {balance} {due_date} {issue_date} {period} {link}"><textarea rows={8} value={body} onChange={e => setBody(e.target.value)} /></Field>
+        <Field label="Message" help="Placeholders: {number} {number_short} {client} {contact} {first_name} {company} {total} {balance} {due_date} {issue_date} {month} {year} {period} {link}"><textarea rows={8} value={body} onChange={e => setBody(e.target.value)} /></Field>
       </div>
       <div className="form-actions"><button className="btn primary" disabled={busy || !settings?.smtp_host}>Send with PDF attached</button></div>
     </form>
