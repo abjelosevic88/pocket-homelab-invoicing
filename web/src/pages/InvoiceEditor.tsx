@@ -160,7 +160,7 @@ export default function InvoiceEditor() {
           <tbody>{items.map((it, idx) => <tr key={it.key}>
             <td><textarea rows={1} value={it.description} onChange={e => setItem(it.key, { description: e.target.value })} placeholder={mode === 'monthly' ? 'e.g. Managed hosting retainer – {month}' : 'What did you do?'} /></td>
             <td><select value={it.unit} onChange={e => setItem(it.key, { unit: e.target.value })}>{UNITS.map(u => <option key={u.value} value={u.value}>{u.label}</option>)}</select></td>
-            <td><input type="number" step="0.01" className="right" value={it.quantity} onChange={e => setItem(it.key, { quantity: parseFloat(e.target.value) || 0 })} /></td>
+            <td><input type="number" step="any" className="right" value={it.quantity} onChange={e => setItem(it.key, { quantity: parseFloat(e.target.value) || 0 })} /></td>
             <td><input type="number" step="0.01" className="right" value={it.unit_price} onChange={e => setItem(it.key, { unit_price: parseFloat(e.target.value) || 0 })} /></td>
             <td><input type="number" step="0.01" className="right" value={it.discount || ''} onChange={e => setItem(it.key, { discount: parseFloat(e.target.value) || 0 })} placeholder="0" /></td>
             <td><select value={it.tax_rate} onChange={e => setItem(it.key, { tax_rate: parseFloat(e.target.value) })}>
