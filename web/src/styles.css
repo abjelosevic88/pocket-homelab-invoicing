@@ -74,7 +74,6 @@ hr { border: 0; border-top: 1px solid var(--border); margin: 16px 0; }
 @media (max-width: 900px) {
   html { -webkit-text-size-adjust: 100%; }
   .stat { padding: 12px 14px; }
-  .stat .value { font-size: 19px; }
   .stat .label { font-size: 11px; }
   .stat .hint { font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .page-header h1 { font-size: 20px; }
@@ -95,7 +94,9 @@ hr { border: 0; border-top: 1px solid var(--border); margin: 16px 0; }
   .form-actions .btn { flex: 1; justify-content: center; }
   .bar-chart { height: 140px; }
   .bar-chart .lbl { font-size: 10px; }
-  .hbar { grid-template-columns: minmax(110px, 1fr) 2fr auto; font-size: 12px; }
+  .hbar { grid-template-columns: 1fr auto; font-size: 12px; row-gap: 4px; }
+  .hbar > span:nth-child(3n+1) { grid-column: 1 / -1; margin-top: 8px; }
+  .stat .value { font-size: 17px; line-height: 1.25; word-break: break-word; }
   .tabs button { padding: 10px 10px; font-size: 13px; }
   .iframe-preview { height: 480px; }
   .topbar .topbar-new { display: none; }
