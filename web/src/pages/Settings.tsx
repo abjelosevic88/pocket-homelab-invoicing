@@ -372,7 +372,7 @@ function Email() {
           <Field label="Port"><input type="number" value={s.smtp_port} onChange={set('smtp_port')} /></Field>
           <Field label="Encryption"><select value={s.smtp_tls} onChange={set('smtp_tls')}><option value="starttls">STARTTLS (587)</option><option value="tls">TLS/SSL (465)</option><option value="none">None (25)</option></select></Field>
           <Field label="Username"><input value={s.smtp_user} onChange={set('smtp_user')} /></Field>
-          <Field label="Password" help="Leave blank to keep the current one"><input type="password" value={s.smtp_password} onChange={set('smtp_password')} autoComplete="new-password" /></Field>
+          <Field label="Password" help={s.smtp_password_set ? 'A password is stored. Leave blank to keep it.' : 'Leave blank to keep the current one'}><input type="password" value={s.smtp_password} onChange={set('smtp_password')} autoComplete="new-password" placeholder={s.smtp_password_set ? '••••••••' : ''} /></Field>
           <Field label="From address"><input value={s.smtp_from} onChange={set('smtp_from')} placeholder="billing@example.com" /></Field>
           <Field label="From name"><input value={s.smtp_from_name} onChange={set('smtp_from_name')} /></Field>
           <Field label="BCC (copy of every invoice)" className="full"><input value={s.smtp_bcc} onChange={set('smtp_bcc')} /></Field>

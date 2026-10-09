@@ -29,11 +29,14 @@ func (s *Server) handleGetSettings(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, maskSettings(st))
 }
 
-// maskSettings hides the Paperless token; a blank value on PUT keeps the stored one.
+// maskSettings hides the SMTP password and the Paperless token: they are write-only, and a
+// blank value on PUT keeps the stored one. `*_set` says whether one is stored.
 func maskSettings(st store.Settings) map[string]any {
 	b, _ := json.Marshal(st)
 	var m map[string]any
 	_ = json.Unmarshal(b, &m)
+	m["smtp_password_set"] = st.SMTPPassword != ""
+	m["smtp_password"] = ""
 	m["paperless_token_set"] = st.PaperlessToken != ""
 	m["paperless_token"] = ""
 	return m
