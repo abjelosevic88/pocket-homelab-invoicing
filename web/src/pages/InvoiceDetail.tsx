@@ -105,7 +105,7 @@ export default function InvoiceDetail() {
         {inv.status === 'draft' && <button className="btn primary" onClick={() => setStatus('sent')}>Mark as sent</button>}
         {['sent', 'viewed', 'partial', 'overdue'].includes(inv.status) && <button className="btn primary" onClick={() => setModal('payment')}>Record payment</button>}
       </>} />
-      <div className="grid cols-2 mb" style={{ gridTemplateColumns: '2fr 1fr' }}>
+      <div className="grid split-2-1 mb">
         <div className="grid">
           <Card flush>
             <div className="table-wrap"><table className="table">

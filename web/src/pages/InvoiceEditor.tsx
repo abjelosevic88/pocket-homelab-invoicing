@@ -122,7 +122,7 @@ export default function InvoiceEditor() {
         <button className="btn" disabled={busy} onClick={() => save()}>{id ? 'Save' : 'Save as draft'}</button>
         {(!id || inv.status === 'draft') && <button className="btn primary" disabled={busy} onClick={() => save('sent')}>Save & mark sent</button>}
       </>} />
-      <div className="grid cols-2 mb" style={{ gridTemplateColumns: '3fr 2fr' }}>
+      <div className="grid split-3-2 mb">
         <Card title="Client & dates">
           <div className="form-grid">
             <Field label="Client" className="full">

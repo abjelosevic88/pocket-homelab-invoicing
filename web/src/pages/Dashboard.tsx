@@ -62,7 +62,7 @@ export default function Dashboard() {
         <div className="card stat"><div className="label">Average per active month</div><div className="value">{money(avgMonth, code)}</div><div className="hint">{lt.months_active} months with invoices</div></div>
         <div className="card stat"><div className="label">Best year</div><div className="value">{bestYear ? money(bestYear.paid, code) : '—'}</div><div className="hint">{bestYear ? `${bestYear.year} · ${bestYear.count} invoices` : ''}</div></div>
       </div>
-      <div className="grid cols-2 mb" style={{ gridTemplateColumns: '2fr 1fr' }}>
+      <div className="grid split-2-1 mb">
         <Card title={`Revenue (last ${months} months)`} actions={<div className="btn-group">{[12, 24, 36].map(m => <button key={m} className={`btn sm ${months === m ? 'primary' : ''}`} onClick={() => setMonths(m)}>{m}m</button>)}</div>}><RevenueChart months={data.revenue} code={code} /></Card>
         <Card title="Needs attention" flush>
           {data.overdue.length === 0 && data.stats.draft_count === 0 ? <Empty title="All clear">No overdue invoices.</Empty> : (
@@ -89,7 +89,7 @@ export default function Dashboard() {
           <p className="muted small mt">Converted to {code} at each invoice's exchange rate. Details in <Link to="/reports">Reports</Link>.</p>
         </Card>
       </div>
-      <div className="grid cols-2" style={{ gridTemplateColumns: '2fr 1fr' }}>
+      <div className="grid split-2-1">
         <Card title="Recent invoices" actions={<Link to="/invoices" className="small">View all →</Link>} flush>
           {data.recent.length === 0 ? <Empty title="No invoices yet"><Link to="/invoices/new">Create your first invoice</Link></Empty> : (
             <div className="table-wrap"><table className="table">

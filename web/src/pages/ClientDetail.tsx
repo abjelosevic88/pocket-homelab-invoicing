@@ -38,7 +38,7 @@ export default function ClientDetail() {
         <div className="card stat"><div className="label">Unbilled time</div><div className="value">{hours(data.unbilled_minutes)}</div><div className="hint">{data.unbilled_entries ? <Link to={`/time?client_id=${c.id}&unbilled=1`}>Invoice it →</Link> : 'nothing pending'}</div></div>
         <div className="card stat"><div className="label">Billing</div><div className="value" style={{ fontSize: 18 }}>{BILLING_MODES.find(b => b.value === c.billing_mode)?.label}</div><div className="hint">{c.default_rate ? `${money(c.default_rate, c.currency)} · ` : ''}net {c.payment_terms_days} days · {c.currency}</div></div>
       </div>
-      <div className="grid cols-2 mb" style={{ gridTemplateColumns: '1fr 2fr' }}>
+      <div className="grid split-1-2 mb">
         <Card title="Details">
           <dl className="kv">
             {c.address1 && <><dt>Address</dt><dd>{c.address1}<br />{c.address2 && <>{c.address2}<br /></>}{[c.postal_code, c.city].filter(Boolean).join(' ')}{c.state ? `, ${c.state}` : ''}<br />{c.country}</dd></>}
