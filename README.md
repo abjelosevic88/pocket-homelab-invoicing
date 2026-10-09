@@ -17,6 +17,8 @@
 
 Pocket Invoicing is an Invoice-Ninja-style app trimmed down to what a one-person business actually needs, and packaged the way the self-hosting community expects: a tiny multi-arch container, environment-variable config, a health endpoint, Prometheus metrics, reverse-proxy auth, an API with tokens, and webhooks for n8n / Home Assistant.
 
+On the go, **[Pocket Homelab](https://pockethomelab.com/)** is its companion app for iPhone, iPad, Mac and Android: what clients owe, the timer and your invoices in your pocket. See [Companion app](#companion-app-pocket-homelab).
+
 ## Features
 
 | Area | What you get |
@@ -136,6 +138,25 @@ curl -X POST -H "Authorization: Bearer pi_…" -d '{"client_id":1,"description":
 ```
 
 Webhooks fire on `invoice.created|sent|viewed|paid|overdue…`, `payment.created`, `client.*` with an HMAC signature. Reference: [docs/api.md](docs/api.md).
+
+## Companion app: Pocket Homelab
+
+[Pocket Homelab](https://pockethomelab.com/) is a native app for iPhone, iPad, Mac and Android that talks to self-hosted services, and Pocket Invoicing is one of them. It connects with an API token and gives you:
+
+| Area | What you get |
+|---|---|
+| **Overview** | What clients owe, what is overdue, paid this month and time not billed yet, on the Home screen and in an **Invoices** tab. |
+| **Timer** | Start it for a client, stop it when you are done. |
+| **Invoices** | Open, overdue, draft and paid invoices with search; an invoice's lines, totals and payments. **Mark sent**, **mark paid**, **record a payment**, **email it to the client**, view or share the PDF. |
+| **Recurring** | The next recurring runs, with client, schedule and date. |
+
+Setup:
+
+1. In Pocket Invoicing, create a token under **Settings → API tokens** (it starts with `pi_` and is shown once).
+2. In Pocket Homelab, open **Settings → Services → Pocket Invoicing** and enter the base URL (e.g. `https://invoices.example.com`) and the token, then **Test connection**.
+3. Turn on the **Invoices** tab in **Settings → Tabs**.
+
+The token is kept in the device's secure store (the Keychain on Apple devices). Details: [pockethomelab.com/docs/services/invoicing](https://pockethomelab.com/docs/services/invoicing).
 
 ## Backups
 
