@@ -237,4 +237,14 @@ table.table tfoot td { font-weight: 600; background: var(--surface-2); }
 .progress > div { height: 100%; background: var(--success); }
 .link-btn { background: none; border: 0; color: var(--accent); cursor: pointer; font: inherit; padding: 0; }
 .link-btn:hover { text-decoration: underline; }
-@media print { .sidebar, .topbar { display: none; } .main { margin: 0; } }
+@media print { .sidebar, .topbar { display: none; } .main { margin: 0; } }/* drag & drop file picker */
+.dropzone { border: 2px dashed var(--border); border-radius: 10px; padding: 14px; background: var(--surface-2); cursor: pointer; transition: border-color .15s, background .15s; text-align: left; }
+.dropzone:hover, .dropzone:focus-visible { border-color: var(--accent); outline: none; }
+.dropzone.over { border-color: var(--accent); background: var(--accent-soft); }
+.dropzone .dz-empty { text-align: center; color: var(--text); display: grid; gap: 4px; padding: 6px 0; }
+.dropzone .dz-icon { font-size: 24px; color: var(--accent); line-height: 1; }
+.dropzone ul.dz-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; cursor: default; text-align: left; }
+.dropzone ul.dz-list li { display: flex; align-items: center; justify-content: flex-start; gap: 12px; padding: 4px 8px; margin: 0; border-radius: 6px; background: var(--surface); border: 1px solid var(--border); }
+.dropzone ul.dz-list li::before { content: none; }
+.dropzone .dz-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13.5px; }
+.dropzone ul.dz-list li.dz-more { background: transparent; border: 0; padding-top: 6px; }
