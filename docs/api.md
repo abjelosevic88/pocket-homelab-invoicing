@@ -10,6 +10,8 @@ X-API-Key: pi_xxxxxxxx
 
 Errors: `{"error": "message"}` with a 4xx/5xx status. Dates are `YYYY-MM-DD`; timestamps RFC 3339 (UTC). Amounts are JSON numbers in the document's currency.
 
+For a ready-made client, [Pocket Homelab](https://pockethomelab.com/) (iPhone, iPad, Mac, Android) uses this API with a token: the dashboard, invoices, payments, the timer and recurring profiles. See the README's [Companion app](../README.md#companion-app-pocket-homelab) section.
+
 ## Auth
 | Method | Path | Notes |
 |---|---|---|
