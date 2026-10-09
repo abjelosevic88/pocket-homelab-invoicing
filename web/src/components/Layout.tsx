@@ -15,6 +15,7 @@ const nav = [
   { section: 'Work' },
   { to: '/time', label: 'Time tracking', ico: '◷' },
   { to: '/expenses', label: 'Expenses', ico: '▽' },
+  { to: '/documents', label: 'Documents', ico: '▣' },
   { section: 'Insights' },
   { to: '/reports', label: 'Reports', ico: '▦' },
   { section: 'System' },

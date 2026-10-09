@@ -266,6 +266,11 @@ func (s *Server) RunScheduler(ctx context.Context) map[string]any {
 	}
 	result["marked_overdue"] = len(ids)
 
+	// 2b. Finish pending Paperless consume tasks (no-op when the integration is off)
+	if n := s.resolvePendingPaperless(ctx); n > 0 {
+		result["paperless_resolved"] = n
+	}
+
 	// 3. Payment reminders
 	st, _ := s.store.GetSettings(ctx)
 	reminders := 0

@@ -75,40 +75,56 @@ type Settings struct {
 	ReminderDays     string `json:"reminder_days"` // comma separated days after due date, e.g. "3,7,14"
 	RemindersEnabled bool   `json:"reminders_enabled"`
 
+	// Paperless-ngx integration (optional; active only when URL and token are set)
+	PaperlessURL                  string `json:"paperless_url"`                   // API base, e.g. http://paperless:8000
+	PaperlessExternalURL          string `json:"paperless_external_url"`          // URL used for links in the browser (defaults to PaperlessURL)
+	PaperlessToken                string `json:"paperless_token"`                 // API token (never cleared by an empty PUT)
+	PaperlessTags                 string `json:"paperless_tags"`                  // comma-separated tag names added to every upload
+	PaperlessInvoiceType          string `json:"paperless_invoice_type"`          // document type for invoices (created if missing)
+	PaperlessCreateCorrespondents bool   `json:"paperless_create_correspondents"` // set the client as correspondent (created if missing)
+	PaperlessArchiveInvoices      string `json:"paperless_archive_invoices"`      // off | sent | paid — archive the invoice automatically
+	PaperlessCategoryAsType       bool   `json:"paperless_category_as_type"`      // use the document category as Paperless document type
+	PaperlessClearToken           bool   `json:"paperless_clear_token,omitempty"` // transient: PUT with true removes the stored token
+
 	SetupComplete bool `json:"setup_complete"`
 }
 
 // DefaultSettings returns the initial settings.
 func DefaultSettings() Settings {
 	return Settings{
-		CompanyName:            "My Company",
-		BaseCurrency:           "EUR",
-		Locale:                 "en",
-		DateFormat:             "2006-01-02",
-		Timezone:               "UTC",
-		InvoiceNumberFmt:       "INV-{YYYY}-{SEQ:4}",
-		InvoiceNextSeq:         1,
-		InvoiceSeqResetYr:      true,
-		DefaultDueDays:         14,
-		DefaultTerms:           "Payment is due within {due_days} days of the invoice date.",
-		DefaultFooter:          "Thank you for your business.",
-		DefaultBilling:         "hourly",
-		HoursPerDay:            8,
-		TimeRoundingMin:        15,
-		ShowTaxColumn:          true,
-		SMTPPort:               587,
-		SMTPTLS:                "starttls",
-		EmailSubject:           "Invoice for the {month}: {number_short}",
-		EmailBody:              "Hi {first_name},\n\nHere is my invoice for {month}.\n\nLet me know if you have any questions.\n\nThank you,\n{company}",
-		ReminderDays:           "3,7,14",
-		NumberFormat:           "1,234.56",
-		ShowBaseTotal:          true,
-		BaseTotalNote:          "Exchange rate 1 {currency} = {rate} {base}. Total in {base}: {total_base}.",
-		EmailAttachmentMode:    "generated",
-		IncomeTaxRate:          10,
-		IncomeTaxBasis:         "revenue",
-		IncomeTaxByPaymentDate: true,
-		IncomeTaxLabel:         "Income tax",
+		CompanyName:                   "My Company",
+		BaseCurrency:                  "EUR",
+		Locale:                        "en",
+		DateFormat:                    "2006-01-02",
+		Timezone:                      "UTC",
+		InvoiceNumberFmt:              "INV-{YYYY}-{SEQ:4}",
+		InvoiceNextSeq:                1,
+		InvoiceSeqResetYr:             true,
+		DefaultDueDays:                14,
+		DefaultTerms:                  "Payment is due within {due_days} days of the invoice date.",
+		DefaultFooter:                 "Thank you for your business.",
+		DefaultBilling:                "hourly",
+		HoursPerDay:                   8,
+		TimeRoundingMin:               15,
+		ShowTaxColumn:                 true,
+		SMTPPort:                      587,
+		SMTPTLS:                       "starttls",
+		EmailSubject:                  "Invoice for the {month}: {number_short}",
+		EmailBody:                     "Hi {first_name},\n\nHere is my invoice for {month}.\n\nLet me know if you have any questions.\n\nThank you,\n{company}",
+		ReminderDays:                  "3,7,14",
+		NumberFormat:                  "1,234.56",
+		ShowBaseTotal:                 true,
+		BaseTotalNote:                 "Exchange rate 1 {currency} = {rate} {base}. Total in {base}: {total_base}.",
+		EmailAttachmentMode:           "generated",
+		IncomeTaxRate:                 10,
+		IncomeTaxBasis:                "revenue",
+		IncomeTaxByPaymentDate:        true,
+		IncomeTaxLabel:                "Income tax",
+		PaperlessTags:                 "pocket-invoicing",
+		PaperlessInvoiceType:          "Invoice",
+		PaperlessCreateCorrespondents: true,
+		PaperlessArchiveInvoices:      "off",
+		PaperlessCategoryAsType:       true,
 	}
 }
 

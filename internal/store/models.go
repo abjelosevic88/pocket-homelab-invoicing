@@ -129,6 +129,8 @@ type Attachment struct {
 	ContentType string `json:"content_type"`
 	Size        int64  `json:"size"`
 	CreatedAt   string `json:"created_at"`
+
+	Paperless *PaperlessLink `json:"paperless,omitempty"`
 }
 
 // CustomFieldDef describes a user-defined invoice field (Settings → Invoicing).
@@ -189,9 +191,10 @@ type Invoice struct {
 
 	CustomFields map[string]string `json:"custom_fields"`
 
-	Items       []InvoiceItem `json:"items,omitempty"`
-	Payments    []Payment     `json:"payments,omitempty"`
-	Attachments []Attachment  `json:"attachments,omitempty"`
+	Items       []InvoiceItem  `json:"items,omitempty"`
+	Payments    []Payment      `json:"payments,omitempty"`
+	Attachments []Attachment   `json:"attachments,omitempty"`
+	Paperless   *PaperlessLink `json:"paperless,omitempty"`
 }
 
 // Payment records money received against an invoice.
@@ -332,3 +335,36 @@ const (
 	UnitUnit  = "unit"
 	UnitFixed = "fixed"
 )
+
+// Document is a company-wide file (contract, registration, certificate …) not tied to an invoice.
+type Document struct {
+	ID          int64  `json:"id"`
+	Title       string `json:"title"`
+	Category    string `json:"category"`
+	ClientID    *int64 `json:"client_id"`
+	ClientName  string `json:"client_name"`
+	DocDate     string `json:"doc_date"`
+	ExpiresAt   string `json:"expires_at"`
+	Notes       string `json:"notes"`
+	Filename    string `json:"filename"`
+	StoredName  string `json:"-"`
+	ContentType string `json:"content_type"`
+	Size        int64  `json:"size"`
+	CreatedAt   string `json:"created_at"`
+	UpdatedAt   string `json:"updated_at"`
+
+	Paperless *PaperlessLink `json:"paperless,omitempty"`
+}
+
+// PaperlessLink records that a local file was archived in Paperless-ngx.
+type PaperlessLink struct {
+	Kind        string `json:"kind"`
+	RefID       int64  `json:"ref_id"`
+	PaperlessID int64  `json:"paperless_id"`
+	TaskID      string `json:"task_id,omitempty"`
+	Title       string `json:"title"`
+	Error       string `json:"error,omitempty"`
+	URL         string `json:"url,omitempty"` // filled by the server when an external URL is known
+	CreatedAt   string `json:"created_at"`
+	UpdatedAt   string `json:"updated_at"`
+}

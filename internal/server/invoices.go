@@ -209,6 +209,7 @@ func (s *Server) handleGetInvoice(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err, "get invoice")
 		return
 	}
+	s.decorateInvoicePaperless(r.Context(), inv)
 	writeJSON(w, http.StatusOK, inv)
 }
 
@@ -371,6 +372,7 @@ func (s *Server) handleInvoiceStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	s.store.LogActivity(ctx, "invoice", inv.ID, "status", "Status changed to "+full.Status)
 	s.hooks.Emit("invoice."+full.Status, full)
+	s.paperlessAutoArchive(full)
 	writeJSON(w, http.StatusOK, full)
 }
 
@@ -386,6 +388,10 @@ func (s *Server) handleDeleteInvoice(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.removeAttachmentFiles(id)
+	_ = s.store.DeletePaperlessLink(r.Context(), "invoice", id)
+	for _, a := range inv.Attachments {
+		_ = s.store.DeletePaperlessLink(r.Context(), "attachment", a.ID)
+	}
 	s.store.LogActivity(r.Context(), "invoice", id, "deleted", "Invoice "+inv.Number+" deleted")
 	s.hooks.Emit("invoice.deleted", map[string]any{"id": id, "number": inv.Number})
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
@@ -705,6 +711,7 @@ func (s *Server) handleSendInvoice(w http.ResponseWriter, r *http.Request) {
 	s.store.LogActivity(ctx, "invoice", inv.ID, "sent", "Emailed to "+firstNonEmpty(in.To, "client"))
 	full, _ := s.store.GetInvoice(ctx, inv.ID)
 	s.hooks.Emit("invoice.sent", full)
+	s.paperlessAutoArchive(full)
 	writeJSON(w, http.StatusOK, full)
 }
 

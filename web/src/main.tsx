@@ -15,6 +15,7 @@ import InvoiceDetail from './pages/InvoiceDetail'
 import Recurring from './pages/Recurring'
 import TimeTracking from './pages/TimeTracking'
 import Expenses from './pages/Expenses'
+import Documents from './pages/Documents'
 import Payments from './pages/Payments'
 import Reports from './pages/Reports'
 import Settings from './pages/Settings'
@@ -44,6 +45,7 @@ function App() {
         <Route path="/recurring" element={<Recurring />} />
         <Route path="/time" element={<TimeTracking />} />
         <Route path="/expenses" element={<Expenses />} />
+        <Route path="/documents" element={<Documents />} />
         <Route path="/payments" element={<Payments />} />
         <Route path="/reports" element={<Reports />} />
         <Route path="/settings/*" element={<Settings />} />
