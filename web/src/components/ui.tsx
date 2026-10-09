@@ -1,4 +1,4 @@
-import React, { createContext, useCallback, useContext, useEffect, useState } from 'react'
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 
 // ---------- Toasts ----------
 type Toast = { id: number; msg: string; kind: 'info' | 'error' | 'success' }
@@ -109,4 +109,37 @@ export function useDebounce<T>(value: T, ms = 300): T {
 export function numberInput(v: string): number {
   const n = parseFloat(v.replace(',', '.'))
   return isNaN(n) ? 0 : n
+}
+
+/** Click-or-drop file picker. Dropped files are appended to the current selection. */
+export function DropZone({ files, onFiles, multiple = true, accept, hint }: { files: File[]; onFiles: (files: File[]) => void; multiple?: boolean; accept?: string; hint?: React.ReactNode }) {
+  const [over, setOver] = useState(false)
+  const inputRef = useRef<HTMLInputElement>(null)
+  const add = (list: FileList | File[] | null) => {
+    const incoming = Array.from(list || [])
+    if (!incoming.length) return
+    onFiles(multiple ? [...files, ...incoming.filter(n => !files.some(f => f.name === n.name && f.size === n.size))] : incoming.slice(0, 1))
+  }
+  return (
+    <div
+      className={`dropzone ${over ? 'over' : ''}`}
+      onClick={() => inputRef.current?.click()}
+      onDragOver={e => { e.preventDefault(); e.stopPropagation(); setOver(true) }}
+      onDragEnter={e => { e.preventDefault(); setOver(true) }}
+      onDragLeave={e => { e.preventDefault(); setOver(false) }}
+      onDrop={e => { e.preventDefault(); e.stopPropagation(); setOver(false); add(e.dataTransfer.files) }}
+      role="button" tabIndex={0}
+      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); inputRef.current?.click() } }}
+    >
+      <input ref={inputRef} type="file" multiple={multiple} accept={accept} style={{ display: 'none' }} onChange={e => { add(e.target.files); e.target.value = '' }} />
+      {files.length === 0 ? (
+        <div className="dz-empty"><div className="dz-icon">⇪</div><div><b>Drop files here</b> or click to choose</div>{hint && <div className="muted small">{hint}</div>}</div>
+      ) : (
+        <ul className="dz-list" onClick={e => e.stopPropagation()}>
+          {files.map((f, i) => <li key={f.name + f.size}><span className="dz-name">{f.name}</span><span className="muted small">{f.size >= 1048576 ? `${(f.size / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(f.size / 1024))} KB`}</span><button type="button" className="btn ghost sm" title="Remove" onClick={() => onFiles(files.filter((_, j) => j !== i))}>✕</button></li>)}
+          {multiple && <li className="dz-more"><button type="button" className="link-btn" onClick={() => inputRef.current?.click()}>+ Add more</button><span className="muted small"> or drop them here</span></li>}
+        </ul>
+      )}
+    </div>
+  )
 }
