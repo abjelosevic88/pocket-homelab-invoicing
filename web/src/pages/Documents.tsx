@@ -3,7 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { api, V1 } from '../lib/api'
 import { fileSize, fmtDate, today } from '../lib/format'
 import type { Client, Document, PaperlessDoc, PaperlessLink } from '../lib/types'
-import { Card, Confirm, Empty, Field, Loading, Modal, PageHeader, Tabs, useAsync, useDebounce, useToast } from '../components/ui'
+import { Card, Confirm, DropZone, Empty, Field, Loading, Modal, PageHeader, Tabs, useAsync, useDebounce, useToast } from '../components/ui'
 import { PaperlessBadge, PaperlessOffNote, usePaperless } from '../components/paperless'
 
 type Meta = { categories: Record<string, number>; expiring: Document[] }
@@ -44,9 +44,8 @@ export function DocForm({ initial, categories, clients, onSaved, onClose, paperl
   }
   return (
     <form onSubmit={submit}>
-      {!initial && <Field label="Files" help="Any type, up to 50 MB each. With several files the title is taken from each file name.">
-        <input type="file" multiple onChange={e => { const fs = Array.from(e.target.files || []); setFiles(fs); if (fs.length === 1 && !f.title) setF(x => ({ ...x, title: fs[0].name.replace(/\.[^.]+$/, '').replace(/[_\-.]+/g, ' ') })) }} />
-        {files.length > 0 && <div className="muted small">{files.map(x => x.name).join(', ')}</div>}
+      {!initial && <Field label="Files">
+        <DropZone files={files} hint="Any type, up to 50 MB each. With several files the title is taken from each file name." onFiles={fs => { setFiles(fs); if (fs.length === 1 && !f.title) setF(x => ({ ...x, title: fs[0].name.replace(/\.[^.]+$/, '').replace(/[_\-.]+/g, ' ') })) }} />
       </Field>}
       <div className="form-grid">
         <Field label="Title" className="full"><input value={f.title} onChange={set('title')} placeholder={files.length > 1 ? 'From file names' : 'e.g. Rješenje o registraciji'} disabled={files.length > 1} /></Field>
