@@ -6,10 +6,10 @@ import { BILLING_MODES, fmtDateTime, money, UNITS } from '../lib/format'
 import type { APIToken, Currency, CustomFieldDef, ExchangeRate, InvoiceTemplate, Product, Settings as S, TaxRate, User, Webhook } from '../lib/types'
 import { Card, Confirm, Empty, Field, Loading, Modal, Tabs, useAsync, useToast } from '../components/ui'
 
-type Tab = 'company' | 'invoicing' | 'currencies' | 'taxes' | 'catalog' | 'templates' | 'email' | 'api' | 'webhooks' | 'users' | 'backup' | 'system'
+type Tab = 'company' | 'invoicing' | 'currencies' | 'taxes' | 'catalog' | 'templates' | 'email' | 'paperless' | 'api' | 'webhooks' | 'users' | 'backup' | 'system'
 const TABS: { id: Tab; label: string }[] = [
   { id: 'company', label: 'Company' }, { id: 'invoicing', label: 'Invoicing' }, { id: 'currencies', label: 'Currencies' }, { id: 'taxes', label: 'Taxes' }, { id: 'catalog', label: 'Catalog' },
-  { id: 'templates', label: 'Templates' }, { id: 'email', label: 'Email' }, { id: 'api', label: 'API tokens' }, { id: 'webhooks', label: 'Webhooks' }, { id: 'users', label: 'Users' }, { id: 'backup', label: 'Backup' }, { id: 'system', label: 'System' },
+  { id: 'templates', label: 'Templates' }, { id: 'email', label: 'Email' }, { id: 'paperless', label: 'Paperless' }, { id: 'api', label: 'API tokens' }, { id: 'webhooks', label: 'Webhooks' }, { id: 'users', label: 'Users' }, { id: 'backup', label: 'Backup' }, { id: 'system', label: 'System' },
 ]
 
 export default function Settings() {
@@ -27,6 +27,7 @@ export default function Settings() {
       {tab === 'catalog' && <Catalog />}
       {tab === 'templates' && <Templates />}
       {tab === 'email' && <Email />}
+      {tab === 'paperless' && <Paperless />}
       {tab === 'api' && <Tokens />}
       {tab === 'webhooks' && <Webhooks />}
       {tab === 'users' && <Users />}
@@ -521,6 +522,54 @@ function System() {
         <button className="btn" onClick={async () => { const r = await api.post<Record<string, number>>(`${V1}/scheduler/run`); toast(`Scheduler: ${Object.entries(r).map(([k, v]) => `${k}=${v}`).join(', ')}`, 'success') }}>Run scheduler now</button>
         <p className="muted small mt">Health: <code>/healthz</code> · readiness: <code>/readyz</code> · metrics: <code>/metrics</code></p>
       </Card>
+    </div>
+  )
+}
+
+// ---------- Paperless-ngx ----------
+function Paperless() {
+  const { s, set, save, busy, setS } = useSettingsForm()
+  const toast = useToast()
+  const [testing, setTesting] = useState(false)
+  const [result, setResult] = useState<{ ok: boolean; version?: string; document_count?: number } | null>(null)
+  if (!s) return <Loading />
+  const configured = !!s.paperless_url && (!!s.paperless_token || !!s.paperless_token_set)
+  const test = async () => {
+    setTesting(true); setResult(null)
+    try { const r = await api.post<{ ok: boolean; version: string; document_count: number }>(`${V1}/settings/test-paperless`, { url: s.paperless_url, token: s.paperless_token }); setResult(r); toast(`Connected to Paperless-ngx ${r.version || ''} (${r.document_count} documents)`, 'success') } catch (e) { toast((e as Error).message, 'error') } finally { setTesting(false) }
+  }
+  return (
+    <div className="grid" style={{ maxWidth: 820 }}>
+      <Card title="Connection">
+        <p className="muted small">Optional. When a URL and API token are set, invoices and company documents can be archived in <a href="https://docs.paperless-ngx.com/" target="_blank" rel="noreferrer">Paperless-ngx</a> and your Paperless archive can be browsed under Documents. Leave empty to keep the integration off. The token is created in Paperless under your profile (top right → My profile → API token).</p>
+        <div className="form-grid">
+          <Field label="Paperless URL" help="As reached from this container, e.g. http://paperless-ngx:8000"><input value={s.paperless_url} onChange={set('paperless_url')} placeholder="http://paperless:8000" /></Field>
+          <Field label="Browser URL (optional)" help="Used for links you click, when different from the URL above"><input value={s.paperless_external_url} onChange={set('paperless_external_url')} placeholder="https://paperless.example.org" /></Field>
+          <Field label="API token" help={s.paperless_token_set ? 'A token is stored. Leave blank to keep it.' : 'Paperless → profile → API token'}><input type="password" value={s.paperless_token} onChange={set('paperless_token')} autoComplete="new-password" placeholder={s.paperless_token_set ? '••••••••' : ''} /></Field>
+          <Field label=" ">
+            <span className="row">
+              <button type="button" className="btn" disabled={testing || !s.paperless_url} onClick={test}>{testing ? 'Testing…' : 'Test connection'}</button>
+              {s.paperless_token_set && <button type="button" className="btn ghost sm" onClick={() => { setS(x => x ? { ...x, paperless_clear_token: true, paperless_token: '', paperless_token_set: false } : x); toast('Token will be removed when you save', 'success') }}>Remove token</button>}
+            </span>
+            {result && <div className="muted small">Paperless-ngx {result.version} · {result.document_count} documents</div>}
+          </Field>
+        </div>
+      </Card>
+      <Card title="What gets archived">
+        <div className="form-grid">
+          <Field label="Archive invoices automatically" help="Uses the same files as email attachments (Settings → Invoicing → Email attachment): generated PDF, your uploaded files, or both">
+            <select value={s.paperless_archive_invoices} onChange={set('paperless_archive_invoices')}><option value="off">Never (manual button only)</option><option value="sent">When marked as sent (or paid)</option><option value="paid">When paid</option></select>
+          </Field>
+          <Field label="Document type for invoices" help="Created in Paperless if missing"><input value={s.paperless_invoice_type} onChange={set('paperless_invoice_type')} placeholder="Invoice" /></Field>
+          <Field label="Tags" help="Comma separated; added to everything sent from here"><input value={s.paperless_tags} onChange={set('paperless_tags')} placeholder="pocket-invoicing, invoices" /></Field>
+          <div className="grid" style={{ gap: 8 }}>
+            <label className="check"><input type="checkbox" checked={s.paperless_create_correspondents} onChange={set('paperless_create_correspondents')} /> Set the client as correspondent (created if missing)</label>
+            <label className="check"><input type="checkbox" checked={s.paperless_category_as_type} onChange={set('paperless_category_as_type')} /> Use the document category as Paperless document type</label>
+          </div>
+        </div>
+        {configured && <p className="muted small" style={{ marginTop: 12 }}>Each invoice page has an "Archive to Paperless" button and each uploaded file a ⇪ button; Documents has "Send to Paperless" and a Paperless tab to search and copy documents back. Links to Paperless are stored locally, so deleting a document here never deletes it there.</p>}
+      </Card>
+      <SaveBar onSave={save} busy={busy} />
     </div>
   )
 }

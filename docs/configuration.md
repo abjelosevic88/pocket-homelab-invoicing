@@ -73,3 +73,12 @@ pocket-invoicing backup [-o F]   # consistent SQLite copy (VACUUM INTO)
 pocket-invoicing scheduler       # run jobs once and exit
 pocket-invoicing version
 ```
+
+## Paperless-ngx (optional)
+
+| Variable | Default | Description |
+|---|---|---|
+| `PAPERLESS_URL` | (empty) | Paperless-ngx base URL as reached from the container. Settings → Paperless overrides. |
+| `PAPERLESS_TOKEN` | (empty) | API token. Settings → Paperless overrides. |
+
+See [paperless.md](paperless.md).

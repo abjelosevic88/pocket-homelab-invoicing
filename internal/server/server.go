@@ -23,6 +23,7 @@ import (
 	"github.com/abjelosevic88/pocket-homelab-invoicing/internal/config"
 	"github.com/abjelosevic88/pocket-homelab-invoicing/internal/currency"
 	"github.com/abjelosevic88/pocket-homelab-invoicing/internal/docx"
+	"github.com/abjelosevic88/pocket-homelab-invoicing/internal/paperless"
 	"github.com/abjelosevic88/pocket-homelab-invoicing/internal/pdf"
 	"github.com/abjelosevic88/pocket-homelab-invoicing/internal/store"
 	"github.com/abjelosevic88/pocket-homelab-invoicing/internal/webhook"
@@ -43,6 +44,9 @@ type Server struct {
 	provName string
 	prov     currency.Provider
 	hooks    *webhook.Dispatcher
+	plMu     sync.Mutex
+	plKey    string
+	pl       *paperless.Client
 	webFS    fs.FS
 	started  time.Time
 	requests atomic.Int64
@@ -130,6 +134,7 @@ func (s *Server) Router() http.Handler {
 			r.Post("/settings/logo", s.handleUploadLogo)
 			r.Delete("/settings/logo", s.handleDeleteLogo)
 			r.Post("/settings/test-email", s.handleTestEmail)
+			r.Post("/settings/test-paperless", s.handleTestPaperless)
 			r.Get("/settings/system", s.handleSystemInfo)
 
 			r.Get("/currencies", s.handleListCurrencies)
@@ -187,6 +192,26 @@ func (s *Server) Router() http.Handler {
 			r.Post("/invoices/{id}/attachments", s.handleUploadAttachment)
 			r.Get("/attachments/{aid}", s.handleDownloadAttachment)
 			r.Delete("/attachments/{aid}", s.handleDeleteAttachment)
+			r.Post("/attachments/{aid}/paperless", s.handleAttachmentToPaperless)
+			r.Post("/invoices/{id}/paperless", s.handleInvoiceToPaperless)
+
+			r.Get("/documents", s.handleListDocuments)
+			r.Post("/documents", s.handleUploadDocuments)
+			r.Get("/documents/categories", s.handleDocumentCategories)
+			r.Get("/documents/{id}", s.handleGetDocument)
+			r.Put("/documents/{id}", s.handleUpdateDocument)
+			r.Delete("/documents/{id}", s.handleDeleteDocument)
+			r.Get("/documents/{id}/file", s.handleDocumentFile)
+			r.Post("/documents/{id}/file", s.handleReplaceDocumentFile)
+			r.Post("/documents/{id}/paperless", s.handleDocumentToPaperless)
+
+			r.Get("/paperless/status", s.handlePaperlessStatus)
+			r.Get("/paperless/documents", s.handlePaperlessSearch)
+			r.Get("/paperless/names", s.handlePaperlessNames)
+			r.Get("/paperless/documents/{pid}/file", s.handlePaperlessFile)
+			r.Get("/paperless/documents/{pid}/thumb", s.handlePaperlessFile)
+			r.Post("/paperless/documents/{pid}/import", s.handlePaperlessImport)
+			r.Delete("/paperless/links/{id}", s.handleUnlinkPaperless)
 
 			r.Get("/payments", s.handleListPayments)
 			r.Post("/payments", s.handleCreatePayment)

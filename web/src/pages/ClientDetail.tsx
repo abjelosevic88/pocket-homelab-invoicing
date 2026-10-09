@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api, V1 } from '../lib/api'
 import { BILLING_MODES, fmtDate, hours, money } from '../lib/format'
-import type { Client, Invoice, Recurring } from '../lib/types'
+import type { Document, Client, Invoice, Recurring } from '../lib/types'
 import { Badge, Card, Confirm, Empty, Loading, Modal, PageHeader, useAsync, useToast } from '../components/ui'
 import { ClientForm } from './Clients'
 
@@ -55,6 +55,7 @@ export default function ClientDetail() {
           </table></div>}
         </Card>
       </div>
+      <ClientDocuments clientId={c.id} />
       {data.recurring?.length > 0 && <Card title="Recurring profiles" flush>
         <table className="table"><thead><tr><th>Name</th><th>Frequency</th><th>Next run</th><th>Status</th></tr></thead>
           <tbody>{data.recurring.map(r => <tr key={r.id} className="clickable" onClick={() => navigate('/recurring')}><td className="bold">{r.name}</td><td>{r.frequency}{r.interval > 1 ? ` ×${r.interval}` : ''}</td><td>{fmtDate(r.next_run)}</td><td><Badge status={r.status} /></td></tr>)}</tbody></table>
@@ -63,4 +64,13 @@ export default function ClientDetail() {
       {confirmDel && <Confirm title={c.invoice_count ? 'Archive client?' : 'Delete client?'} message={c.invoice_count ? 'This client has invoices, so it will be archived (hidden) rather than deleted.' : 'This permanently deletes the client and its time entries.'} onConfirm={del} onCancel={() => setConfirmDel(false)} />}
     </>
   )
+}
+
+function ClientDocuments({ clientId }: { clientId: number }) {
+  const { data } = useAsync(() => api.get<Document[]>(`${V1}/documents?client_id=${clientId}`), [clientId])
+  if (!data?.length) return null
+  return <Card title="Documents" actions={<Link className="btn sm" to="/documents">All documents</Link>} flush className="mb">
+    <table className="table"><thead><tr><th>Title</th><th>Category</th><th>Date</th><th>Expires</th></tr></thead>
+      <tbody>{data.map(d => <tr key={d.id}><td><a className="bold" href={`${V1}/documents/${d.id}/file`} target="_blank" rel="noreferrer">{d.title}</a><div className="muted small">{d.filename}</div></td><td>{d.category && <span className="badge">{d.category}</span>}</td><td className="muted">{fmtDate(d.doc_date)}</td><td className="muted">{fmtDate(d.expires_at)}</td></tr>)}</tbody></table>
+  </Card>
 }

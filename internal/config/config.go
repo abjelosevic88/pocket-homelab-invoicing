@@ -53,6 +53,10 @@ type Config struct {
 	SchedulerEnabled  bool
 	SchedulerInterval time.Duration
 
+	// Paperless-ngx (optional defaults; Settings → Paperless overrides)
+	PaperlessURL   string
+	PaperlessToken string
+
 	// Misc
 	DemoData bool
 }
@@ -122,6 +126,8 @@ func Load() (*Config, error) {
 		ChromiumPath:    env("CHROMIUM_PATH", "chromium"),
 		GotenbergURL:    strings.TrimRight(env("GOTENBERG_URL", "http://gotenberg:3000"), "/"),
 		DocxConverter:   strings.ToLower(env("DOCX_CONVERTER", "gotenberg")),
+		PaperlessURL:    strings.TrimRight(env("PAPERLESS_URL", ""), "/"),
+		PaperlessToken:  env("PAPERLESS_TOKEN", ""),
 		LibreOfficePath: env("LIBREOFFICE_PATH", "soffice"),
 
 		ExchangeRateProvider: strings.ToLower(env("EXCHANGE_RATE_PROVIDER", "frankfurter")),

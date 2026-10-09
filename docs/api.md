@@ -158,3 +158,7 @@ automation:
       data:
         message: "💸 {{ trigger.json.data.client_name }} paid {{ trigger.json.data.number }}"
 ```
+
+## Documents and Paperless-ngx
+
+See [paperless.md](paperless.md) for the document store endpoints (`/api/v1/documents…`) and the Paperless proxy endpoints (`/api/v1/paperless/…`).

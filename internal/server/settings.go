@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -25,7 +26,17 @@ func (s *Server) handleGetSettings(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err, "settings")
 		return
 	}
-	writeJSON(w, http.StatusOK, st)
+	writeJSON(w, http.StatusOK, maskSettings(st))
+}
+
+// maskSettings hides the Paperless token; a blank value on PUT keeps the stored one.
+func maskSettings(st store.Settings) map[string]any {
+	b, _ := json.Marshal(st)
+	var m map[string]any
+	_ = json.Unmarshal(b, &m)
+	m["paperless_token_set"] = st.PaperlessToken != ""
+	m["paperless_token"] = ""
+	return m
 }
 
 func (s *Server) handlePutSettings(w http.ResponseWriter, r *http.Request) {
@@ -36,12 +47,27 @@ func (s *Server) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	prevPwd := st.SMTPPassword
+	prevToken := st.PaperlessToken
 	if err := decode(r, &st); err != nil {
 		writeErr(w, http.StatusBadRequest, "invalid json")
 		return
 	}
 	if st.SMTPPassword == "" {
 		st.SMTPPassword = prevPwd // password is never echoed back as cleared
+	}
+	if st.PaperlessToken == "" {
+		st.PaperlessToken = prevToken
+	}
+	if st.PaperlessClearToken {
+		st.PaperlessToken = ""
+	}
+	st.PaperlessClearToken = false
+	st.PaperlessURL = strings.TrimRight(strings.TrimSpace(st.PaperlessURL), "/")
+	st.PaperlessExternalURL = strings.TrimRight(strings.TrimSpace(st.PaperlessExternalURL), "/")
+	switch st.PaperlessArchiveInvoices {
+	case "off", "sent", "paid":
+	default:
+		st.PaperlessArchiveInvoices = "off"
 	}
 	st.BaseCurrency = strings.ToUpper(strings.TrimSpace(st.BaseCurrency))
 	if st.BaseCurrency == "" {
@@ -81,7 +107,7 @@ func (s *Server) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err, "save settings")
 		return
 	}
-	writeJSON(w, http.StatusOK, st)
+	writeJSON(w, http.StatusOK, maskSettings(st))
 }
 
 func slugify(v string) string {

@@ -5,6 +5,7 @@ import { useApp } from '../lib/app-context'
 import { fileSize, fmtDate, fmtDateTime, money, PAYMENT_METHODS, today } from '../lib/format'
 import type { Activity, Client, Invoice, Payment } from '../lib/types'
 import { Badge, Card, Confirm, Field, Loading, Modal, PageHeader, useAsync, useToast } from '../components/ui'
+import { PaperlessBadge, usePaperless } from '../components/paperless'
 
 function PaymentForm({ inv, onDone }: { inv: Invoice; onDone: () => void }) {
   const toast = useToast()
@@ -75,6 +76,9 @@ export default function InvoiceDetail() {
   const { data: inv, loading, reload, setData } = useAsync(() => api.get<Invoice>(`${V1}/invoices/${id}`), [id])
   const { data: activity, reload: reloadAct } = useAsync(() => api.get<Activity[]>(`${V1}/activity?entity_type=invoice&entity_id=${id}&limit=20`), [id])
   const [modal, setModal] = useState<'' | 'payment' | 'send' | 'delete' | 'cancel'>('')
+  const [archiving, setArchiving] = useState(false)
+  const paperless = usePaperless()
+  const plOn = !!paperless?.configured
   if (loading || !inv) return <Loading />
   const publicUrl = `${window.location.origin}/i/${inv.public_token}`
   const setStatus = async (status: string) => {
@@ -84,6 +88,11 @@ export default function InvoiceDetail() {
   const del = async () => { await api.del(`${V1}/invoices/${inv.id}`); toast('Invoice deleted', 'success'); navigate('/invoices') }
   const delPayment = async (p: Payment) => { if (!confirm('Delete this payment?')) return; await api.del(`${V1}/payments/${p.id}`); reload(); reloadAct() }
   const copyLink = () => navigator.clipboard.writeText(publicUrl).then(() => toast('Public link copied', 'success'))
+  const archive = async (source = '') => {
+    setArchiving(true)
+    try { const r = await api.post<Invoice>(`${V1}/invoices/${inv.id}/paperless`, { source }); const n = [r.paperless, ...(r.attachments || []).map(a => a.paperless)].filter(l => l && l.paperless_id > 0).length; toast(n ? `Archived in Paperless (${n} file${n === 1 ? '' : 's'})` : 'Sent to Paperless, consuming…', 'success'); reload(); reloadAct() } catch (e) { toast((e as Error).message, 'error') } finally { setArchiving(false) }
+  }
+  const archived = !!(inv.paperless && inv.paperless.paperless_id > 0) || !!inv.attachments?.some(a => a.paperless && a.paperless.paperless_id > 0)
   const base = settings?.base_currency
   const paidPct = inv.total > 0 ? Math.min(100, (inv.amount_paid / inv.total) * 100) : 0
   return (
@@ -91,6 +100,7 @@ export default function InvoiceDetail() {
       <PageHeader title={<span className="row">{inv.number} <Badge status={inv.status} /></span>} sub={<><Link to={`/clients/${inv.client_id}`}>{inv.client_name}</Link> · issued {fmtDate(inv.issue_date)} · due {fmtDate(inv.due_date)}</>} actions={<>
         <a className="btn" href={`${V1}/invoices/${inv.id}/pdf`} target="_blank" rel="noreferrer">View PDF</a>
         <a className="btn" href={`${V1}/invoices/${inv.id}/pdf?download=1`}>Download</a>
+        {plOn && (archived ? <a className="btn" href={(inv.paperless?.paperless_id ? inv.paperless : inv.attachments?.find(a => a.paperless?.paperless_id)?.paperless)?.url} target="_blank" rel="noreferrer" title="Open in Paperless">In Paperless ↗</a> : <button className="btn" disabled={archiving} onClick={() => archive()} title="Send the PDF / uploaded files to Paperless-ngx">{archiving ? 'Archiving…' : 'Archive to Paperless'}</button>)}
         {inv.status !== 'paid' && inv.status !== 'cancelled' && <button className="btn" onClick={() => setModal('send')}>Email</button>}
         {inv.status === 'draft' && <button className="btn primary" onClick={() => setStatus('sent')}>Mark as sent</button>}
         {['sent', 'viewed', 'partial', 'overdue'].includes(inv.status) && <button className="btn primary" onClick={() => setModal('payment')}>Record payment</button>}
@@ -122,7 +132,7 @@ export default function InvoiceDetail() {
           </Card>
           {(inv.notes || inv.terms) && <Card><div className="grid cols-2">{inv.notes && <div><div className="muted small bold">NOTES</div><p style={{ whiteSpace: 'pre-wrap' }}>{inv.notes}</p></div>}{inv.terms && <div><div className="muted small bold">TERMS</div><p style={{ whiteSpace: 'pre-wrap' }}>{inv.terms}</p></div>}</div></Card>}
           <Card title="Attachments" actions={<label className="btn sm">+ Upload<input type="file" multiple style={{ display: 'none' }} onChange={async e => { if (!e.target.files?.length) return; const fd = new FormData(); for (const f of Array.from(e.target.files)) fd.append('file', f); try { await api.post(`${V1}/invoices/${inv.id}/attachments`, fd); toast('Uploaded', 'success'); reload(); reloadAct() } catch (err) { toast((err as Error).message, 'error') } }} /></label>} flush>
-            {!inv.attachments?.length ? <div className="empty muted">No files attached. Upload your own PDF (e.g. a signed or fiscalised version); emails can send it instead of the generated PDF (Settings → Invoicing).</div> : <table className="table"><tbody>{inv.attachments.map(a => <tr key={a.id}><td><a href={`${V1}/attachments/${a.id}`} target="_blank" rel="noreferrer">{a.filename}</a><div className="muted small">{fileSize(a.size)} · {fmtDateTime(a.created_at)}</div></td><td className="actions"><a className="btn ghost sm" href={`${V1}/attachments/${a.id}?download=1`}>↓</a><button className="btn ghost sm" onClick={async () => { if (!confirm(`Remove ${a.filename}?`)) return; await api.del(`${V1}/attachments/${a.id}`); reload() }}>✕</button></td></tr>)}</tbody></table>}
+            {!inv.attachments?.length ? <div className="empty muted">No files attached. Upload your own PDF (e.g. a signed or fiscalised version); emails can send it instead of the generated PDF (Settings → Invoicing).</div> : <table className="table"><tbody>{inv.attachments.map(a => <tr key={a.id}><td><a href={`${V1}/attachments/${a.id}`} target="_blank" rel="noreferrer">{a.filename}</a><div className="muted small">{fileSize(a.size)} · {fmtDateTime(a.created_at)} {plOn && <PaperlessBadge link={a.paperless} />}</div></td><td className="actions">{plOn && !(a.paperless && a.paperless.paperless_id > 0) && <button className="btn ghost sm" title="Send to Paperless" onClick={async () => { try { await api.post(`${V1}/attachments/${a.id}/paperless`); toast('Sent to Paperless', 'success'); reload(); reloadAct() } catch (e) { toast((e as Error).message, 'error') } }}>⇪</button>}<a className="btn ghost sm" href={`${V1}/attachments/${a.id}?download=1`}>↓</a><button className="btn ghost sm" onClick={async () => { if (!confirm(`Remove ${a.filename}?`)) return; await api.del(`${V1}/attachments/${a.id}`); reload() }}>✕</button></td></tr>)}</tbody></table>}
           </Card>
           <Card title="Payments" actions={['sent', 'viewed', 'partial', 'overdue'].includes(inv.status) ? <button className="btn sm" onClick={() => setModal('payment')}>+ Add</button> : undefined} flush>
             {inv.amount_paid > 0 && <div style={{ padding: '12px 16px 0' }}><div className="progress"><div style={{ width: `${paidPct}%` }} /></div><div className="muted small mt" style={{ marginTop: 6 }}>{paidPct.toFixed(0)}% paid</div></div>}

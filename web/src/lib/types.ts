@@ -10,7 +10,11 @@ export interface Client {
 export interface Product { id: number; name: string; description: string; unit: string; unit_price: number; currency: string; tax_rate: number; archived: boolean }
 export interface TemplateOptions { hide_rate: boolean; hide_unit: boolean; show_quantity_total: boolean; signature_label: string; hide_logo: boolean }
 export interface InvoiceTemplate { id: number; name: string; layout: string; accent_color: string; labels: Record<string, string>; options: TemplateOptions; html: string; is_default: boolean; kind: 'design' | 'docx'; docx_path: string; docx_name: string }
-export interface Attachment { id: number; invoice_id: number; filename: string; content_type: string; size: number; created_at: string }
+export interface PaperlessLink { kind: string; ref_id: number; paperless_id: number; task_id?: string; title: string; error?: string; url?: string; created_at: string; updated_at: string }
+export interface Attachment { id: number; invoice_id: number; filename: string; content_type: string; size: number; created_at: string; paperless?: PaperlessLink }
+export interface Document { id: number; title: string; category: string; client_id: number | null; client_name: string; doc_date: string; expires_at: string; notes: string; filename: string; content_type: string; size: number; created_at: string; updated_at: string; paperless?: PaperlessLink }
+export interface PaperlessDoc { id: number; title: string; created: string; added: string; modified: string; correspondent: string; document_type: string; tags: string[]; original_file_name: string; archived_file_name: string; archive_serial_number: number | null; url: string }
+export interface PaperlessStatus { configured: boolean; ok?: boolean; error?: string; version?: string; document_count?: number; url?: string; archive_mode?: string }
 export interface CustomFieldDef { key: string; label: string; show_on_pdf: boolean }
 export interface InvoiceItem { id?: number; description: string; unit: string; quantity: number; unit_price: number; tax_rate: number; discount: number; line_total?: number }
 export interface Payment { id: number; invoice_id: number; invoice_number?: string; client_name?: string; date: string; amount: number; currency: string; exchange_rate: number; applied_amount: number; method: string; reference: string; notes: string; created_at: string }
@@ -19,7 +23,7 @@ export interface Invoice {
   period_start: string | null; period_end: string | null; po_number: string; discount_type: string; discount_value: number; subtotal: number; discount_total: number; tax_total: number; total: number; amount_paid: number; balance: number;
   notes: string; terms: string; footer: string; template_id: number | null; recurring_id: number | null; public_token: string; sent_at: string | null; viewed_at: string | null; paid_at: string | null; created_at: string; updated_at: string;
   custom_fields: Record<string, string>;
-  items?: InvoiceItem[]; payments?: Payment[]; attachments?: Attachment[];
+  items?: InvoiceItem[]; payments?: Payment[]; attachments?: Attachment[]; paperless?: PaperlessLink;
 }
 export interface RecurringItem { description: string; unit: string; quantity: number; unit_price: number; tax_rate: number; discount: number }
 export interface Recurring {
@@ -37,6 +41,7 @@ export interface Settings {
   payment_details_by_currency: Record<string, string> | null; number_format: string; custom_fields: CustomFieldDef[] | null; show_base_total: boolean; base_total_note: string; email_attachment_mode: string;
   income_tax_rate: number; income_tax_basis: string; income_tax_by_payment_date: boolean; income_tax_min_yearly: number; income_tax_deduction: number; contributions_monthly: number; income_tax_label: string;
   smtp_host: string; smtp_port: number; smtp_user: string; smtp_password: string; smtp_from: string; smtp_from_name: string; smtp_tls: string; smtp_bcc: string; email_subject: string; email_body: string; reminder_days: string; reminders_enabled: boolean; setup_complete: boolean;
+  paperless_url: string; paperless_external_url: string; paperless_token: string; paperless_token_set?: boolean; paperless_clear_token?: boolean; paperless_tags: string; paperless_invoice_type: string; paperless_create_correspondents: boolean; paperless_archive_invoices: string; paperless_category_as_type: boolean;
 }
 export interface DashboardStats { outstanding: number; outstanding_count: number; overdue: number; overdue_count: number; paid_this_month: number; paid_this_year: number; invoiced_this_year: number; draft_count: number; unbilled_minutes: number; unbilled_expenses: number; active_clients: number }
 export interface MonthlyRevenue { month: string; invoiced: number; paid: number; expenses: number; count: number }
