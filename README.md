@@ -24,7 +24,7 @@ Pocket Invoicing is an Invoice-Ninja-style app trimmed down to what a one-person
 | **Billing modes** | Hourly, daily, monthly retainer, fixed price, or per unit. Mix them on one invoice. |
 | **Time tracking** | Start/stop timer, manual entries, rounding (e.g. 15 min), bill unbilled time as hours *or* days in one click, grouped per entry / day / project / total. |
 | **Recurring invoices** | Weekly → yearly schedules, "every N" intervals, end date or max occurrences, `{month}` / `{period}` placeholders, optional auto-send. Missed runs catch up after downtime. |
-| **Multi-currency** | Invoice each client in its own currency. Rates from the ECB (free, no key) or entered manually. Payments can arrive in a third currency. Reports convert everything to your base currency at the rate locked on each invoice. 56 currencies seeded, add your own (incl. crypto). |
+| **Multi-currency** | Invoice each client in its own currency. Rates from the ECB or the Central Bank of BiH (free, no key) or entered manually. Payments can arrive in a third currency. Reports convert everything to your base currency at the rate locked on each invoice. 56 currencies seeded, add your own (incl. crypto). |
 | **PDF & templates** | Three built-in layouts (Classic, Modern, Minimal), accent colour, logo, per-template label overrides for localisation (RECHNUNG / FAKTURA / …), optional custom HTML template. **Word templates:** upload any `.docx` with `{{placeholders}}`, keep several, assign per client, converted by Gotenberg. Pure-Go PDF engine by default. |
 | **Payments** | Partial payments, multiple methods, references. Status flow draft → sent → viewed → partial → paid, with automatic overdue marking. |
 | **Client portal link** | Every invoice has a share link (`/i/<token>`) with web view, PDF download and view tracking. No client accounts needed. |
@@ -90,7 +90,7 @@ Everything is an environment variable; all are optional. The important ones:
 | `AUTH_MODE` | `local` | `local` (built-in login), `proxy` (trust `Remote-User` from Authelia/Authentik), `none` (LAN only!) |
 | `ADMIN_EMAIL` / `ADMIN_PASSWORD` | – | Create the admin without the wizard |
 | `PDF_ENGINE` | `native` | `native` (pure Go) · `chromium` · `gotenberg` |
-| `EXCHANGE_RATE_PROVIDER` | `frankfurter` | ECB rates via frankfurter.app, or `none` for fully offline |
+| `EXCHANGE_RATE_PROVIDER` | `frankfurter` | Default rate source: `frankfurter` (ECB), `cbbh` (Central Bank of Bosnia and Herzegovina), or `none`. Can be changed in Settings → Currencies |
 | `SCHEDULER_INTERVAL` | `15m` | Recurring invoices, overdue marking, reminders, rate refresh |
 | `TRUST_PROXY` | `true` | Honour `X-Forwarded-*` headers |
 | `SECURE_COOKIES` | `false` | Set `true` behind HTTPS |
@@ -114,8 +114,8 @@ Details and examples: [docs/billing-modes.md](docs/billing-modes.md).
 
 1. Pick a **base currency** (Settings → Currencies). Reports and the dashboard are shown in it.
 2. Enable the currencies you invoice in. Each client has a default currency.
-3. Rates are fetched automatically from the ECB every 12h, or enter them manually (manual rates are never overwritten). Fully offline? `EXCHANGE_RATE_PROVIDER=none`.
-4. When you create an invoice the current rate is **locked** on that invoice, so reports stay consistent even if rates move later. You can override it per invoice.
+3. Rates are fetched automatically every 12h from the source chosen in Settings → Currencies: the ECB (via frankfurter.app) or the Central Bank of Bosnia and Herzegovina's official daily list. Or enter them manually (manual rates are never overwritten). Fully offline? Pick "None".
+4. When you create an invoice the rate is **locked** on that invoice, so reports stay consistent even if rates move later. With the CBBH source it is the official rate valid on the invoice's issue date (so backdated invoices get the right day); otherwise the current stored rate. You can override it per invoice.
 5. Payments in a different currency are converted at the stored or a typed rate; the invoice shows what was applied.
 
 ## Templates & PDF

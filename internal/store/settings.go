@@ -23,26 +23,27 @@ type Settings struct {
 	TaxID          string `json:"tax_id"`
 	LogoPath       string `json:"logo_path"`
 
-	BaseCurrency       string  `json:"base_currency"`
-	Locale             string  `json:"locale"`
-	DateFormat         string  `json:"date_format"` // Go layout
-	Timezone           string  `json:"timezone"`
-	InvoiceNumberFmt   string  `json:"invoice_number_format"` // e.g. INV-{YYYY}-{SEQ:4}
-	InvoiceNextSeq     int64   `json:"invoice_next_seq"`
-	InvoiceSeqResetYr  bool    `json:"invoice_seq_reset_yearly"`
-	InvoiceSeqYear     int     `json:"invoice_seq_year"`
-	DefaultDueDays     int     `json:"default_due_days"`
-	DefaultNotes       string  `json:"default_notes"`
-	DefaultTerms       string  `json:"default_terms"`
-	DefaultFooter      string  `json:"default_footer"`
-	DefaultBilling     string  `json:"default_billing_mode"`
-	DefaultHourlyRate  float64 `json:"default_hourly_rate"`
-	DefaultDailyRate   float64 `json:"default_daily_rate"`
-	DefaultMonthlyRate float64 `json:"default_monthly_rate"`
-	DefaultTaxRate     float64 `json:"default_tax_rate"`
-	HoursPerDay        float64 `json:"hours_per_day"`
-	TimeRoundingMin    int     `json:"time_rounding_minutes"`
-	ShowTaxColumn      bool    `json:"show_tax_column"`
+	BaseCurrency         string  `json:"base_currency"`
+	ExchangeRateProvider string  `json:"exchange_rate_provider"` // frankfurter | cbbh | none; empty = EXCHANGE_RATE_PROVIDER env
+	Locale               string  `json:"locale"`
+	DateFormat           string  `json:"date_format"` // Go layout
+	Timezone             string  `json:"timezone"`
+	InvoiceNumberFmt     string  `json:"invoice_number_format"` // e.g. INV-{YYYY}-{SEQ:4}
+	InvoiceNextSeq       int64   `json:"invoice_next_seq"`
+	InvoiceSeqResetYr    bool    `json:"invoice_seq_reset_yearly"`
+	InvoiceSeqYear       int     `json:"invoice_seq_year"`
+	DefaultDueDays       int     `json:"default_due_days"`
+	DefaultNotes         string  `json:"default_notes"`
+	DefaultTerms         string  `json:"default_terms"`
+	DefaultFooter        string  `json:"default_footer"`
+	DefaultBilling       string  `json:"default_billing_mode"`
+	DefaultHourlyRate    float64 `json:"default_hourly_rate"`
+	DefaultDailyRate     float64 `json:"default_daily_rate"`
+	DefaultMonthlyRate   float64 `json:"default_monthly_rate"`
+	DefaultTaxRate       float64 `json:"default_tax_rate"`
+	HoursPerDay          float64 `json:"hours_per_day"`
+	TimeRoundingMin      int     `json:"time_rounding_minutes"`
+	ShowTaxColumn        bool    `json:"show_tax_column"`
 
 	PaymentDetails           string            `json:"payment_details"`             // bank account, IBAN, PayPal etc. shown on invoice
 	PaymentDetailsByCurrency map[string]string `json:"payment_details_by_currency"` // optional per-currency override (e.g. USD IBAN)

@@ -173,7 +173,7 @@ function Currencies() {
   const toast = useToast()
   const { s, set, save, busy } = useSettingsForm()
   const { data: list, reload } = useAsync(() => api.get<Currency[]>(`${V1}/currencies`))
-  const { data: rates, reload: reloadRates } = useAsync(() => api.get<{ base: string; rates: ExchangeRate[]; provider: string }>(`${V1}/rates`))
+  const { data: rates, reload: reloadRates } = useAsync(() => api.get<{ base: string; rates: ExchangeRate[]; provider: string; default_provider: string; providers: { ID: string; Label: string }[] }>(`${V1}/rates`))
   const [manual, setManual] = useState({ quote: '', rate: '' })
   const [filter, setFilter] = useState('')
   const [refreshing, setRefreshing] = useState(false)
@@ -187,10 +187,17 @@ function Currencies() {
       <div className="grid">
         <Card title="Base currency">
           <Field label="Base currency" help="Reports and the dashboard are shown in this currency. Changing it does not alter existing invoices."><select value={s.base_currency} onChange={set('base_currency')}>{list.map(c => <option key={c.code} value={c.code}>{c.code} – {c.name}</option>)}</select></Field>
-          <SaveBar onSave={save} busy={busy} />
+          <Field label="Rate source" help={s.exchange_rate_provider === 'cbbh' ? 'Official daily list of the Central Bank of BiH (middle rate). New invoices lock the rate valid on their issue date, so backdated invoices get that day\'s rate.' : 'Where automatic rates come from. Invoices lock the stored rate at creation; you can override it per invoice.'}>
+            <select value={s.exchange_rate_provider || ''} onChange={set('exchange_rate_provider')}>
+              <option value="">Server default ({rates?.default_provider || '…'})</option>
+              {rates?.providers.map(p => <option key={p.ID} value={p.ID}>{p.Label}</option>)}
+            </select>
+          </Field>
+          <SaveBar onSave={async () => { await save(); reloadRates() }} busy={busy} />
         </Card>
         <Card title={`Exchange rates (1 ${base} = …)`} actions={<button className="btn sm" disabled={refreshing || rates?.provider === 'none'} onClick={refreshRates}>{refreshing ? 'Refreshing…' : `Refresh from ${rates?.provider || 'provider'}`}</button>} flush>
-          {rates?.provider === 'none' && <div className="callout warn" style={{ margin: 12 }}>Automatic rates are disabled (EXCHANGE_RATE_PROVIDER=none). Enter rates manually below.</div>}
+          {rates?.provider === 'none' && <div className="callout warn" style={{ margin: 12 }}>Automatic rates are disabled. Pick a rate source above or enter rates manually below.</div>}
+          {rates?.provider === 'cbbh' && base !== 'BAM' && <div className="callout warn" style={{ margin: 12 }}>The Central Bank of BiH quotes everything against BAM. With {base} as base currency, rates are derived through BAM.</div>}
           <table className="table"><thead><tr><th>Quote</th><th className="num">Rate</th><th>Source</th><th>Updated</th><th></th></tr></thead>
             <tbody>{rates?.rates.map(r => <tr key={r.quote}><td className="bold">{r.quote}</td><td className="num">{r.rate.toFixed(6)}</td><td className="muted">{r.source}</td><td className="muted small">{fmtDateTime(r.fetched_at)}</td><td className="actions"><button className="btn ghost sm" onClick={async () => { await api.del(`${V1}/rates/${r.quote}`); reloadRates() }}>✕</button></td></tr>)}
               <tr><td><input value={manual.quote} onChange={e => setManual({ ...manual, quote: e.target.value })} placeholder="USD" style={{ width: 80 }} /></td><td><input value={manual.rate} onChange={e => setManual({ ...manual, rate: e.target.value })} placeholder="1.08" style={{ width: 110 }} /></td><td colSpan={2} className="muted small">Manual rates are never overwritten by refresh.</td><td className="actions"><button className="btn sm" onClick={addManual} disabled={!manual.quote || !manual.rate}>Add</button></td></tr>

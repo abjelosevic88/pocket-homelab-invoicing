@@ -88,8 +88,10 @@ export default function InvoiceEditor() {
   // Exchange rate hint when currency differs from base
   useEffect(() => {
     if (!inv?.currency || !settings || inv.currency === settings.base_currency) { setRateHint(''); return }
-    api.get<{ rate: number }>(`${V1}/rates/convert?from=${inv.currency}&to=${settings.base_currency}&amount=1`).then(r => setRateHint(`1 ${inv.currency} ≈ ${r.rate.toFixed(4)} ${settings.base_currency} (stored rate; leave 0 to use it)`)).catch(() => setRateHint(`No stored rate for ${inv.currency}→${settings.base_currency}. Enter one or add it under Settings → Currencies.`))
-  }, [inv?.currency, settings])
+    api.get<{ rate: number; source: string }>(`${V1}/rates/convert?from=${inv.currency}&to=${settings.base_currency}&amount=1&date=${inv.issue_date || ''}`)
+      .then(r => setRateHint(`1 ${inv.currency} ≈ ${r.rate.toFixed(5)} ${settings.base_currency} (${r.source === 'stored' ? 'stored rate' : `official list ${r.source}`}; leave 0 to use it)`))
+      .catch(() => setRateHint(`No stored rate for ${inv.currency}→${settings.base_currency}. Enter one or add it under Settings → Currencies.`))
+  }, [inv?.currency, inv?.issue_date, settings])
 
   if (!inv || !settings) return <Loading />
   const cur = currencies.find(c => c.code === inv.currency)

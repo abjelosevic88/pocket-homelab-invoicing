@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -37,7 +38,10 @@ type Server struct {
 	log      *slog.Logger
 	pdf      pdf.Engine
 	docx     docx.Converter
-	rates    currency.Provider
+	rates    currency.Provider // default from config; Settings can override, see provider()
+	provMu   sync.Mutex
+	provName string
+	prov     currency.Provider
 	hooks    *webhook.Dispatcher
 	webFS    fs.FS
 	started  time.Time
@@ -59,6 +63,24 @@ func New(cfg *config.Config, st *store.Store, log *slog.Logger, webFS fs.FS) *Se
 		webFS:   webFS,
 		started: time.Now(),
 	}
+}
+
+// provider returns the exchange rate provider chosen in Settings, falling back to the
+// EXCHANGE_RATE_PROVIDER environment default.
+func (s *Server) provider(ctx context.Context) currency.Provider {
+	name := ""
+	if st, err := s.store.GetSettings(ctx); err == nil {
+		name = strings.ToLower(strings.TrimSpace(st.ExchangeRateProvider))
+	}
+	if name == "" {
+		return s.rates
+	}
+	s.provMu.Lock()
+	defer s.provMu.Unlock()
+	if s.prov == nil || s.provName != name {
+		s.prov, s.provName = currency.New(name), name
+	}
+	return s.prov
 }
 
 // Store exposes the store (used by the scheduler).

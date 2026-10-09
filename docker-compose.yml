@@ -18,7 +18,7 @@ services:
       # PDF_ENGINE: native                            # native | chromium | gotenberg (design/HTML templates)
       # DOCX_CONVERTER: gotenberg                     # Word templates -> PDF (gotenberg | libreoffice | none)
       GOTENBERG_URL: http://gotenberg:3000
-      # EXCHANGE_RATE_PROVIDER: frankfurter           # or "none" for fully offline
+      # EXCHANGE_RATE_PROVIDER: frankfurter           # or "cbbh" (Central Bank of BiH), "none" for fully offline
       # LOG_LEVEL: info
     volumes:
       - ./data:/data

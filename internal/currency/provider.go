@@ -19,6 +19,21 @@ type Provider interface {
 	Fetch(ctx context.Context, base string, quotes []string) (Rates, error)
 }
 
+// Historical is implemented by providers that can return the rates valid on a given
+// day (YYYY-MM-DD). The returned date is the list actually used, which may be earlier
+// than requested (weekends, holidays).
+type Historical interface {
+	Provider
+	FetchOn(ctx context.Context, date, base string, quotes []string) (Rates, string, error)
+}
+
+// Names lists the selectable providers in display order.
+var Names = []struct{ ID, Label string }{
+	{"frankfurter", "European Central Bank (frankfurter.app)"},
+	{"cbbh", "Central Bank of Bosnia and Herzegovina (cbbh.ba)"},
+	{"none", "None (manual rates only)"},
+}
+
 // Frankfurter uses the free ECB-backed https://frankfurter.app API (no key needed).
 type Frankfurter struct {
 	Client  *http.Client
@@ -80,6 +95,8 @@ func New(name string) Provider {
 	switch strings.ToLower(name) {
 	case "frankfurter", "ecb":
 		return NewFrankfurter()
+	case "cbbh":
+		return NewCBBH()
 	default:
 		return None{}
 	}

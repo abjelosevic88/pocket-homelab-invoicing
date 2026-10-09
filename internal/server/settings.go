@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/abjelosevic88/pocket-homelab-invoicing/internal/currency"
 	"github.com/abjelosevic88/pocket-homelab-invoicing/internal/docx"
 	"github.com/abjelosevic88/pocket-homelab-invoicing/internal/mailer"
 	"github.com/abjelosevic88/pocket-homelab-invoicing/internal/money"
@@ -244,7 +245,7 @@ func (s *Server) handleListRates(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err, "list rates")
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"base": base, "rates": list, "provider": s.rates.Name()})
+	writeJSON(w, http.StatusOK, map[string]any{"base": base, "rates": list, "provider": s.provider(r.Context()).Name(), "default_provider": s.rates.Name(), "providers": currency.Names})
 }
 
 func (s *Server) handlePutRate(w http.ResponseWriter, r *http.Request) {
@@ -296,13 +297,14 @@ func (s *Server) handleConvert(w http.ResponseWriter, r *http.Request) {
 	to := strings.ToUpper(r.URL.Query().Get("to"))
 	var amount float64
 	fmt.Sscanf(r.URL.Query().Get("amount"), "%g", &amount)
-	rate, ok := s.store.GetRate(r.Context(), from, to)
+	// With a date, providers that publish daily lists (CBBH) return the official rate of that day.
+	rate, source, ok := s.rateOn(r.Context(), r.URL.Query().Get("date"), from, to)
 	if !ok {
 		writeErr(w, http.StatusNotFound, fmt.Sprintf("no rate for %s→%s (add one under Settings → Currencies or refresh rates)", from, to))
 		return
 	}
 	cur := s.store.GetCurrency(r.Context(), to)
-	writeJSON(w, http.StatusOK, map[string]any{"from": from, "to": to, "rate": rate, "amount": amount, "converted": money.Convert(amount, rate, cur.Decimals)})
+	writeJSON(w, http.StatusOK, map[string]any{"from": from, "to": to, "rate": rate, "source": source, "amount": amount, "converted": money.Convert(amount, rate, cur.Decimals)})
 }
 
 // ---- tax rates ----
