@@ -4,6 +4,9 @@ All notable changes to this project are documented here. Format follows [Keep a 
 
 ## [Unreleased]
 
+### Added
+- Email placeholders `{first_name}`, `{month}`, `{year}` and `{number_short}`; the default invoice email is now a short personal note ("Here is my invoice for August").
+
 ### Changed
 - Invoice numbers are now unique per client instead of globally (migration rebuilds the invoices table). The editor warns when another client already uses a number; auto-numbering still skips numbers used anywhere.
 

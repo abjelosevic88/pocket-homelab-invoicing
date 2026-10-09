@@ -381,7 +381,7 @@ function Email() {
       <Card title="Invoice email & reminders">
         <div className="grid" style={{ gap: 12 }}>
           <Field label="Subject"><input value={s.email_subject} onChange={set('email_subject')} /></Field>
-          <Field label="Body" help="Placeholders: {number} {client} {contact} {company} {total} {balance} {due_date} {issue_date} {period} {link}. Clients can override subject and message on their own page."><textarea rows={8} value={s.email_body} onChange={set('email_body')} /></Field>
+          <Field label="Body" help="Placeholders: {number} {number_short} {client} {contact} {first_name} {company} {total} {balance} {due_date} {issue_date} {month} {year} {period} {link}. Clients can override subject and message on their own page."><textarea rows={8} value={s.email_body} onChange={set('email_body')} /></Field>
           <label className="check"><input type="checkbox" checked={s.reminders_enabled} onChange={set('reminders_enabled')} /> Send automatic payment reminders for overdue invoices</label>
           <Field label="Remind on days after due date" help="Comma separated"><input value={s.reminder_days} onChange={set('reminder_days')} placeholder="3,7,14" /></Field>
         </div>

@@ -27,3 +27,11 @@ func TestNextRun(t *testing.T) {
 		t.Errorf("period %s %s", ps, pe)
 	}
 }
+
+func TestShortNumber(t *testing.T) {
+	for in, want := range map[string]string{"INV-005-2026": "005-2026", "005-2026": "005-2026", "R-2026-01": "2026-01", "2026-001": "2026-001", "INV": "INV"} {
+		if got := shortNumber(in); got != want {
+			t.Errorf("shortNumber(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
