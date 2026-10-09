@@ -49,31 +49,33 @@ type TaxRate struct {
 
 // Client is a customer.
 type Client struct {
-	ID               int64   `json:"id"`
-	Name             string  `json:"name"`
-	ContactName      string  `json:"contact_name"`
-	Email            string  `json:"email"`
-	Phone            string  `json:"phone"`
-	Address1         string  `json:"address1"`
-	Address2         string  `json:"address2"`
-	City             string  `json:"city"`
-	State            string  `json:"state"`
-	PostalCode       string  `json:"postal_code"`
-	Country          string  `json:"country"`
-	TaxID            string  `json:"tax_id"`
-	Website          string  `json:"website"`
-	Currency         string  `json:"currency"`
-	BillingMode      string  `json:"billing_mode"`
-	DefaultRate      float64 `json:"default_rate"`
-	PaymentTermsDays int     `json:"payment_terms_days"`
-	TemplateID       *int64  `json:"template_id"`
-	EmailSubject     string  `json:"email_subject"` // per-client override of the invoice email subject ("" = global)
-	EmailBody        string  `json:"email_body"`    // per-client override of the invoice email body ("" = global)
-	EmailCC          string  `json:"email_cc"`      // extra recipients, comma separated
-	Notes            string  `json:"notes"`
-	Archived         bool    `json:"archived"`
-	CreatedAt        string  `json:"created_at"`
-	UpdatedAt        string  `json:"updated_at"`
+	ID                       int64   `json:"id"`
+	Name                     string  `json:"name"`
+	ContactName              string  `json:"contact_name"`
+	Email                    string  `json:"email"`
+	Phone                    string  `json:"phone"`
+	Address1                 string  `json:"address1"`
+	Address2                 string  `json:"address2"`
+	City                     string  `json:"city"`
+	State                    string  `json:"state"`
+	PostalCode               string  `json:"postal_code"`
+	Country                  string  `json:"country"`
+	TaxID                    string  `json:"tax_id"`
+	Website                  string  `json:"website"`
+	Currency                 string  `json:"currency"`
+	BillingMode              string  `json:"billing_mode"`
+	DefaultRate              float64 `json:"default_rate"`
+	PaymentTermsDays         int     `json:"payment_terms_days"`
+	TemplateID               *int64  `json:"template_id"`
+	EmailSubject             string  `json:"email_subject"`              // per-client override of the invoice email subject ("" = global)
+	EmailBody                string  `json:"email_body"`                 // per-client override of the invoice email body ("" = global)
+	EmailCC                  string  `json:"email_cc"`                   // extra recipients, comma separated
+	PaperlessCorrespondentID int64   `json:"paperless_correspondent_id"` // 0 = not linked
+	PaperlessCorrespondent   string  `json:"paperless_correspondent"`    // cached name for display
+	Notes                    string  `json:"notes"`
+	Archived                 bool    `json:"archived"`
+	CreatedAt                string  `json:"created_at"`
+	UpdatedAt                string  `json:"updated_at"`
 
 	// Computed (list views)
 	InvoiceCount int64   `json:"invoice_count,omitempty"`

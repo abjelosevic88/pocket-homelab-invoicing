@@ -173,8 +173,8 @@ func (s *Server) paperlessSendDocument(ctx context.Context, d *store.Document, w
 	if st.PaperlessCategoryAsType && d.Category != "" {
 		o.DocumentType = d.Category
 	}
-	if st.PaperlessCreateCorrespondents && d.ClientName != "" {
-		o.Correspondent = d.ClientName
+	if d.ClientID != nil {
+		o.CorrespondentID, o.Correspondent = s.clientCorrespondent(ctx, *d.ClientID, d.ClientName, st)
 	}
 	l, err := s.paperlessUpload(ctx, "document", d.ID, d.Filename, data, o, wait)
 	if err == nil {
@@ -194,9 +194,7 @@ func (s *Server) paperlessArchiveInvoice(ctx context.Context, inv *store.Invoice
 		source = firstNonEmpty(st.EmailAttachmentMode, "generated")
 	}
 	base := paperless.UploadOptions{Created: inv.IssueDate, DocumentType: st.PaperlessInvoiceType}
-	if st.PaperlessCreateCorrespondents {
-		base.Correspondent = inv.ClientName
-	}
+	base.CorrespondentID, base.Correspondent = s.clientCorrespondent(ctx, inv.ClientID, inv.ClientName, st)
 	var out []*store.PaperlessLink
 	var firstErr error
 	if source == "generated" || source == "both" || (source == "uploaded" && len(inv.Attachments) == 0) {
@@ -610,9 +608,7 @@ func (s *Server) handleAttachmentToPaperless(w http.ResponseWriter, r *http.Requ
 			return
 		}
 		o := paperless.UploadOptions{Title: fmt.Sprintf("Invoice %s – %s", inv.Number, inv.ClientName), Created: inv.IssueDate, DocumentType: st.PaperlessInvoiceType}
-		if st.PaperlessCreateCorrespondents {
-			o.Correspondent = inv.ClientName
-		}
+		o.CorrespondentID, o.Correspondent = s.clientCorrespondent(r.Context(), inv.ClientID, inv.ClientName, st)
 		l, err := s.paperlessUpload(r.Context(), "attachment", a.ID, a.Filename, data, o, true)
 		if err != nil {
 			writeErr(w, http.StatusBadGateway, err.Error())
@@ -637,4 +633,118 @@ func (s *Server) handleUnlinkPaperless(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+// clientCorrespondent decides which Paperless correspondent an upload for a client gets:
+// the one linked on the client, else (when enabled) one named after the client.
+func (s *Server) clientCorrespondent(ctx context.Context, clientID int64, clientName string, st store.Settings) (int64, string) {
+	if clientID > 0 {
+		if c, err := s.store.GetClient(ctx, clientID); err == nil && c.PaperlessCorrespondentID > 0 {
+			return c.PaperlessCorrespondentID, ""
+		}
+	}
+	if st.PaperlessCreateCorrespondents {
+		return 0, clientName
+	}
+	return 0, ""
+}
+
+func (s *Server) handlePaperlessCorrespondents(w http.ResponseWriter, r *http.Request) {
+	cl, _, ok := s.requirePaperless(w, r)
+	if !ok {
+		return
+	}
+	if r.URL.Query().Get("refresh") == "1" {
+		cl.Refresh()
+	}
+	writeJSON(w, http.StatusOK, cl.Entries(r.Context(), "correspondents"))
+}
+
+// handleCreateCorrespondent creates a correspondent in Paperless (or returns the existing one).
+func (s *Server) handleCreateCorrespondent(w http.ResponseWriter, r *http.Request) {
+	cl, _, ok := s.requirePaperless(w, r)
+	if !ok {
+		return
+	}
+	var in struct {
+		Name     string `json:"name"`
+		ClientID int64  `json:"client_id"` // optional: link this client right away
+	}
+	_ = decode(r, &in)
+	in.Name = strings.TrimSpace(in.Name)
+	if in.Name == "" {
+		writeErr(w, http.StatusBadRequest, "name is required")
+		return
+	}
+	id, err := cl.Ensure(r.Context(), "correspondents", in.Name)
+	if err != nil {
+		writeErr(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	if in.ClientID > 0 {
+		if c, err := s.store.GetClient(r.Context(), in.ClientID); err == nil {
+			c.PaperlessCorrespondentID, c.PaperlessCorrespondent = id, cl.Name(r.Context(), "correspondents", id)
+			_ = s.store.UpdateClient(r.Context(), c)
+		}
+	}
+	writeJSON(w, http.StatusOK, paperless.Entry{ID: id, Name: cl.Name(r.Context(), "correspondents", id)})
+}
+
+// handleSyncCorrespondents links clients to correspondents by name and optionally creates missing ones.
+func (s *Server) handleSyncCorrespondents(w http.ResponseWriter, r *http.Request) {
+	cl, _, ok := s.requirePaperless(w, r)
+	if !ok {
+		return
+	}
+	var in struct {
+		Create bool `json:"create"`
+	}
+	_ = decode(r, &in)
+	ctx := r.Context()
+	cl.Refresh()
+	clients, err := s.store.ListClients(ctx, false, "")
+	if err != nil {
+		s.fail(w, err, "clients")
+		return
+	}
+	entries := cl.Entries(ctx, "correspondents")
+	matched, created, skipped := []string{}, []string{}, []string{}
+	for i := range clients {
+		c := &clients[i]
+		if c.PaperlessCorrespondentID > 0 {
+			continue
+		}
+		id := cl.Lookup(ctx, "correspondents", c.Name)
+		if id == 0 {
+			// Fuzzy: a correspondent whose name is contained in the client name or vice versa ("Athena Studio" ~ "Athena Studio S.à r.l.")
+			lc := strings.ToLower(c.Name)
+			for _, e := range entries {
+				le := strings.ToLower(e.Name)
+				if len(le) >= 4 && (strings.Contains(lc, le) || strings.Contains(le, lc)) {
+					id = e.ID
+					break
+				}
+			}
+		}
+		if id == 0 && in.Create {
+			nid, err := cl.Ensure(ctx, "correspondents", c.Name)
+			if err != nil {
+				skipped = append(skipped, c.Name+": "+err.Error())
+				continue
+			}
+			id = nid
+			created = append(created, c.Name)
+		} else if id > 0 {
+			matched = append(matched, c.Name+" → "+cl.Name(ctx, "correspondents", id))
+		}
+		if id == 0 {
+			skipped = append(skipped, c.Name)
+			continue
+		}
+		c.PaperlessCorrespondentID, c.PaperlessCorrespondent = id, cl.Name(ctx, "correspondents", id)
+		if err := s.store.UpdateClient(ctx, c); err != nil {
+			skipped = append(skipped, c.Name+": "+err.Error())
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"matched": matched, "created": created, "unmatched": skipped})
 }

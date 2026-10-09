@@ -4,7 +4,7 @@ export interface ExchangeRate { base: string; quote: string; rate: number; sourc
 export interface TaxRate { id: number; name: string; rate: number; is_default: boolean }
 export interface Client {
   id: number; name: string; contact_name: string; email: string; phone: string; address1: string; address2: string; city: string; state: string; postal_code: string; country: string; tax_id: string; website: string;
-  currency: string; billing_mode: string; default_rate: number; payment_terms_days: number; template_id: number | null; email_subject: string; email_body: string; email_cc: string; notes: string; archived: boolean; created_at: string; updated_at: string;
+  currency: string; billing_mode: string; default_rate: number; payment_terms_days: number; template_id: number | null; email_subject: string; email_body: string; email_cc: string; paperless_correspondent_id: number; paperless_correspondent: string; notes: string; archived: boolean; created_at: string; updated_at: string;
   invoice_count?: number; outstanding: number; total_billed: number;
 }
 export interface Product { id: number; name: string; description: string; unit: string; unit_price: number; currency: string; tax_rate: number; archived: boolean }
@@ -14,6 +14,7 @@ export interface PaperlessLink { kind: string; ref_id: number; paperless_id: num
 export interface Attachment { id: number; invoice_id: number; filename: string; content_type: string; size: number; created_at: string; paperless?: PaperlessLink }
 export interface Document { id: number; title: string; category: string; client_id: number | null; client_name: string; doc_date: string; expires_at: string; notes: string; filename: string; content_type: string; size: number; created_at: string; updated_at: string; paperless?: PaperlessLink }
 export interface PaperlessDoc { id: number; title: string; created: string; added: string; modified: string; correspondent: string; document_type: string; tags: string[]; original_file_name: string; archived_file_name: string; archive_serial_number: number | null; url: string }
+export interface PaperlessEntry { id: number; name: string }
 export interface PaperlessStatus { configured: boolean; ok?: boolean; error?: string; version?: string; document_count?: number; url?: string; archive_mode?: string }
 export interface CustomFieldDef { key: string; label: string; show_on_pdf: boolean }
 export interface InvoiceItem { id?: number; description: string; unit: string; quantity: number; unit_price: number; tax_rate: number; discount: number; line_total?: number }

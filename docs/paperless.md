@@ -32,6 +32,7 @@ Environment variables `PAPERLESS_URL` and `PAPERLESS_TOKEN` can seed the same va
 | Automatic | *Archive invoices automatically* = when marked as sent, when paid, or never. Runs in the background after the status change; already archived parts are skipped. |
 | Documents | **Send to Paperless** per document, or tick *Also send to Paperless* while uploading. The category becomes the Paperless document type (toggle), the client becomes the correspondent (toggle). |
 | Documents → Paperless tab | Full-text search of your archive with thumbnails, open in Paperless, download through the app, and **copy into Documents** (⇩), which pulls the file and keeps the link. |
+| Clients | Each client can be linked to a Paperless **correspondent** (Clients → edit → "Paperless correspondent": pick one or "Create … in Paperless"). The client page then shows that correspondent's documents with a link to the filtered view in Paperless, and everything archived for the client is filed under it. Settings → Paperless → **Link clients to correspondents** matches unlinked clients by name (exact, or one name contained in the other, e.g. "Athena Studio S.à r.l." → "Athena Studio") and optionally creates the missing ones. |
 | Metadata | Every upload gets the configured **tags** (created if missing), invoices get the configured **document type** (default "Invoice"), the created date is the invoice/document date, the title is `Invoice NUMBER – Client`. |
 
 Paperless consumes uploads asynchronously. The app records the task, polls it for a few minutes, and the scheduler finishes any that are still pending. Until then the badge reads "Paperless…"; a duplicate or OCR failure shows as "Paperless failed" with the reason on hover.
@@ -47,6 +48,9 @@ GET  /api/v1/paperless/documents?q=&page=          search (also correspondent__i
 GET  /api/v1/paperless/names                       tags, correspondents, document types
 GET  /api/v1/paperless/documents/{pid}/file        proxied download (?download=1, ?original=1)
 GET  /api/v1/paperless/documents/{pid}/thumb       proxied thumbnail
+GET  /api/v1/paperless/correspondents              [{id, name}]  (?refresh=1)
+POST /api/v1/paperless/correspondents              {name, client_id?} → create or return existing, optionally link the client
+POST /api/v1/paperless/correspondents/sync         {create} → {matched, created, unmatched}
 POST /api/v1/paperless/documents/{pid}/import      {category, client_id, original} → company document
 POST /api/v1/documents/{id}/paperless              (?force=1 to re-send)
 POST /api/v1/invoices/{id}/paperless               {source: generated|uploaded|both}  (empty = email attachment mode)

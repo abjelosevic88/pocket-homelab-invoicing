@@ -15,6 +15,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -83,12 +84,13 @@ type Task struct {
 
 // UploadOptions carries the metadata sent with a file.
 type UploadOptions struct {
-	Title         string
-	Created       string // YYYY-MM-DD
-	Correspondent string // name, created when missing
-	DocumentType  string // name, created when missing
-	Tags          []string
-	ASN           int64
+	Title           string
+	Created         string // YYYY-MM-DD
+	Correspondent   string // name, created when missing (ignored when CorrespondentID is set)
+	CorrespondentID int64
+	DocumentType    string // name, created when missing
+	Tags            []string
+	ASN             int64
 }
 
 func (c *Client) req(ctx context.Context, method, path string, q url.Values, body io.Reader, contentType string) (*http.Response, error) {
@@ -260,7 +262,9 @@ func (c *Client) Upload(ctx context.Context, filename string, data []byte, o Upl
 	if o.Created != "" {
 		_ = mw.WriteField("created", o.Created)
 	}
-	if o.Correspondent != "" {
+	if o.CorrespondentID > 0 {
+		_ = mw.WriteField("correspondent", strconv.FormatInt(o.CorrespondentID, 10))
+	} else if o.Correspondent != "" {
 		if id, err := c.ensure(ctx, "correspondents", o.Correspondent); err == nil && id > 0 {
 			_ = mw.WriteField("correspondent", strconv.FormatInt(id, 10))
 		}
@@ -439,4 +443,48 @@ func (c *Client) Names(ctx context.Context, kind string) []string {
 		out = append(out, n)
 	}
 	return out
+}
+
+// Entry is a named Paperless object (tag, correspondent, document type).
+type Entry struct {
+	ID   int64  `json:"id"`
+	Name string `json:"name"`
+}
+
+// Entries returns all known objects of one kind, sorted by name.
+func (c *Client) Entries(ctx context.Context, kind string) []Entry {
+	c.loadNames(ctx)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	out := make([]Entry, 0, len(c.names[kind]))
+	for id, n := range c.names[kind] {
+		out = append(out, Entry{ID: id, Name: n})
+	}
+	sort.Slice(out, func(i, j int) bool { return strings.ToLower(out[i].Name) < strings.ToLower(out[j].Name) })
+	return out
+}
+
+// Ensure returns the id of a tag/correspondent/document type by name, creating it when missing.
+func (c *Client) Ensure(ctx context.Context, kind, name string) (int64, error) {
+	return c.ensure(ctx, kind, name)
+}
+
+// Lookup returns the id of an existing object by name (case-insensitive), or 0.
+func (c *Client) Lookup(ctx context.Context, kind, name string) int64 {
+	c.loadNames(ctx)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.ids[kind][strings.ToLower(strings.TrimSpace(name))]
+}
+
+// Name returns the display name for an id, or "".
+func (c *Client) Name(ctx context.Context, kind string, id int64) string {
+	return c.name(ctx, kind, id)
+}
+
+// Refresh drops the name cache so newly created objects show up immediately.
+func (c *Client) Refresh() {
+	c.mu.Lock()
+	c.names, c.ids = nil, nil
+	c.mu.Unlock()
 }
