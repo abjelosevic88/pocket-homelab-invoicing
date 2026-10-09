@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { api, V1 } from '../lib/api'
 import { fileSize, fmtDate, today } from '../lib/format'
 import type { Client, Document, PaperlessDoc, PaperlessLink } from '../lib/types'
@@ -16,10 +16,10 @@ function expiryState(d: Document): 'expired' | 'soon' | '' {
   return ''
 }
 
-function DocForm({ initial, categories, clients, onSaved, onClose, paperlessOn }: { initial?: Document; categories: string[]; clients: Client[]; onSaved: () => void; onClose: () => void; paperlessOn: boolean }) {
+export function DocForm({ initial, categories, clients, onSaved, onClose, paperlessOn, defaultClientId = 0 }: { initial?: Document; categories: string[]; clients: Client[]; onSaved: () => void; onClose: () => void; paperlessOn: boolean; defaultClientId?: number }) {
   const toast = useToast()
   const [files, setFiles] = useState<File[]>([])
-  const [f, setF] = useState({ title: initial?.title || '', category: initial?.category || '', client_id: initial?.client_id || 0, doc_date: initial?.doc_date || (initial ? '' : today()), expires_at: initial?.expires_at || '', notes: initial?.notes || '' })
+  const [f, setF] = useState({ title: initial?.title || '', category: initial?.category || '', client_id: initial?.client_id || defaultClientId || 0, doc_date: initial?.doc_date || (initial ? '' : today()), expires_at: initial?.expires_at || '', notes: initial?.notes || '' })
   const [sendPaperless, setSendPaperless] = useState(false)
   const [busy, setBusy] = useState(false)
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => setF(x => ({ ...x, [k]: k === 'client_id' ? Number(e.target.value) : e.target.value }))
@@ -68,7 +68,8 @@ function LocalDocuments({ paperlessOn }: { paperlessOn: boolean }) {
   const clients = clientList || []
   const [q, setQ] = useState('')
   const [cat, setCat] = useState('')
-  const [clientId, setClientId] = useState(0)
+  const [params] = useSearchParams()
+  const [clientId, setClientId] = useState(Number(params.get('client_id')) || 0)
   const dq = useDebounce(q)
   const meta = useAsync(() => api.get<Meta>(`${V1}/documents/categories`), [])
   const list = useAsync(() => api.get<Document[]>(`${V1}/documents?q=${encodeURIComponent(dq)}&category=${encodeURIComponent(cat)}&client_id=${clientId || ''}`), [dq, cat, clientId])
@@ -163,6 +164,8 @@ function PaperlessBrowser() {
     </>
   )
 }
+
+export { expiryState }
 
 export default function Documents() {
   const pl = usePaperless()

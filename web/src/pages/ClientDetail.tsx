@@ -1,10 +1,11 @@
 import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api, V1 } from '../lib/api'
-import { BILLING_MODES, fmtDate, hours, money } from '../lib/format'
-import type { Document, Client, Invoice, PaperlessDoc, Recurring } from '../lib/types'
+import { BILLING_MODES, fileSize, fmtDate, hours, money } from '../lib/format'
+import type { Document, Client, Invoice, PaperlessDoc, PaperlessLink, Recurring } from '../lib/types'
 import { Badge, Card, Confirm, Empty, Loading, Modal, PageHeader, useAsync, useToast } from '../components/ui'
-import { usePaperless } from '../components/paperless'
+import { PaperlessBadge, usePaperless } from '../components/paperless'
+import { DocForm, expiryState } from './Documents'
 import { ClientForm } from './Clients'
 
 interface Detail { client: Client; invoices: Invoice[]; recurring: Recurring[]; unbilled_minutes: number; unbilled_entries: number }
@@ -56,7 +57,7 @@ export default function ClientDetail() {
           </table></div>}
         </Card>
       </div>
-      <ClientDocuments clientId={c.id} />
+      <ClientDocuments client={c} />
       <ClientPaperless client={c} onEdit={() => setEditing(true)} />
       {data.recurring?.length > 0 && <Card title="Recurring profiles" flush>
         <table className="table"><thead><tr><th>Name</th><th>Frequency</th><th>Next run</th><th>Status</th></tr></thead>
@@ -68,13 +69,40 @@ export default function ClientDetail() {
   )
 }
 
-function ClientDocuments({ clientId }: { clientId: number }) {
-  const { data } = useAsync(() => api.get<Document[]>(`${V1}/documents?client_id=${clientId}`), [clientId])
-  if (!data?.length) return null
-  return <Card title="Documents" actions={<Link className="btn sm" to="/documents">All documents</Link>} flush className="mb">
-    <table className="table"><thead><tr><th>Title</th><th>Category</th><th>Date</th><th>Expires</th></tr></thead>
-      <tbody>{data.map(d => <tr key={d.id}><td><a className="bold" href={`${V1}/documents/${d.id}/file`} target="_blank" rel="noreferrer">{d.title}</a><div className="muted small">{d.filename}</div></td><td>{d.category && <span className="badge">{d.category}</span>}</td><td className="muted">{fmtDate(d.doc_date)}</td><td className="muted">{fmtDate(d.expires_at)}</td></tr>)}</tbody></table>
-  </Card>
+function ClientDocuments({ client }: { client: Client }) {
+  const toast = useToast()
+  const pl = usePaperless()
+  const paperlessOn = !!pl?.configured
+  const { data, reload } = useAsync(() => api.get<Document[]>(`${V1}/documents?client_id=${client.id}`), [client.id])
+  const { data: meta } = useAsync(() => api.get<{ categories: Record<string, number> }>(`${V1}/documents/categories`), [])
+  const [modal, setModal] = useState<'new' | Document | null>(null)
+  const [del, setDel] = useState<Document | null>(null)
+  const send = async (d: Document) => {
+    try { const l = await api.post<PaperlessLink>(`${V1}/documents/${d.id}/paperless`); toast(l.paperless_id ? `Archived as Paperless #${l.paperless_id}` : 'Sent to Paperless, consuming…', 'success'); reload() } catch (e) { toast((e as Error).message, 'error') }
+  }
+  return <>
+    <Card title={<>Documents{data?.length ? <span className="muted small"> · {data.length}</span> : null}</>} actions={<><Link className="btn ghost sm" to={`/documents?client_id=${client.id}`}>All documents</Link><button className="btn sm" onClick={() => setModal('new')}>+ Upload</button></>} flush className="mb">
+      {!data?.length ? <div className="empty muted">No documents for this client yet. Upload contracts, NDAs, purchase orders or anything else you want to keep with {client.name}.</div> :
+        <table className="table"><thead><tr><th>Title</th><th>Category</th><th>Date</th><th>Expires</th><th className="num">Size</th><th></th></tr></thead>
+          <tbody>{data.map(d => { const ex = expiryState(d); return <tr key={d.id}>
+            <td><a className="bold" href={`${V1}/documents/${d.id}/file`} target="_blank" rel="noreferrer">{d.title}</a><div className="muted small">{d.filename}{d.notes ? ` · ${d.notes}` : ''} {paperlessOn && <PaperlessBadge link={d.paperless} />}</div></td>
+            <td>{d.category && <span className="badge">{d.category}</span>}</td>
+            <td className="muted">{fmtDate(d.doc_date)}</td>
+            <td>{d.expires_at && <span className={`badge ${ex === 'expired' ? 'overdue' : ex === 'soon' ? 'partial' : ''}`}>{fmtDate(d.expires_at)}</span>}</td>
+            <td className="num muted">{fileSize(d.size)}</td>
+            <td className="actions">
+              <a className="btn ghost sm" href={`${V1}/documents/${d.id}/file?download=1`} title="Download">↓</a>
+              <button className="btn ghost sm" onClick={() => setModal(d)} title="Edit">✎</button>
+              {paperlessOn && !(d.paperless && d.paperless.paperless_id > 0) && <button className="btn ghost sm" onClick={() => send(d)} title="Send to Paperless">⇪</button>}
+              <button className="btn ghost sm" onClick={() => setDel(d)} title="Delete">✕</button>
+            </td>
+          </tr> })}</tbody></table>}
+    </Card>
+    {modal && <Modal title={modal === 'new' ? `Upload documents for ${client.name}` : 'Edit document'} size="lg" onClose={() => setModal(null)}>
+      <DocForm initial={modal === 'new' ? undefined : modal} categories={Object.keys(meta?.categories || {}).sort()} clients={[client]} defaultClientId={client.id} paperlessOn={paperlessOn} onSaved={() => { setModal(null); reload() }} onClose={() => setModal(null)} />
+    </Modal>}
+    {del && <Confirm title="Delete document" message={<>Delete <b>{del.title}</b>?{del.paperless?.paperless_id ? ' It stays in Paperless.' : ''}</>} onCancel={() => setDel(null)} onConfirm={async () => { await api.del(`${V1}/documents/${del.id}`); setDel(null); toast('Deleted', 'success'); reload() }} />}
+  </>
 }
 
 function ClientPaperless({ client, onEdit }: { client: Client; onEdit: () => void }) {
