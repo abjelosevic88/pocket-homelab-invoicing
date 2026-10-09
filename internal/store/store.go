@@ -79,6 +79,14 @@ func (s *Store) migrate() error {
 		if err != nil {
 			return err
 		}
+		if strings.Contains(string(body), "-- pragma: no-transaction") {
+			// Table rebuilds must run with foreign keys off and outside a transaction,
+			// otherwise DROP TABLE would cascade into child rows.
+			if err := s.runUnsafeMigration(name, string(body)); err != nil {
+				return err
+			}
+			continue
+		}
 		tx, err := s.DB.Begin()
 		if err != nil {
 			return err
@@ -96,6 +104,33 @@ func (s *Store) migrate() error {
 		}
 		s.log.Info("applied migration", "name", name)
 	}
+	return nil
+}
+
+func (s *Store) runUnsafeMigration(name, body string) error {
+	if _, err := s.DB.Exec(`PRAGMA foreign_keys = OFF`); err != nil {
+		return err
+	}
+	defer s.DB.Exec(`PRAGMA foreign_keys = ON`)
+	if _, err := s.DB.Exec(body); err != nil {
+		return fmt.Errorf("migration %s: %w", name, err)
+	}
+	rows, err := s.DB.Query(`PRAGMA foreign_key_check`)
+	if err != nil {
+		return err
+	}
+	violations := 0
+	for rows.Next() {
+		violations++
+	}
+	rows.Close()
+	if violations > 0 {
+		return fmt.Errorf("migration %s: %d foreign key violations after rebuild", name, violations)
+	}
+	if _, err := s.DB.Exec(`INSERT INTO schema_migrations (name, applied_at) VALUES (?, ?)`, name, Now()); err != nil {
+		return err
+	}
+	s.log.Info("applied migration", "name", name)
 	return nil
 }
 

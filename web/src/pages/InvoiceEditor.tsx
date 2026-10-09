@@ -4,7 +4,7 @@ import { api, V1 } from '../lib/api'
 import { useApp } from '../lib/app-context'
 import { addDays, BILLING_MODES, money, today, UNITS, unitForBilling } from '../lib/format'
 import type { Client, Invoice, InvoiceItem, InvoiceTemplate, Product, TaxRate } from '../lib/types'
-import { Card, Field, Loading, PageHeader, useAsync, useToast } from '../components/ui'
+import { Card, Field, Loading, PageHeader, useAsync, useDebounce, useToast } from '../components/ui'
 
 type Item = InvoiceItem & { key: number }
 let keySeq = 1
@@ -45,6 +45,15 @@ export default function InvoiceEditor() {
   const [items, setItems] = useState<Item[]>([])
   const [busy, setBusy] = useState(false)
   const [rateHint, setRateHint] = useState<string>('')
+  const [numberHint, setNumberHint] = useState<{ kind: 'error' | 'warn'; text: string } | null>(null)
+  const debouncedNumber = useDebounce(inv?.number || '', 400)
+  useEffect(() => {
+    if (!debouncedNumber || !inv?.client_id) { setNumberHint(null); return }
+    api.get<{ same_client: boolean; other_clients: string[] }>(`${V1}/invoices/check-number?number=${encodeURIComponent(debouncedNumber)}&client_id=${inv.client_id}&exclude=${id || 0}`)
+      .then(r => setNumberHint(r.same_client ? { kind: 'error', text: 'This client already has an invoice with this number.' } : r.other_clients.length ? { kind: 'warn', text: `Also used for ${r.other_clients.join(', ')} — allowed, but your numbering is normally unique.` } : null))
+      .catch(() => setNumberHint(null))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedNumber, inv?.client_id])
 
   // Load existing or initialise new
   useEffect(() => {
@@ -120,7 +129,7 @@ export default function InvoiceEditor() {
                 {clients?.map(c => <option key={c.id} value={c.id}>{c.name} ({c.currency})</option>)}
               </select>
             </Field>
-            <Field label="Invoice number" help={id ? undefined : 'Leave blank to auto-number'}><input value={inv.number || ''} onChange={e => set('number', e.target.value)} placeholder="auto" /></Field>
+            <Field label="Invoice number" help={numberHint ? <span style={{ color: numberHint.kind === 'error' ? 'var(--danger)' : 'var(--warning)' }}>{numberHint.text}</span> : id ? undefined : 'Leave blank to auto-number'}><input value={inv.number || ''} onChange={e => set('number', e.target.value)} placeholder="auto" /></Field>
             <Field label="PO / reference"><input value={inv.po_number || ''} onChange={e => set('po_number', e.target.value)} /></Field>
             <Field label="Issue date"><input type="date" value={inv.issue_date} onChange={e => set('issue_date', e.target.value)} /></Field>
             <Field label="Due date"><input type="date" value={inv.due_date} onChange={e => set('due_date', e.target.value)} /></Field>

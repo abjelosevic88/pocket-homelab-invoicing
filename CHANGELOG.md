@@ -4,6 +4,9 @@ All notable changes to this project are documented here. Format follows [Keep a 
 
 ## [Unreleased]
 
+### Changed
+- Invoice numbers are now unique per client instead of globally (migration rebuilds the invoices table). The editor warns when another client already uses a number; auto-numbering still skips numbers used anywhere.
+
 ### Added
 - Per-client email template (subject, message, always-CC) overriding the global one; new placeholders {contact} and {period}.
 - Income tax estimate: configurable rate, base (gross or profit), cash/invoice basis, yearly minimum, allowance and fixed monthly contributions (Settings → Taxes); Reports → Income tax with per-month and per-year breakdown; year selector on Reports.

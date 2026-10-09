@@ -164,6 +164,20 @@ func (s *Server) nextNumber(ctx context.Context, st *store.Settings, issueDate s
 	return "", fmt.Errorf("could not allocate invoice number")
 }
 
+// handleCheckNumber tells the editor whether a number is free, taken by this client, or used by others.
+func (s *Server) handleCheckNumber(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	same, others, err := s.store.NumberUsage(r.Context(), q.Get("number"), qInt64(r, "client_id"), qInt64(r, "exclude"))
+	if err != nil {
+		s.fail(w, err, "check number")
+		return
+	}
+	if others == nil {
+		others = []string{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"same_client": same, "other_clients": others})
+}
+
 func (s *Server) handleNextNumber(w http.ResponseWriter, r *http.Request) {
 	st, err := s.store.GetSettings(r.Context())
 	if err != nil {
@@ -221,8 +235,8 @@ func (s *Server) handleCreateInvoice(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if in.Number != "" {
-		if exists, _ := s.store.NumberExists(ctx, in.Number, 0); exists {
-			writeErr(w, http.StatusConflict, "invoice number already exists")
+		if same, _, _ := s.store.NumberUsage(ctx, in.Number, inv.ClientID, 0); same {
+			writeErr(w, http.StatusConflict, "this client already has an invoice with that number")
 			return
 		}
 		inv.Number = in.Number
@@ -267,8 +281,8 @@ func (s *Server) handleUpdateInvoice(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if in.Number != "" && in.Number != inv.Number {
-		if exists, _ := s.store.NumberExists(ctx, in.Number, inv.ID); exists {
-			writeErr(w, http.StatusConflict, "invoice number already exists")
+		if same, _, _ := s.store.NumberUsage(ctx, in.Number, inv.ClientID, inv.ID); same {
+			writeErr(w, http.StatusConflict, "this client already has an invoice with that number")
 			return
 		}
 		inv.Number = in.Number
