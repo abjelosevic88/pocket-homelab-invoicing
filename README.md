@@ -146,6 +146,13 @@ docker compose exec app pocket-invoicing backup -o /data/backups/nightly.db
 
 Restore = stop the container, replace `data/pocket-invoicing.db`, start. See [docs/backup.md](docs/backup.md).
 
+Forgot your password? Reset it from the CLI (prints a temporary one; change it under Settings → Profile):
+
+```bash
+docker compose exec app pocket-invoicing reset-password            # first admin user
+docker compose exec app pocket-invoicing reset-password -email you@example.com -password 'NewSecret123'
+```
+
 ## Migrating from Invoice Ninja
 
 See [docs/migrating-from-invoice-ninja.md](docs/migrating-from-invoice-ninja.md): two SQL exports plus `scripts/import_invoiceninja.py` bring over clients, invoices, payments and attached documents.

@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
 	"flag"
 	"fmt"
@@ -19,6 +20,7 @@ import (
 	"github.com/abjelosevic88/pocket-homelab-invoicing/internal/server"
 	"github.com/abjelosevic88/pocket-homelab-invoicing/internal/store"
 	"github.com/abjelosevic88/pocket-homelab-invoicing/web"
+	"golang.org/x/crypto/bcrypt"
 )
 
 var version = "dev"
@@ -35,6 +37,9 @@ func main() {
 		case "scheduler":
 			runSchedulerOnce()
 			return
+		case "reset-password":
+			runResetPassword(os.Args[2:])
+			return
 		case "help", "--help", "-h":
 			fmt.Println(`pocket-invoicing — self-hosted invoicing
 
@@ -42,6 +47,8 @@ Usage:
   pocket-invoicing            start the server (default)
   pocket-invoicing backup [-o FILE]   write a consistent SQLite backup
   pocket-invoicing scheduler  run recurring/overdue/reminder jobs once and exit
+  pocket-invoicing reset-password [-email USER] [-password NEW]
+                              set a user's password (default: first admin, random password printed)
   pocket-invoicing version    print version
 
 Configuration is read from environment variables, see docs/configuration.md.`)
@@ -164,6 +171,72 @@ func runBackup(args []string) {
 		os.Exit(1)
 	}
 	fmt.Println(dst)
+}
+
+// runResetPassword sets a new password for a local user — the "forgot password" path for
+// a single-user install. Without -password a random one is generated and printed; the
+// user should change it under Settings → Profile afterwards. Existing sessions stay valid.
+func runResetPassword(args []string) {
+	fs := flag.NewFlagSet("reset-password", flag.ExitOnError)
+	email := fs.String("email", "", "user email (default: the first admin user)")
+	password := fs.String("password", "", "new password (default: generate a random one)")
+	_ = fs.Parse(args)
+	_, log, st := mustLoad()
+	defer st.Close()
+	ctx := context.Background()
+	var u *store.User
+	var err error
+	if *email != "" {
+		u, err = st.GetUserByEmail(ctx, *email)
+	} else {
+		var users []store.User
+		users, err = st.ListUsers(ctx)
+		for i := range users {
+			if users[i].Role == "admin" {
+				u = &users[i]
+				break
+			}
+		}
+		if err == nil && u == nil {
+			err = errors.New("no admin user found")
+		}
+	}
+	if err != nil {
+		log.Error("reset-password: user lookup failed", "err", err)
+		os.Exit(1)
+	}
+	pw := *password
+	if pw == "" {
+		const alphabet = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+		b := make([]byte, 16)
+		if _, err := rand.Read(b); err != nil {
+			log.Error("reset-password: random", "err", err)
+			os.Exit(1)
+		}
+		for i := range b {
+			b[i] = alphabet[int(b[i])%len(alphabet)]
+		}
+		pw = string(b)
+	}
+	if len(pw) < 8 {
+		log.Error("reset-password: password must be at least 8 characters")
+		os.Exit(1)
+	}
+	h, err := bcrypt.GenerateFromPassword([]byte(pw), bcrypt.DefaultCost)
+	if err != nil {
+		log.Error("reset-password: hash", "err", err)
+		os.Exit(1)
+	}
+	u.PasswordHash = string(h)
+	if err := st.UpdateUser(ctx, u); err != nil {
+		log.Error("reset-password: save", "err", err)
+		os.Exit(1)
+	}
+	if *password == "" {
+		fmt.Printf("Password for %s reset.\nTemporary password: %s\nChange it under Settings → Profile after logging in.\n", u.Email, pw)
+	} else {
+		fmt.Printf("Password for %s reset.\n", u.Email)
+	}
 }
 
 func runSchedulerOnce() {

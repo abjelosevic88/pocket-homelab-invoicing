@@ -25,7 +25,7 @@ All configuration is via environment variables. Nothing is required; `docker com
 | `AUTH_MODE` | `local` | `local` — built-in email/password login with the first-run wizard.<br>`proxy` — trust an identity header set by your SSO reverse proxy (Authelia, Authentik, oauth2-proxy, Caddy `forward_auth`). Users are auto-provisioned.<br>`none` — no authentication at all. Only for isolated LAN/VPN setups. |
 | `AUTH_PROXY_HEADER` | `Remote-User` | Header carrying the username in `proxy` mode |
 | `AUTH_PROXY_EMAIL_HEADER` | `Remote-Email` | Header carrying the email in `proxy` mode |
-| `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `ADMIN_NAME` | – | If set, the admin user is created on first start and the setup wizard is skipped. Handy for IaC. |
+| `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `ADMIN_NAME` | – | If set, the admin user is created on first start and the setup wizard is skipped. Handy for IaC. | Lost the password of an existing user? `pocket-invoicing reset-password [-email USER] [-password NEW]` inside the container sets a new one (random and printed if `-password` is omitted).
 
 API tokens (`Authorization: Bearer pi_…` or `X-API-Key`) work in every mode.
 
