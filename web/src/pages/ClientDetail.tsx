@@ -2,8 +2,9 @@ import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api, V1 } from '../lib/api'
 import { BILLING_MODES, fmtDate, hours, money } from '../lib/format'
-import type { Document, Client, Invoice, Recurring } from '../lib/types'
+import type { Document, Client, Invoice, PaperlessDoc, Recurring } from '../lib/types'
 import { Badge, Card, Confirm, Empty, Loading, Modal, PageHeader, useAsync, useToast } from '../components/ui'
+import { usePaperless } from '../components/paperless'
 import { ClientForm } from './Clients'
 
 interface Detail { client: Client; invoices: Invoice[]; recurring: Recurring[]; unbilled_minutes: number; unbilled_entries: number }
@@ -56,6 +57,7 @@ export default function ClientDetail() {
         </Card>
       </div>
       <ClientDocuments clientId={c.id} />
+      <ClientPaperless client={c} onEdit={() => setEditing(true)} />
       {data.recurring?.length > 0 && <Card title="Recurring profiles" flush>
         <table className="table"><thead><tr><th>Name</th><th>Frequency</th><th>Next run</th><th>Status</th></tr></thead>
           <tbody>{data.recurring.map(r => <tr key={r.id} className="clickable" onClick={() => navigate('/recurring')}><td className="bold">{r.name}</td><td>{r.frequency}{r.interval > 1 ? ` ×${r.interval}` : ''}</td><td>{fmtDate(r.next_run)}</td><td><Badge status={r.status} /></td></tr>)}</tbody></table>
@@ -72,5 +74,27 @@ function ClientDocuments({ clientId }: { clientId: number }) {
   return <Card title="Documents" actions={<Link className="btn sm" to="/documents">All documents</Link>} flush className="mb">
     <table className="table"><thead><tr><th>Title</th><th>Category</th><th>Date</th><th>Expires</th></tr></thead>
       <tbody>{data.map(d => <tr key={d.id}><td><a className="bold" href={`${V1}/documents/${d.id}/file`} target="_blank" rel="noreferrer">{d.title}</a><div className="muted small">{d.filename}</div></td><td>{d.category && <span className="badge">{d.category}</span>}</td><td className="muted">{fmtDate(d.doc_date)}</td><td className="muted">{fmtDate(d.expires_at)}</td></tr>)}</tbody></table>
+  </Card>
+}
+
+function ClientPaperless({ client, onEdit }: { client: Client; onEdit: () => void }) {
+  const pl = usePaperless()
+  const cid = client.paperless_correspondent_id
+  const { data, loading, error } = useAsync(() => pl?.configured && cid ? api.get<{ count: number; results: PaperlessDoc[] }>(`${V1}/paperless/documents?correspondent__id=${cid}&page_size=15`) : Promise.resolve(null), [pl?.configured, cid])
+  if (!pl?.configured) return null
+  if (!cid) return <div className="callout mb">Paperless-ngx is connected but this client is not linked to a correspondent yet. <button className="link-btn" onClick={onEdit}>Edit the client</button> and pick one (or create it) to see their Paperless documents here.</div>
+  const plUrl = `${pl.url}/documents?correspondent__id=${cid}`
+  return <Card title={<>Paperless · {client.paperless_correspondent || `correspondent #${cid}`}{data ? <span className="muted small"> · {data.count} document{data.count === 1 ? '' : 's'}</span> : null}</>} actions={<a className="btn sm" href={plUrl} target="_blank" rel="noreferrer">Open in Paperless ↗</a>} flush className="mb">
+    {error ? <div className="empty muted">{String(error)}</div> : loading && !data ? <Loading /> : !data?.results.length ? <div className="empty muted">No documents for this correspondent in Paperless yet.</div> :
+      <table className="table"><thead><tr><th></th><th>Title</th><th>Type</th><th>Tags</th><th>Created</th><th></th></tr></thead>
+        <tbody>{data.results.map(d => <tr key={d.id}>
+          <td style={{ width: 48 }}><a href={`${V1}/paperless/documents/${d.id}/file`} target="_blank" rel="noreferrer"><img src={`${V1}/paperless/documents/${d.id}/thumb`} alt="" style={{ width: 36, height: 46, objectFit: 'cover', borderRadius: 4, border: '1px solid var(--border)', background: 'var(--surface-2)' }} loading="lazy" /></a></td>
+          <td><a className="bold" href={`${V1}/paperless/documents/${d.id}/file`} target="_blank" rel="noreferrer">{d.title}</a><div className="muted small">#{d.id}{d.original_file_name ? ` · ${d.original_file_name}` : ''}</div></td>
+          <td className="muted">{d.document_type}</td>
+          <td>{d.tags.map(t => <span key={t} className="badge" style={{ marginRight: 4 }}>{t}</span>)}</td>
+          <td className="muted">{fmtDate(d.created)}</td>
+          <td className="actions"><a className="btn ghost sm" href={d.url} target="_blank" rel="noreferrer" title="Open in Paperless">↗</a><a className="btn ghost sm" href={`${V1}/paperless/documents/${d.id}/file?download=1`} title="Download">↓</a></td>
+        </tr>)}</tbody></table>}
+    {data && data.count > data.results.length && <div className="muted small" style={{ padding: '8px 14px' }}>Showing {data.results.length} of {data.count}. <a href={plUrl} target="_blank" rel="noreferrer">See all in Paperless</a>.</div>}
   </Card>
 }

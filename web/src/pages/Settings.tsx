@@ -567,9 +567,38 @@ function Paperless() {
             <label className="check"><input type="checkbox" checked={s.paperless_category_as_type} onChange={set('paperless_category_as_type')} /> Use the document category as Paperless document type</label>
           </div>
         </div>
-        {configured && <p className="muted small" style={{ marginTop: 12 }}>Each invoice page has an "Archive to Paperless" button and each uploaded file a ⇪ button; Documents has "Send to Paperless" and a Paperless tab to search and copy documents back. Links to Paperless are stored locally, so deleting a document here never deletes it there.</p>}
       </Card>
+      {configured && <Card title="Clients ↔ correspondents">
+        <p className="muted small">Each client can be linked to a Paperless correspondent (Clients → edit). The client page then shows that correspondent's documents, and everything archived for the client is filed under it. This matches unlinked clients to existing correspondents by name; optionally creates the missing ones.</p>
+        <SyncCorrespondents />
+      </Card>}
+      {configured && <Card title="Where it shows up">
+        <p className="muted small" style={{ marginTop: 0 }}>Each invoice page has an "Archive to Paperless" button and each uploaded file a ⇪ button; Documents has "Send to Paperless" and a Paperless tab to search and copy documents back. Links to Paperless are stored locally, so deleting a document here never deletes it there.</p>
+      </Card>}
       <SaveBar onSave={save} busy={busy} />
     </div>
   )
+}
+
+function SyncCorrespondents() {
+  const toast = useToast()
+  const [create, setCreate] = useState(true)
+  const [busy, setBusy] = useState(false)
+  const [res, setRes] = useState<{ matched: string[]; created: string[]; unmatched: string[] } | null>(null)
+  const run = async () => {
+    setBusy(true)
+    try { const r = await api.post<{ matched: string[]; created: string[]; unmatched: string[] }>(`${V1}/paperless/correspondents/sync`, { create }); setRes(r); toast(`${r.matched.length} matched, ${r.created.length} created, ${r.unmatched.length} left`, 'success') } catch (e) { toast((e as Error).message, 'error') } finally { setBusy(false) }
+  }
+  return <>
+    <div className="row" style={{ gap: 14, flexWrap: 'wrap' }}>
+      <button type="button" className="btn" disabled={busy} onClick={run}>{busy ? 'Linking…' : 'Link clients to correspondents'}</button>
+      <label className="check"><input type="checkbox" checked={create} onChange={e => setCreate(e.target.checked)} /> Create missing correspondents in Paperless</label>
+    </div>
+    {res && <div className="muted small" style={{ marginTop: 10, whiteSpace: 'pre-wrap' }}>
+      {res.matched.length > 0 && <>Matched: {res.matched.join('; ')}{'\n'}</>}
+      {res.created.length > 0 && <>Created: {res.created.join(', ')}{'\n'}</>}
+      {res.unmatched.length > 0 && <>Not linked: {res.unmatched.join(', ')}</>}
+      {!res.matched.length && !res.created.length && !res.unmatched.length && 'All clients were already linked.'}
+    </div>}
+  </>
 }

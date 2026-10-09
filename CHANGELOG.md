@@ -6,6 +6,7 @@ All notable changes to this project are documented here. Format follows [Keep a 
 
 ### Added
 - Documents: a company-wide file store (contracts, registration, tax, bank, certificates …) with categories, client link, document date, expiry warnings, search and a card on the client page.
+- Clients can be linked to a Paperless correspondent (picker in the client form, name-based sync in Settings → Paperless); the client page lists that correspondent's documents and archived files are filed under it.
 - Optional Paperless-ngx integration (Settings → Paperless): archive invoices manually or automatically when sent/paid, send company documents, browse and search the Paperless archive from Documents, copy documents back, consume-task tracking with links. Off unless a URL and token are configured; `PAPERLESS_URL` / `PAPERLESS_TOKEN` env defaults.
 - Email placeholders `{first_name}`, `{month}`, `{year}` and `{number_short}`; the default invoice email is now a short personal note ("Here is my invoice for August").
 

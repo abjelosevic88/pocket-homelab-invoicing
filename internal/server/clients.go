@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"net/http"
 	"strings"
 
@@ -67,6 +68,7 @@ func (s *Server) handleCreateClient(w http.ResponseWriter, r *http.Request) {
 	if c.PaymentTermsDays == 0 {
 		c.PaymentTermsDays = st.DefaultDueDays
 	}
+	s.fillCorrespondentName(r.Context(), &c)
 	if err := s.store.CreateClient(r.Context(), &c); err != nil {
 		s.fail(w, err, "create client")
 		return
@@ -92,6 +94,7 @@ func (s *Server) handleUpdateClient(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "name is required")
 		return
 	}
+	s.fillCorrespondentName(r.Context(), &c)
 	if err := s.store.UpdateClient(r.Context(), &c); err != nil {
 		s.fail(w, err, "update client")
 		return
@@ -109,4 +112,17 @@ func (s *Server) handleDeleteClient(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "deleted": deleted, "archived": !deleted})
+}
+
+// fillCorrespondentName caches the Paperless correspondent name on the client record.
+func (s *Server) fillCorrespondentName(ctx context.Context, c *store.Client) {
+	if c.PaperlessCorrespondentID <= 0 {
+		c.PaperlessCorrespondentID, c.PaperlessCorrespondent = 0, ""
+		return
+	}
+	if cl, _ := s.paperlessClient(ctx); cl != nil {
+		if n := cl.Name(ctx, "correspondents", c.PaperlessCorrespondentID); n != "" {
+			c.PaperlessCorrespondent = n
+		}
+	}
 }
