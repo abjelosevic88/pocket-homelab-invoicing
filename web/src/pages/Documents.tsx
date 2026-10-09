@@ -103,11 +103,11 @@ function LocalDocuments({ paperlessOn }: { paperlessOn: boolean }) {
               <td>{d.expires_at && <span className={`badge ${ex === 'expired' ? 'overdue' : ex === 'soon' ? 'partial' : ''}`}>{fmtDate(d.expires_at)}</span>}</td>
               <td className="num muted">{fileSize(d.size)}</td>
               <td className="actions">
-                <a className="btn ghost sm" href={`${V1}/documents/${d.id}/file?download=1`} title="Download">↓</a>
-                <button className="btn ghost sm" onClick={() => setModal(d)} title="Edit">✎</button>
-                <label className="btn ghost sm" title="Replace file">⇄<input type="file" style={{ display: 'none' }} onChange={async e => { const f = e.target.files?.[0]; if (!f) return; const fd = new FormData(); fd.append('file', f); try { await api.post(`${V1}/documents/${d.id}/file`, fd); toast('File replaced', 'success'); reload() } catch (err) { toast((err as Error).message, 'error') } }} /></label>
-                {paperlessOn && !(d.paperless && d.paperless.paperless_id > 0) && <button className="btn ghost sm" onClick={() => send(d)} title="Send to Paperless">⇪</button>}
-                <button className="btn ghost sm" onClick={() => setDel(d)} title="Delete">✕</button>
+                <a className="btn ghost sm" href={`${V1}/documents/${d.id}/file?download=1`} title="Download the file">Download</a>
+                <button className="btn ghost sm" onClick={() => setModal(d)} title="Edit title, category, dates">Edit</button>
+                <label className="btn ghost sm" title="Upload a new version of the file">Replace<input type="file" style={{ display: 'none' }} onChange={async e => { const f = e.target.files?.[0]; if (!f) return; const fd = new FormData(); fd.append('file', f); try { await api.post(`${V1}/documents/${d.id}/file`, fd); toast('File replaced', 'success'); reload() } catch (err) { toast((err as Error).message, 'error') } }} /></label>
+                {paperlessOn && !(d.paperless && d.paperless.paperless_id > 0) && <button className="btn ghost sm" onClick={() => send(d)} title="Send a copy to Paperless-ngx">To Paperless</button>}
+                <button className="btn ghost sm danger" onClick={() => setDel(d)} title="Delete">Delete</button>
               </td>
             </tr>
           })}</tbody>
@@ -153,9 +153,9 @@ function PaperlessBrowser() {
               <td>{d.tags.map(t => <span key={t} className="badge" style={{ marginRight: 4 }}>{t}</span>)}</td>
               <td className="muted">{fmtDate(d.created)}</td>
               <td className="actions">
-                <a className="btn ghost sm" href={d.url} target="_blank" rel="noreferrer" title="Open in Paperless">↗</a>
-                <a className="btn ghost sm" href={`${V1}/paperless/documents/${d.id}/file?download=1`} title="Download">↓</a>
-                {linked?.kind === 'document' ? <span className="muted small">copied</span> : linked?.kind === 'invoice' || linked?.kind === 'attachment' ? <Link className="btn ghost sm" to={linked.kind === 'invoice' ? `/invoices/${linked.ref_id}` : '/invoices'} title="Open invoice">▤</Link> : <button className="btn ghost sm" disabled={importing === d.id} onClick={() => importDoc(d)} title="Copy into Documents">⇩</button>}
+                <a className="btn ghost sm" href={d.url} target="_blank" rel="noreferrer" title="Open this document in Paperless-ngx (new tab)">Open in Paperless ↗</a>
+                <a className="btn ghost sm" href={`${V1}/paperless/documents/${d.id}/file?download=1`} title="Download the file">Download</a>
+                {linked?.kind === 'document' ? <span className="muted small">already in Documents</span> : linked?.kind === 'invoice' || linked?.kind === 'attachment' ? <Link className="btn ghost sm" to={linked.kind === 'invoice' ? `/invoices/${linked.ref_id}` : '/invoices'} title="Open the invoice this file belongs to">Open invoice</Link> : <button className="btn ghost sm" disabled={importing === d.id} onClick={() => importDoc(d)} title="Copy this file into Pocket Invoicing Documents">{importing === d.id ? 'Importing…' : 'Import'}</button>}
               </td>
             </tr>
           })}</tbody>

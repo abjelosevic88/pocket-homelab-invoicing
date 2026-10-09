@@ -91,10 +91,10 @@ function ClientDocuments({ client }: { client: Client }) {
             <td>{d.expires_at && <span className={`badge ${ex === 'expired' ? 'overdue' : ex === 'soon' ? 'partial' : ''}`}>{fmtDate(d.expires_at)}</span>}</td>
             <td className="num muted">{fileSize(d.size)}</td>
             <td className="actions">
-              <a className="btn ghost sm" href={`${V1}/documents/${d.id}/file?download=1`} title="Download">↓</a>
-              <button className="btn ghost sm" onClick={() => setModal(d)} title="Edit">✎</button>
-              {paperlessOn && !(d.paperless && d.paperless.paperless_id > 0) && <button className="btn ghost sm" onClick={() => send(d)} title="Send to Paperless">⇪</button>}
-              <button className="btn ghost sm" onClick={() => setDel(d)} title="Delete">✕</button>
+              <a className="btn ghost sm" href={`${V1}/documents/${d.id}/file?download=1`} title="Download the file">Download</a>
+              <button className="btn ghost sm" onClick={() => setModal(d)} title="Edit title, category, dates">Edit</button>
+              {paperlessOn && !(d.paperless && d.paperless.paperless_id > 0) && <button className="btn ghost sm" onClick={() => send(d)} title="Send a copy to Paperless-ngx">To Paperless</button>}
+              <button className="btn ghost sm danger" onClick={() => setDel(d)} title="Delete">Delete</button>
             </td>
           </tr> })}</tbody></table>}
     </Card>
@@ -121,7 +121,7 @@ function ClientPaperless({ client, onEdit }: { client: Client; onEdit: () => voi
           <td className="muted">{d.document_type}</td>
           <td>{d.tags.map(t => <span key={t} className="badge" style={{ marginRight: 4 }}>{t}</span>)}</td>
           <td className="muted">{fmtDate(d.created)}</td>
-          <td className="actions"><a className="btn ghost sm" href={d.url} target="_blank" rel="noreferrer" title="Open in Paperless">↗</a><a className="btn ghost sm" href={`${V1}/paperless/documents/${d.id}/file?download=1`} title="Download">↓</a></td>
+          <td className="actions"><a className="btn ghost sm" href={d.url} target="_blank" rel="noreferrer" title="Open this document in Paperless-ngx (new tab)">Open ↗</a><a className="btn ghost sm" href={`${V1}/paperless/documents/${d.id}/file?download=1`} title="Download the file">Download</a></td>
         </tr>)}</tbody></table>}
     {data && data.count > data.results.length && <div className="muted small" style={{ padding: '8px 14px' }}>Showing {data.results.length} of {data.count}. <a href={plUrl} target="_blank" rel="noreferrer">See all in Paperless</a>.</div>}
   </Card>

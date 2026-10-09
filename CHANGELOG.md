@@ -4,6 +4,9 @@ All notable changes to this project are documented here. Format follows [Keep a 
 
 ## [Unreleased]
 
+### Changed
+- Text labels replace the arrow icons on document, attachment and payment row actions (Open in Paperless, Download, Import, Edit, Replace, To Paperless, Delete).
+
 ### Added
 - Documents: a company-wide file store (contracts, registration, tax, bank, certificates …) with categories, client link, document date, expiry warnings, search and a card on the client page.
 - Clients can be linked to a Paperless correspondent (picker in the client form, name-based sync in Settings → Paperless); the client page lists that correspondent's documents and archived files are filed under it.
