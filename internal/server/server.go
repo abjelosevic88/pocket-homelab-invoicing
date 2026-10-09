@@ -149,6 +149,7 @@ func (s *Server) Router() http.Handler {
 			r.Get("/invoices", s.handleListInvoices)
 			r.Post("/invoices", s.handleCreateInvoice)
 			r.Get("/invoices/next-number", s.handleNextNumber)
+			r.Get("/invoices/check-number", s.handleCheckNumber)
 			r.Post("/invoices/from-time", s.handleInvoiceFromTime)
 			r.Get("/invoices/{id}", s.handleGetInvoice)
 			r.Put("/invoices/{id}", s.handleUpdateInvoice)

@@ -38,6 +38,7 @@ Client fields: `name, contact_name, email, phone, address1, address2, city, stat
 | GET | `/invoices?status=&client_id=&q=&from=&to=&limit=&offset=` | `status`: draft, sent, viewed, partial, paid, overdue, cancelled, `open` (any unpaid) |
 | POST | `/invoices` | see body below |
 | GET | `/invoices/next-number` | |
+| GET | `/invoices/check-number?number=&client_id=&exclude=` | `{same_client, other_clients[]}` — numbers are unique per client |
 | POST | `/invoices/from-time` | `{client_id, from, to, entry_ids[], group_by: entry|day|project|total, billing_mode: hourly|daily, rate, include_expenses}` |
 | GET | `/invoices/{id}` | includes `items[]`, `payments[]` |
 | PUT | `/invoices/{id}` | same body as POST; recalculates totals |

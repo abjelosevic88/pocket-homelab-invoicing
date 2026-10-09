@@ -135,3 +135,33 @@ func TestTemplatesAndSettings(t *testing.T) {
 		t.Fatalf("%+v", d)
 	}
 }
+
+func TestInvoiceNumberUniquePerClient(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+	a := &Client{Name: "A", Currency: "EUR"}
+	b := &Client{Name: "B", Currency: "USD"}
+	_ = s.CreateClient(ctx, a)
+	_ = s.CreateClient(ctx, b)
+	mk := func(c *Client) error {
+		return s.CreateInvoice(ctx, &Invoice{Number: "INV-001-2026", ClientID: c.ID, Status: StatusDraft, IssueDate: "2026-01-01", DueDate: "2026-01-01", Currency: c.Currency, ExchangeRate: 1})
+	}
+	if err := mk(a); err != nil {
+		t.Fatal(err)
+	}
+	if err := mk(b); err != nil {
+		t.Fatalf("same number for another client should be allowed: %v", err)
+	}
+	if err := mk(b); err == nil {
+		t.Fatal("same number for the same client must be rejected")
+	}
+	same, others, err := s.NumberUsage(ctx, "INV-001-2026", a.ID, 0)
+	if err != nil || !same || len(others) != 1 || others[0] != "B" {
+		t.Fatalf("usage: %v %v %v", same, others, err)
+	}
+	// migration left the FK graph intact
+	inv, _, _ := s.ListInvoices(ctx, InvoiceFilter{})
+	if len(inv) != 2 {
+		t.Fatalf("expected 2 invoices, got %d", len(inv))
+	}
+}

@@ -274,11 +274,33 @@ func (s *Store) MarkOverdue(ctx context.Context) ([]int64, error) {
 	return ids, nil
 }
 
-// NumberExists checks whether an invoice number is taken.
+// NumberExists checks whether an invoice number is taken by any client (used by auto-numbering).
 func (s *Store) NumberExists(ctx context.Context, number string, excludeID int64) (bool, error) {
 	var n int
 	err := s.DB.QueryRowContext(ctx, `SELECT COUNT(1) FROM invoices WHERE number = ? AND id != ?`, number, excludeID).Scan(&n)
 	return n > 0, err
+}
+
+// NumberUsage reports who uses a number: the same client (a hard conflict) or other clients (a warning).
+func (s *Store) NumberUsage(ctx context.Context, number string, clientID, excludeID int64) (sameClient bool, others []string, err error) {
+	rows, err := s.DB.QueryContext(ctx, `SELECT i.client_id, c.name FROM invoices i JOIN clients c ON c.id = i.client_id WHERE i.number = ? AND i.id != ?`, number, excludeID)
+	if err != nil {
+		return false, nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var cid int64
+		var name string
+		if err := rows.Scan(&cid, &name); err != nil {
+			return false, nil, err
+		}
+		if cid == clientID {
+			sameClient = true
+		} else {
+			others = append(others, name)
+		}
+	}
+	return sameClient, others, rows.Err()
 }
 
 // LinkTimeEntries attaches time entries to an invoice.
