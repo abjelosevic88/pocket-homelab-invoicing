@@ -4,6 +4,9 @@ All notable changes to this project are documented here. Format follows [Keep a 
 
 ## [Unreleased]
 
+### Added
+- `docs/homelab-integration.md`: backup (restic/Backrest, consistent SQLite snapshots), Uptime Kuma, Prometheus and Homepage customapi recipes.
+
 ### Fixed
 - Exchange rates stored against a previous base currency (for example EUR-based ECB rows from before switching to BAM) lingered invisibly and could feed wrong cross rates. A migration removes them, and changing the base currency now prunes old rows and refreshes rates for the new base automatically.
 
