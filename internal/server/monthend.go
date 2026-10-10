@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -76,6 +77,7 @@ func (s *Server) monthEndPlan(ctx context.Context, month string) (map[string]any
 		issue = store.Today()
 	}
 	wd, _ := workingDays(st, ps, pe)
+	allHol := calendar.Count(a, b, calendar.ParseWorkWeek("1,2,3,4,5,6,7"), st.Holidays).Holidays
 
 	clients, err := s.store.ListClients(ctx, false, "")
 	if err != nil {
@@ -201,7 +203,7 @@ func (s *Server) monthEndPlan(ctx context.Context, month string) (map[string]any
 	}
 	return map[string]any{
 		"month": month, "month_label": monthLabel, "period_start": ps, "period_end": pe, "issue_date": issue,
-		"calendar": wd, "hours_per_day": st.HoursPerDay, "custom_fields": st.CustomFields,
+		"calendar": wd, "all_holidays": allHol, "work_week": calendar.NormalizeWorkWeek(st.WorkWeek), "hours_per_day": st.HoursPerDay, "custom_fields": st.CustomFields,
 		"rows": rows, "invoices": all, "smtp_configured": st.SMTPHost != "",
 	}, nil
 }
@@ -244,6 +246,7 @@ type monthEndCreateRow struct {
 	DueDate      string              `json:"due_date"`
 	Notes        string              `json:"notes"`
 	Terms        string              `json:"terms"`
+	WorkedDays   []string            `json:"worked_days"` // dates picked in the calendar; "YYYY-MM-DD" or "YYYY-MM-DD:0.5" for half days
 }
 
 // handleMonthEndCreate: POST /month-end  {month, issue_date, rows:[...]} -> creates draft invoices.
@@ -316,7 +319,11 @@ func (s *Server) handleMonthEndCreate(w http.ResponseWriter, r *http.Request) {
 		if len(row.TimeEntryIDs) > 0 {
 			_ = s.store.LinkTimeEntries(ctx, inv.ID, row.TimeEntryIDs)
 		}
-		s.store.LogActivity(ctx, "invoice", inv.ID, "created", "Created by the month-end wizard for "+a.Format("January 2006"))
+		msg := "Created by the month-end wizard for " + a.Format("January 2006")
+		if len(row.WorkedDays) > 0 {
+			msg += " · days worked: " + describeWorkedDays(row.WorkedDays)
+		}
+		s.store.LogActivity(ctx, "invoice", inv.ID, "created", msg)
 		// Keep the recurring schedule in step so the scheduler does not generate the same period again.
 		if row.RecurringID != nil {
 			if rec, err := s.store.GetRecurring(ctx, *row.RecurringID); err == nil && rec.ClientID == row.ClientID {
@@ -347,4 +354,27 @@ func (s *Server) handleMonthEndCreate(w http.ResponseWriter, r *http.Request) {
 		status = http.StatusBadRequest
 	}
 	writeJSON(w, status, map[string]any{"invoices": created, "errors": errs})
+}
+
+// describeWorkedDays compresses ["2026-10-01","2026-10-02","2026-10-05:0.5"] into "1, 2, 5(½)".
+func describeWorkedDays(days []string) string {
+	sort.Strings(days)
+	parts := make([]string, 0, len(days))
+	var total float64
+	for _, d := range days {
+		half := strings.HasSuffix(d, ":0.5")
+		d = strings.TrimSuffix(d, ":0.5")
+		if len(d) < 10 {
+			continue
+		}
+		day := strings.TrimLeft(d[8:10], "0")
+		if half {
+			day += "(½)"
+			total += 0.5
+		} else {
+			total++
+		}
+		parts = append(parts, day)
+	}
+	return fmt.Sprintf("%s (%s days)", strings.Join(parts, ", "), strconv.FormatFloat(total, 'f', -1, 64))
 }
