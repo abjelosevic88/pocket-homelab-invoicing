@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+
+	"github.com/abjelosevic88/pocket-homelab-invoicing/internal/calendar"
 )
 
 // Settings is the application-wide configuration stored in the DB.
@@ -52,6 +54,10 @@ type Settings struct {
 	ShowBaseTotal            bool              `json:"show_base_total"`             // print the total converted to the base currency when currencies differ
 	BaseTotalNote            string            `json:"base_total_note"`             // sentence printed under the totals; placeholders {rate} {currency} {currency_name} {base} {total_base}
 	EmailAttachmentMode      string            `json:"email_attachment_mode"`       // generated | uploaded | both
+
+	// Working-days calendar: feeds recurring profiles with quantity_mode = working_days and the month-end wizard.
+	WorkWeek string             `json:"work_week"` // ISO weekdays that count as working days, e.g. "1,2,3,4,5"
+	Holidays []calendar.Holiday `json:"holidays"`  // public holidays (yearly) and personal days off (one-off)
 
 	// Income tax estimate (for the owner's own tax return; not printed on invoices)
 	IncomeTaxRate          float64 `json:"income_tax_rate"`            // percent, e.g. 10
@@ -116,6 +122,8 @@ func DefaultSettings() Settings {
 		ShowBaseTotal:                 true,
 		BaseTotalNote:                 "Exchange rate 1 {currency} = {rate} {base}. Total in {base}: {total_base}.",
 		EmailAttachmentMode:           "generated",
+		WorkWeek:                      calendar.DefaultWorkWeek,
+		Holidays:                      []calendar.Holiday{},
 		IncomeTaxRate:                 10,
 		IncomeTaxBasis:                "revenue",
 		IncomeTaxByPaymentDate:        true,

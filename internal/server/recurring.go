@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/abjelosevic88/pocket-homelab-invoicing/internal/calendar"
 	"github.com/abjelosevic88/pocket-homelab-invoicing/internal/store"
 )
 
@@ -48,13 +49,81 @@ func addMonthsClamped(t time.Time, months int) time.Time {
 }
 
 // periodFor returns the service period covered by a run on `runDate`.
-func periodFor(runDate, frequency string, interval int) (string, string) {
+// Forward profiles bill the period that starts on the run date; arrears
+// profiles bill the period that ended the day before (run on Nov 1 -> October).
+func periodFor(runDate, frequency string, interval int, periodMode string) (string, string) {
 	t, err := time.Parse("2006-01-02", runDate)
 	if err != nil {
 		return "", ""
 	}
+	if periodMode == "arrears" {
+		return shiftPeriod(t, frequency, -interval).Format("2006-01-02"), t.AddDate(0, 0, -1).Format("2006-01-02")
+	}
 	end, _ := time.Parse("2006-01-02", NextRun(runDate, frequency, interval))
 	return t.Format("2006-01-02"), end.AddDate(0, 0, -1).Format("2006-01-02")
+}
+
+// shiftPeriod moves t by n periods of the given frequency (n may be negative).
+func shiftPeriod(t time.Time, frequency string, n int) time.Time {
+	switch frequency {
+	case "daily":
+		return t.AddDate(0, 0, n)
+	case "weekly":
+		return t.AddDate(0, 0, 7*n)
+	case "biweekly":
+		return t.AddDate(0, 0, 14*n)
+	case "quarterly":
+		return addMonthsClamped(t, 3*n)
+	case "yearly":
+		return t.AddDate(n, 0, 0)
+	default:
+		return addMonthsClamped(t, n)
+	}
+}
+
+// runDateFor is the inverse of periodFor: the run date whose period starts on periodStart.
+func runDateFor(periodStart, periodEnd, periodMode string) string {
+	if periodMode == "arrears" {
+		if t, err := time.Parse("2006-01-02", periodEnd); err == nil {
+			return t.AddDate(0, 0, 1).Format("2006-01-02")
+		}
+	}
+	return periodStart
+}
+
+// recurringItems expands a profile's line items for a service period: placeholders
+// are filled and, for quantity_mode = working_days, day/hour quantities are derived
+// from the working-days calendar. The second return value names the quantity source.
+func recurringItems(rec *store.RecurringInvoice, st store.Settings, ps, pe string) ([]store.InvoiceItem, string) {
+	t, err := time.Parse("2006-01-02", ps)
+	if err != nil {
+		t = time.Now()
+	}
+	source := "profile"
+	var wd calendar.Result
+	if rec.QuantityMode == "working_days" {
+		if res, err := workingDays(st, ps, pe); err == nil {
+			wd = res
+			source = "working_days"
+		}
+	}
+	items := make([]store.InvoiceItem, 0, len(rec.Items))
+	for _, it := range rec.Items {
+		desc := strings.ReplaceAll(it.Description, "{period}", fmt.Sprintf("%s – %s", ps, pe))
+		desc = strings.ReplaceAll(desc, "{month}", t.Format("January 2006"))
+		desc = strings.ReplaceAll(desc, "{year}", t.Format("2006"))
+		qty := it.Quantity
+		if source == "working_days" {
+			switch it.Unit {
+			case "day":
+				qty = float64(wd.WorkingDays)
+			case "hour":
+				qty = float64(wd.WorkingDays) * st.HoursPerDay
+			}
+		}
+		items = append(items, store.InvoiceItem{Description: desc, Unit: it.Unit, Quantity: qty, UnitPrice: it.UnitPrice, TaxRate: it.TaxRate, Discount: it.Discount})
+	}
+	return items, source
 }
 
 func (s *Server) handleListRecurring(w http.ResponseWriter, r *http.Request) {
@@ -138,6 +207,12 @@ func (s *Server) handleSaveRecurring(w http.ResponseWriter, r *http.Request) {
 	if rec.EndDate != nil && *rec.EndDate == "" {
 		rec.EndDate = nil
 	}
+	if rec.QuantityMode != "working_days" {
+		rec.QuantityMode = "fixed"
+	}
+	if rec.PeriodMode != "arrears" {
+		rec.PeriodMode = "forward"
+	}
 	if len(rec.Items) == 0 {
 		writeErr(w, http.StatusBadRequest, "at least one line item is required")
 		return
@@ -178,7 +253,7 @@ func (s *Server) runRecurring(ctx context.Context, rec *store.RecurringInvoice, 
 	if err != nil {
 		return nil, err
 	}
-	ps, pe := periodFor(runDate, rec.Frequency, rec.Interval)
+	ps, pe := periodFor(runDate, rec.Frequency, rec.Interval, rec.PeriodMode)
 	in := invoiceInput{
 		ClientID: rec.ClientID, Currency: rec.Currency, BillingMode: rec.BillingMode, IssueDate: runDate,
 		DiscountType: rec.DiscountType, DiscountValue: rec.DiscountValue, Notes: rec.Notes, Terms: rec.Terms, Footer: st.DefaultFooter, TemplateID: rec.TemplateID,
@@ -186,12 +261,7 @@ func (s *Server) runRecurring(ctx context.Context, rec *store.RecurringInvoice, 
 	}
 	t, _ := time.Parse("2006-01-02", runDate)
 	in.DueDate = t.AddDate(0, 0, rec.DueDays).Format("2006-01-02")
-	for _, it := range rec.Items {
-		desc := strings.ReplaceAll(it.Description, "{period}", fmt.Sprintf("%s – %s", ps, pe))
-		desc = strings.ReplaceAll(desc, "{month}", t.Format("January 2006"))
-		desc = strings.ReplaceAll(desc, "{year}", t.Format("2006"))
-		in.Items = append(in.Items, store.InvoiceItem{Description: desc, Unit: it.Unit, Quantity: it.Quantity, UnitPrice: it.UnitPrice, TaxRate: it.TaxRate, Discount: it.Discount})
-	}
+	in.Items, _ = recurringItems(rec, st, ps, pe)
 	inv := &store.Invoice{Status: store.StatusDraft}
 	if err := s.applyInput(ctx, inv, in, st); err != nil {
 		return nil, err

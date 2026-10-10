@@ -26,9 +26,11 @@ export interface Invoice {
   custom_fields: Record<string, string>;
   items?: InvoiceItem[]; payments?: Payment[]; attachments?: Attachment[]; paperless?: PaperlessLink;
 }
+export interface Holiday { date: string; name: string; yearly: boolean }
+export interface WorkingDays { from: string; to: string; working_days: number; week_days: number; holidays: { date: string; name: string; weekday: string }[]; hours_per_day: number; working_hours: number; work_week: string }
 export interface RecurringItem { description: string; unit: string; quantity: number; unit_price: number; tax_rate: number; discount: number }
 export interface Recurring {
-  id: number; name: string; client_id: number; client_name: string; status: string; frequency: string; interval: number; start_date: string; end_date: string | null; next_run: string; last_run: string | null; occurrences: number; max_occurrences: number; due_days: number; currency: string; billing_mode: string; items: RecurringItem[]; discount_type: string; discount_value: number; notes: string; terms: string; auto_send: boolean; template_id: number | null;
+  id: number; name: string; client_id: number; client_name: string; status: string; frequency: string; interval: number; start_date: string; end_date: string | null; next_run: string; last_run: string | null; occurrences: number; max_occurrences: number; due_days: number; currency: string; billing_mode: string; items: RecurringItem[]; discount_type: string; discount_value: number; notes: string; terms: string; auto_send: boolean; template_id: number | null; quantity_mode: string; period_mode: string;
 }
 export interface TimeEntry { id: number; client_id: number; client_name: string; project: string; description: string; started_at: string; ended_at: string | null; duration_minutes: number; billable: boolean; rate: number | null; invoice_id: number | null }
 export interface Expense { id: number; client_id: number | null; client_name: string; date: string; category: string; description: string; amount: number; currency: string; exchange_rate: number; billable: boolean; invoice_id: number | null }
@@ -41,6 +43,7 @@ export interface Settings {
   default_hourly_rate: number; default_daily_rate: number; default_monthly_rate: number; default_tax_rate: number; hours_per_day: number; time_rounding_minutes: number; show_tax_column: boolean; payment_details: string;
   payment_details_by_currency: Record<string, string> | null; number_format: string; custom_fields: CustomFieldDef[] | null; show_base_total: boolean; base_total_note: string; email_attachment_mode: string;
   income_tax_rate: number; income_tax_basis: string; income_tax_by_payment_date: boolean; income_tax_min_yearly: number; income_tax_deduction: number; contributions_monthly: number; income_tax_label: string;
+  work_week: string; holidays: Holiday[] | null;
   smtp_host: string; smtp_port: number; smtp_user: string; smtp_password: string; smtp_password_set?: boolean; smtp_from: string; smtp_from_name: string; smtp_tls: string; smtp_bcc: string; email_subject: string; email_body: string; reminder_days: string; reminders_enabled: boolean; setup_complete: boolean;
   paperless_url: string; paperless_external_url: string; paperless_token: string; paperless_token_set?: boolean; paperless_clear_token?: boolean; paperless_tags: string; paperless_invoice_type: string; paperless_create_correspondents: boolean; paperless_archive_invoices: string; paperless_category_as_type: boolean;
 }
@@ -49,3 +52,14 @@ export interface MonthlyRevenue { month: string; invoiced: number; paid: number;
 export interface YearRevenue { year: string; invoiced: number; paid: number; expenses: number; count: number }
 export interface Lifetime { paid_total: number; invoiced_total: number; invoice_count: number; paid_count: number; first_invoice: string; paid_by_currency: Record<string, number>; months_active: number }
 export interface ClientRevenue { client_id: number; client_name: string; currency: string; invoiced: number; paid: number; outstanding: number; count: number }
+
+export interface MonthEndRow {
+  client_id: number; client_name: string; client_email: string; currency: string; billing_mode: string; recurring_id: number | null; recurring_name: string; template_id: number | null;
+  include: boolean; items: InvoiceItem[]; quantity_source: string; unbilled_minutes: number; time_entry_ids: number[]; existing: Invoice[];
+  custom_fields: Record<string, string>; custom_fields_last: Record<string, string>; due_date: string; notes: string; terms: string; hint: string
+}
+export interface MonthEndPlan {
+  month: string; month_label: string; period_start: string; period_end: string; issue_date: string; hours_per_day: number; smtp_configured: boolean;
+  calendar: { from: string; to: string; working_days: number; week_days: number; holidays: { date: string; name: string; weekday: string }[] };
+  custom_fields: CustomFieldDef[]; rows: MonthEndRow[]; invoices: Invoice[]
+}

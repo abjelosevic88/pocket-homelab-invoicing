@@ -353,3 +353,54 @@ func (s *Store) InvoicesDueForReminder(ctx context.Context, days []int) ([]Invoi
 	}
 	return out, rows.Err()
 }
+
+// InvoicesForPeriod returns a client's invoices whose service period starts inside
+// [from, to], or (when no period is recorded) whose issue date falls inside it.
+func (s *Store) InvoicesForPeriod(ctx context.Context, clientID int64, from, to string) ([]Invoice, error) {
+	rows, err := s.DB.QueryContext(ctx, `SELECT `+invoiceCols+` FROM invoices i JOIN clients c ON c.id = i.client_id
+		WHERE i.client_id = ? AND ((i.period_start IS NOT NULL AND i.period_start >= ? AND i.period_start <= ?)
+		   OR (i.period_start IS NULL AND i.issue_date >= ? AND i.issue_date <= ?))
+		ORDER BY i.issue_date DESC, i.id DESC`, clientID, from, to, from, to)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []Invoice{}
+	for rows.Next() {
+		inv, err := scanInvoice(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, *inv)
+	}
+	return out, rows.Err()
+}
+
+// LatestCustomFields returns, per custom field key, the most recent non-empty
+// value used on one of the client's invoices (newest issue date first).
+func (s *Store) LatestCustomFields(ctx context.Context, clientID int64, excludeDrafts bool) (map[string]string, error) {
+	q := `SELECT custom_fields FROM invoices WHERE client_id = ? AND custom_fields <> '{}'`
+	if excludeDrafts {
+		q += ` AND status NOT IN ('draft','cancelled')`
+	}
+	rows, err := s.DB.QueryContext(ctx, q+` ORDER BY issue_date DESC, id DESC LIMIT 50`, clientID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]string{}
+	for rows.Next() {
+		var raw string
+		if err := rows.Scan(&raw); err != nil {
+			return nil, err
+		}
+		m := map[string]string{}
+		_ = json.Unmarshal([]byte(raw), &m)
+		for k, v := range m {
+			if _, seen := out[k]; !seen && strings.TrimSpace(v) != "" {
+				out[k] = v
+			}
+		}
+	}
+	return out, rows.Err()
+}
