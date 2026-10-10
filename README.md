@@ -167,7 +167,7 @@ docker compose exec app pocket-invoicing backup -o /data/backups/nightly.db
 ```
 
 Restore = stop the container, replace `data/pocket-invoicing.db`, start. See [docs/backup.md](docs/backup.md).
-Restore = stop the container, replace `data/pocket-invoicing.db`, start. See [Homelab integration](docs/homelab-integration.md) — Backrest/restic, Uptime Kuma, Prometheus, Homepage widget
+Wiring it into restic/Backrest, Uptime Kuma, Prometheus and a Homepage card: [docs/homelab-integration.md](docs/homelab-integration.md).
 
 Forgot your password? Reset it from the CLI (prints a temporary one; change it under Settings → Profile):
 
