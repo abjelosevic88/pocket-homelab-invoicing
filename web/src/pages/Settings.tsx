@@ -198,12 +198,12 @@ function WorkingDaysCard({ s, setS, save, busy }: { s: S; setS: React.Dispatch<R
             <button className="btn" onClick={addPreset} style={{ marginBottom: 6 }}>Add</button>
           </div>
           <div className="table-wrap mt"><table className="table">
-            <thead><tr><th>Date</th><th>Name</th><th>Repeats yearly</th><th></th></tr></thead>
+            <thead><tr><th style={{ width: 170 }}>Date</th><th>Name</th><th style={{ width: 150 }}>Repeats</th><th style={{ width: 90 }}></th></tr></thead>
             <tbody>
               {sorted.map(h => { const i = holidays.indexOf(h); return <tr key={h.date + h.name + i}>
-                <td><input type="date" value={h.date} onChange={e => setHol(holidays.map((x, j) => j === i ? { ...x, date: e.target.value } : x))} /></td>
-                <td><input value={h.name} onChange={e => setHol(holidays.map((x, j) => j === i ? { ...x, name: e.target.value } : x))} /></td>
-                <td><label className="check"><input type="checkbox" checked={h.yearly} onChange={e => setHol(holidays.map((x, j) => j === i ? { ...x, yearly: e.target.checked } : x))} /> {h.yearly ? 'every year' : 'this date only'}</label></td>
+                <td><input type="date" value={h.date} style={{ width: '100%' }} onChange={e => setHol(holidays.map((x, j) => j === i ? { ...x, date: e.target.value } : x))} /></td>
+                <td><input value={h.name} style={{ width: '100%', minWidth: 180 }} placeholder="Holiday or day off" onChange={e => setHol(holidays.map((x, j) => j === i ? { ...x, name: e.target.value } : x))} /></td>
+                <td style={{ whiteSpace: 'nowrap' }}><label className="check"><input type="checkbox" checked={h.yearly} onChange={e => setHol(holidays.map((x, j) => j === i ? { ...x, yearly: e.target.checked } : x))} /> {h.yearly ? 'every year' : 'once'}</label></td>
                 <td className="actions"><button className="btn ghost sm danger" onClick={() => setHol(holidays.filter((_, j) => j !== i))}>Remove</button></td>
               </tr> })}
               <tr><td colSpan={4}><button className="btn sm" onClick={() => setHol([...holidays, { date: today(), name: '', yearly: false }])}>+ Add day off</button></td></tr>
