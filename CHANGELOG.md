@@ -4,6 +4,9 @@ All notable changes to this project are documented here. Format follows [Keep a 
 
 ## [Unreleased]
 
+### Fixed
+- Exchange rates stored against a previous base currency (for example EUR-based ECB rows from before switching to BAM) lingered invisibly and could feed wrong cross rates. A migration removes them, and changing the base currency now prunes old rows and refreshes rates for the new base automatically.
+
 ### Changed
 - Text labels replace the arrow icons on document, attachment and payment row actions (Open in Paperless, Download, Import, Edit, Replace, To Paperless, Delete).
 

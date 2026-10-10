@@ -51,6 +51,7 @@ func (s *Server) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	prevPwd := st.SMTPPassword
 	prevToken := st.PaperlessToken
+	prevBase := st.BaseCurrency
 	if err := decode(r, &st); err != nil {
 		writeErr(w, http.StatusBadRequest, "invalid json")
 		return
@@ -109,6 +110,21 @@ func (s *Server) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 	if err := s.store.SaveSettings(ctx, st); err != nil {
 		s.fail(w, err, "save settings")
 		return
+	}
+	if prevBase != "" && prevBase != st.BaseCurrency {
+		// Stored rates are quoted against the base; rows for the old base would linger
+		// invisibly and poison cross rates. Drop them and fetch fresh ones for the new base.
+		n, err := s.store.PruneRates(ctx, st.BaseCurrency)
+		s.log.Info("base currency changed, pruned exchange rates", "from", prevBase, "to", st.BaseCurrency, "removed", n, "err", err)
+		go func() {
+			bg, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			if n, err := s.refreshRates(bg); err != nil {
+				s.log.Warn("exchange rate refresh after base change failed", "err", err)
+			} else {
+				s.log.Info("exchange rates refreshed after base change", "updated", n)
+			}
+		}()
 	}
 	writeJSON(w, http.StatusOK, maskSettings(st))
 }

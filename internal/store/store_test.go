@@ -100,6 +100,17 @@ func TestRates(t *testing.T) {
 	if _, ok := s.GetRate(ctx, "USD", "JPY"); ok {
 		t.Fatal("expected missing")
 	}
+	// Rows against another base are pruned when the base changes.
+	_ = s.UpsertRate(ctx, ExchangeRate{Base: "BAM", Quote: "USD", Rate: 0.57})
+	if n, err := s.PruneRates(ctx, "BAM"); err != nil || n != 2 {
+		t.Fatalf("PruneRates removed %d rows, err %v; want 2", n, err)
+	}
+	if left, _ := s.ListRates(ctx, "BAM"); len(left) != 1 || left[0].Quote != "USD" {
+		t.Fatalf("BAM rates after prune: %+v", left)
+	}
+	if _, ok := s.GetRate(ctx, "EUR", "USD"); ok {
+		t.Fatalf("EUR→USD should be gone after prune")
+	}
 }
 
 func TestRoundMinutes(t *testing.T) {
