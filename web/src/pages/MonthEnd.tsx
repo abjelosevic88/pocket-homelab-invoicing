@@ -1,10 +1,11 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api, V1 } from '../lib/api'
 import { useApp } from '../lib/app-context'
 import { fmtDate, money, today } from '../lib/format'
 import type { Invoice, InvoiceItem, MonthEndPlan, MonthEndRow } from '../lib/types'
 import { Badge, Card, Empty, Field, Loading, Modal, PageHeader, useAsync, useToast } from '../components/ui'
+import { DayPicker, defaultDays } from '../components/DayPicker'
 import { computeTotals } from './InvoiceEditor'
 import { SendForm } from './InvoiceDetail'
 
@@ -18,51 +19,6 @@ function prevMonth(): string {
   return d.toISOString().slice(0, 7)
 }
 
-type DayState = 0 | 0.5 | 1
-type DayMap = Record<string, DayState>
-
-function pad(n: number) { return String(n).padStart(2, '0') }
-
-/** Default selection: every work-week day that is not a holiday, as a full day. */
-export function defaultDays(month: string, workWeek: string, holidays: string[]): DayMap {
-  const [y, m] = month.split('-').map(Number)
-  const week = new Set(workWeek.split(',').map(Number))
-  const hol = new Set(holidays)
-  const out: DayMap = {}
-  const last = new Date(y, m, 0).getDate()
-  for (let d = 1; d <= last; d++) {
-    const iso = `${y}-${pad(m)}-${pad(d)}`
-    const dow = new Date(y, m - 1, d).getDay() || 7 // ISO: Mon=1 … Sun=7
-    out[iso] = week.has(dow) && !hol.has(iso) ? 1 : 0
-  }
-  return out
-}
-
-export function countDays(days: DayMap): number { return Object.values(days).reduce<number>((a, v) => a + v, 0) }
-
-function DayPicker({ month, value, holidays, onChange }: { month: string; value: DayMap; holidays: Record<string, string>; onChange: (v: DayMap) => void }) {
-  const [y, m] = month.split('-').map(Number)
-  const first = new Date(y, m - 1, 1)
-  const offset = (first.getDay() || 7) - 1 // blanks before the 1st (Monday-first grid)
-  const last = new Date(y, m, 0).getDate()
-  const cycle = (iso: string) => { const cur = value[iso] ?? 0; onChange({ ...value, [iso]: cur === 1 ? 0.5 : cur === 0.5 ? 0 : 1 }) }
-  const cells: React.ReactNode[] = []
-  for (let i = 0; i < offset; i++) cells.push(<button key={`b${i}`} type="button" className="blank" tabIndex={-1} />)
-  for (let d = 1; d <= last; d++) {
-    const iso = `${y}-${pad(m)}-${pad(d)}`
-    const st = value[iso] ?? 0
-    const hol = holidays[iso]
-    cells.push(<button key={iso} type="button" className={`${st === 1 ? 'on' : st === 0.5 ? 'half' : ''}${hol ? ' hol' : ''}`} title={`${iso}${hol ? ` · ${hol}` : ''} · click: full → half → off`} onClick={() => cycle(iso)}>{d}</button>)
-  }
-  const full = Object.values(value).filter(v => v === 1).length, half = Object.values(value).filter(v => v === 0.5).length
-  return (
-    <div>
-      <div className="daypick">{['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'].map(d => <div key={d} className="dow">{d}</div>)}{cells}</div>
-      <div className="muted small mt" style={{ marginTop: 6 }}><strong>{countDays(value)}</strong> days · {full} full{half ? `, ${half} half` : ''} · click a day to cycle full → half → off{Object.keys(holidays).length ? ' · red dot = holiday' : ''}</div>
-    </div>
-  )
-}
-
 const SOURCE: Record<string, string> = { working_days: 'working days', time_entries: 'tracked time', profile: 'recurring profile', client: 'client defaults' }
 
 export default function MonthEnd() {
@@ -74,20 +30,20 @@ export default function MonthEnd() {
   const [issue, setIssue] = useState('')
   const [busy, setBusy] = useState(false)
   const [send, setSend] = useState<Invoice | null>(null)
-  const [days, setDays] = useState<Record<number, DayMap>>({})
+  const [days, setDays] = useState<Record<number, string[]>>({})
   useEffect(() => {
     if (!plan) return
     setRows(plan.rows); setIssue(plan.issue_date)
-    const init: Record<number, DayMap> = {}
-    for (const r of plan.rows) if (usesCalendar(r)) init[r.client_id] = defaultDays(plan.month, plan.work_week, plan.all_holidays.map(h => h.date))
+    const init: Record<number, string[]> = {}
+    for (const r of plan.rows) if (usesCalendar(r)) init[r.client_id] = defaultDays(plan.period_start, plan.period_end, plan.work_week, plan.all_holidays.map(h => h.date))
     setDays(init)
   }, [plan])
   const holidayMap = useMemo(() => Object.fromEntries((plan?.all_holidays || []).map(h => [h.date, h.name])), [plan])
   /** Apply a day selection to the row's quantities: day lines get the day count, hour lines (when hours are derived from days) days × hours/day. */
-  const applyDays = (i: number, map: DayMap) => {
+  const applyDays = (i: number, list: string[]) => {
     const r = rows[i]
-    setDays(d => ({ ...d, [r.client_id]: map }))
-    const n = countDays(map)
+    setDays(d => ({ ...d, [r.client_id]: list }))
+    const n = list.length
     const hpd = plan?.hours_per_day || 8
     setRow(i, { items: r.items.map(it => it.unit === 'day' ? { ...it, quantity: n } : it.unit === 'hour' && r.quantity_source === 'working_days' ? { ...it, quantity: n * hpd } : it) })
   }
@@ -107,7 +63,7 @@ export default function MonthEnd() {
     try {
       const r = await api.post<{ invoices: Invoice[]; errors: string[] }>(`${V1}/month-end`, {
         month, issue_date: issue,
-        rows: selected.map(r => ({ client_id: r.client_id, recurring_id: r.recurring_id, template_id: r.template_id, currency: r.currency, billing_mode: r.billing_mode, items: r.items, custom_fields: r.custom_fields, time_entry_ids: r.time_entry_ids, due_date: r.due_date, notes: r.notes, terms: r.terms, worked_days: days[r.client_id] ? Object.entries(days[r.client_id]).filter(([, v]) => v > 0).map(([d, v]) => v === 0.5 ? `${d}:0.5` : d) : [] })),
+        rows: selected.map(r => ({ client_id: r.client_id, recurring_id: r.recurring_id, template_id: r.template_id, currency: r.currency, billing_mode: r.billing_mode, items: r.items, custom_fields: r.custom_fields, time_entry_ids: r.time_entry_ids, due_date: r.due_date, notes: r.notes, terms: r.terms, worked_days: days[r.client_id] || [] })),
       })
       if (r.errors?.length) toast(r.errors.join('; '), 'error')
       if (r.invoices.length) toast(`Created ${r.invoices.map(i => i.number).join(', ')}`, 'success')
@@ -159,10 +115,10 @@ export default function MonthEnd() {
                   </table></div>
                   {usesCalendar(r) && days[r.client_id] && <div className="grid split-2-1 mt" style={{ alignItems: 'start' }}>
                     <div>
-                      <div className="row between wrap" style={{ marginBottom: 6 }}><div className="small bold">Days worked in {plan.month_label}</div><div className="row" style={{ gap: 6 }}><button type="button" className="btn ghost sm" onClick={() => applyDays(i, defaultDays(plan.month, plan.work_week, plan.all_holidays.map(h => h.date)))}>All working days</button><button type="button" className="btn ghost sm" onClick={() => applyDays(i, Object.fromEntries(Object.keys(days[r.client_id]).map(k => [k, 0 as DayState])))}>None</button></div></div>
-                      <DayPicker month={plan.month} value={days[r.client_id]} holidays={holidayMap} onChange={m => applyDays(i, m)} />
+                      <div className="row between wrap" style={{ marginBottom: 6 }}><div className="small bold">Days worked in {plan.month_label} · <span className="accent">{days[r.client_id].length} days</span></div><div className="row" style={{ gap: 6 }}><button type="button" className="btn ghost sm" onClick={() => applyDays(i, defaultDays(plan.period_start, plan.period_end, plan.work_week, plan.all_holidays.map(h => h.date)))}>All working days</button><button type="button" className="btn ghost sm" onClick={() => applyDays(i, [])}>None</button></div></div>
+                      <DayPicker from={plan.period_start} to={plan.period_end} value={days[r.client_id]} holidays={holidayMap} defaults={defaultDays(plan.period_start, plan.period_end, plan.work_week, plan.all_holidays.map(h => h.date))} onChange={v => applyDays(i, v)} />
                     </div>
-                    <div className="muted small">Working days are pre-selected as full days. Click a day you took off to turn it into a half day, click again to remove it; click a weekend to add it. The quantity above follows the selection{r.items.some(it => it.unit === 'hour') ? ` (hours = days × ${plan.hours_per_day})` : ''}.</div>
+                    <div className="muted small">Working days are pre-selected. Click a day to turn it off or on; click a week number to clear that week or put its working days back. The quantity above follows the selection{r.items.some(it => it.unit === 'hour') ? ` (hours = days × ${plan.hours_per_day})` : ''}; the dates are saved on the invoice.</div>
                   </div>}
                   <div className="row between wrap mt" style={{ alignItems: 'flex-end', gap: 12 }}>
                     <div className="row wrap" style={{ gap: 12 }}>

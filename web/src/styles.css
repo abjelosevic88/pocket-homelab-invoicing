@@ -298,12 +298,15 @@ table.table tfoot td { font-weight: 600; background: var(--surface-2); }
 .muted-card:hover { opacity: 1; }
 .badge-link { text-decoration: none; }
 
-/* Month-end day picker */
-.daypick { display: grid; grid-template-columns: repeat(7, 36px); gap: 4px; }
+/* Day picker (month-end wizard, invoice editor) */
+.daypick { display: grid; grid-template-columns: 30px repeat(7, 36px); gap: 4px; }
 .daypick .dow { font-size: 11px; color: var(--muted); text-align: center; text-transform: uppercase; letter-spacing: .04em; }
 .daypick button { position: relative; height: 34px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-2); color: var(--muted); font-size: 13px; cursor: pointer; padding: 0; }
 .daypick button.on { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
-.daypick button.half { background: linear-gradient(135deg, var(--accent) 50%, var(--surface-2) 50%); border-color: var(--accent); color: var(--text); font-weight: 600; }
-.daypick button.hol::after { content: ''; position: absolute; right: 4px; top: 4px; width: 6px; height: 6px; border-radius: 50%; background: var(--danger, #dc2626); }
+.daypick button.wk { background: transparent; border-color: transparent; font-size: 11px; }
+.daypick button.wk.on { color: var(--accent); font-weight: 700; }
+.daypick button.wk:hover:not(:disabled) { border-color: var(--border); }
+.daypick button.hol::after { content: ''; position: absolute; right: 4px; top: 4px; width: 6px; height: 6px; border-radius: 50%; background: var(--danger); }
 .daypick button.blank { visibility: hidden; }
-.daypick button:hover { filter: brightness(.95); }
+.daypick button.out { opacity: .35; cursor: default; }
+.daypick button:hover:not(:disabled) { filter: brightness(.95); }

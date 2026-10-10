@@ -115,6 +115,7 @@ export default function InvoiceDetail() {
             <div style={{ padding: 16 }} className="row" >
               <div style={{ flex: 1 }}>
                 {inv.period_start && <div className="muted small">Service period: {fmtDate(inv.period_start)} – {fmtDate(inv.period_end)}</div>}
+                {inv.worked_days?.length > 0 && <div className="muted small" title={inv.worked_days.join(', ')}>Days worked: {inv.worked_days.map(d => Number(d.slice(8, 10))).join(', ')} ({inv.worked_days.length})</div>}
                 {inv.po_number && <div className="muted small">PO: {inv.po_number}</div>}
                 {(settings?.custom_fields || []).filter(f => inv.custom_fields?.[f.key]).map(f => <div key={f.key} className="muted small">{f.label}: {inv.custom_fields[f.key]}</div>)}
                 <div className="muted small">Billing mode: {inv.billing_mode}</div>

@@ -3,8 +3,9 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { api, V1 } from '../lib/api'
 import { useApp } from '../lib/app-context'
 import { addDays, BILLING_MODES, money, today, UNITS, unitForBilling } from '../lib/format'
-import type { Client, Invoice, InvoiceItem, InvoiceTemplate, Product, TaxRate } from '../lib/types'
+import type { Client, Invoice, InvoiceItem, InvoiceTemplate, Product, TaxRate, WorkingDays } from '../lib/types'
 import { Card, Field, Loading, PageHeader, useAsync, useDebounce, useToast } from '../components/ui'
+import { DayPicker, defaultDays } from '../components/DayPicker'
 
 type Item = InvoiceItem & { key: number }
 let keySeq = 1
@@ -59,10 +60,10 @@ export default function InvoiceEditor() {
   useEffect(() => {
     if (!settings) return
     if (id) {
-      api.get<Invoice>(`${V1}/invoices/${id}`).then(i => { setInv(i); setItems((i.items || []).map(it => ({ ...it, key: keySeq++ }))) })
+      api.get<Invoice>(`${V1}/invoices/${id}`).then(i => { setInv(i); setItems((i.items || []).map(it => ({ ...it, key: keySeq++ }))); setShowCal(!!i.worked_days?.length) })
     } else {
       const issue = today()
-      setInv({ client_id: Number(sp.get('client_id')) || 0, issue_date: issue, due_date: addDays(issue, settings.default_due_days), currency: settings.base_currency, exchange_rate: 0, billing_mode: settings.default_billing_mode || 'hourly', discount_type: 'none', discount_value: 0, notes: settings.default_notes, terms: settings.default_terms.replace('{due_days}', String(settings.default_due_days)), footer: settings.default_footer, po_number: '', period_start: '', period_end: '', template_id: null, status: 'draft', custom_fields: {} })
+      setInv({ client_id: Number(sp.get('client_id')) || 0, issue_date: issue, due_date: addDays(issue, settings.default_due_days), currency: settings.base_currency, exchange_rate: 0, billing_mode: settings.default_billing_mode || 'hourly', discount_type: 'none', discount_value: 0, notes: settings.default_notes, terms: settings.default_terms.replace('{due_days}', String(settings.default_due_days)), footer: settings.default_footer, po_number: '', period_start: '', period_end: '', template_id: null, status: 'draft', custom_fields: {}, worked_days: [] })
       setItems([newItem(unitForBilling(settings.default_billing_mode || 'hourly'), settings.default_tax_rate, settings.default_hourly_rate)])
     }
   }, [id, settings, sp])
@@ -92,6 +93,19 @@ export default function InvoiceEditor() {
       .then(r => setRateHint(`1 ${inv.currency} ≈ ${r.rate.toFixed(5)} ${settings.base_currency} (${r.source === 'stored' ? 'stored rate' : `official list ${r.source}`}; leave 0 to use it)`))
       .catch(() => setRateHint(`No stored rate for ${inv.currency}→${settings.base_currency}. Enter one or add it under Settings → Currencies.`))
   }, [inv?.currency, inv?.issue_date, settings])
+
+  // Day calendar: covers the service period (or the issue month); feeds the first day line, or hour lines as days × hours/day.
+  const calFrom = inv?.period_start || (inv?.issue_date ? inv.issue_date.slice(0, 7) + '-01' : '')
+  const calTo = inv?.period_end || (calFrom ? new Date(Number(calFrom.slice(0, 4)), Number(calFrom.slice(5, 7)), 0).toISOString().slice(0, 10) : '')
+  const { data: cal } = useAsync(() => calFrom && calTo && calTo >= calFrom ? api.get<WorkingDays>(`${V1}/calendar/working-days?from=${calFrom}&to=${calTo}`) : Promise.resolve(null), [calFrom, calTo])
+  const dayLine = items.find(it => it.unit === 'day') || items.find(it => it.unit === 'hour')
+  const [showCal, setShowCal] = useState(false)
+  const pickDays = (list: string[]) => {
+    set('worked_days', list)
+    if (!dayLine) return
+    const n = dayLine.unit === 'day' ? list.length : list.length * (settings?.hours_per_day || 8)
+    setItems(its => its.map(it => it.key === dayLine.key ? { ...it, quantity: n } : it))
+  }
 
   if (!inv || !settings) return <Loading />
   const cur = currencies.find(c => c.code === inv.currency)
@@ -185,6 +199,16 @@ export default function InvoiceEditor() {
           </div>
         </div>
       </Card>
+
+      {dayLine && cal && calFrom && calTo && <Card className="mt" title={<>Days worked <span className="muted small" style={{ fontWeight: 400 }}>· {inv.worked_days?.length || 0} selected{inv.period_start ? '' : ' · set a service period to change the month'}</span></>} actions={<div className="row" style={{ gap: 6 }}>
+        {!showCal && !(inv.worked_days?.length) && <button type="button" className="btn sm primary" onClick={() => { setShowCal(true); pickDays(defaultDays(calFrom, calTo, cal.work_week, cal.all_holidays.map(h => h.date))) }}>Pick days ({cal.working_days} working days)</button>}
+        {(showCal || !!inv.worked_days?.length) && <><button type="button" className="btn ghost sm" onClick={() => pickDays(defaultDays(calFrom, calTo, cal.work_week, cal.all_holidays.map(h => h.date)))}>All working days</button><button type="button" className="btn ghost sm" onClick={() => pickDays([])}>None</button><button type="button" className="btn ghost sm" onClick={() => setShowCal(v => !v)}>{showCal ? 'Hide' : 'Show calendar'}</button></>}
+      </div>}>
+        {showCal ? <div className="grid split-2-1" style={{ alignItems: 'start' }}>
+          <DayPicker from={calFrom} to={calTo} value={inv.worked_days || []} holidays={Object.fromEntries(cal.all_holidays.map(h => [h.date, h.name]))} defaults={defaultDays(calFrom, calTo, cal.work_week, cal.all_holidays.map(h => h.date))} onChange={pickDays} />
+          <div className="muted small">Click a day to toggle it; click a week number to clear that week or put its working days back. The selection sets the quantity of the first <em>{dayLine.unit}</em> line{dayLine.unit === 'hour' ? ` (days × ${settings.hours_per_day} h)` : ''} and is saved with the invoice.</div>
+        </div> : <div className="muted small">{inv.worked_days?.length ? `${inv.worked_days.map(d => Number(d.slice(8, 10))).join(', ')} — ` : ''}{cal.working_days} working days in this period{cal.holidays.length ? `, skipping ${cal.holidays.map(h => h.name).join(', ')}` : ''}.</div>}
+      </Card>}
 
       <div className="grid cols-3 mt">
         <Field label="Notes (shown on invoice)"><textarea value={inv.notes || ''} onChange={e => set('notes', e.target.value)} /></Field>

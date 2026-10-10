@@ -246,7 +246,7 @@ type monthEndCreateRow struct {
 	DueDate      string              `json:"due_date"`
 	Notes        string              `json:"notes"`
 	Terms        string              `json:"terms"`
-	WorkedDays   []string            `json:"worked_days"` // dates picked in the calendar; "YYYY-MM-DD" or "YYYY-MM-DD:0.5" for half days
+	WorkedDays   []string            `json:"worked_days"` // dates picked in the calendar (YYYY-MM-DD)
 }
 
 // handleMonthEndCreate: POST /month-end  {month, issue_date, rows:[...]} -> creates draft invoices.
@@ -300,7 +300,7 @@ func (s *Server) handleMonthEndCreate(w http.ResponseWriter, r *http.Request) {
 		inp := invoiceInput{
 			ClientID: row.ClientID, Currency: row.Currency, BillingMode: row.BillingMode, IssueDate: in.IssueDate, DueDate: row.DueDate,
 			DiscountType: "none", Notes: row.Notes, Terms: row.Terms, Footer: st.DefaultFooter, TemplateID: row.TemplateID,
-			PeriodStart: &ps, PeriodEnd: &pe, Items: items, CustomFields: row.CustomFields,
+			PeriodStart: &ps, PeriodEnd: &pe, Items: items, CustomFields: row.CustomFields, WorkedDays: row.WorkedDays,
 		}
 		inv := &store.Invoice{Status: store.StatusDraft}
 		if err := s.applyInput(ctx, inv, inp, st); err != nil {
@@ -356,25 +356,15 @@ func (s *Server) handleMonthEndCreate(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, status, map[string]any{"invoices": created, "errors": errs})
 }
 
-// describeWorkedDays compresses ["2026-10-01","2026-10-02","2026-10-05:0.5"] into "1, 2, 5(½)".
+// describeWorkedDays compresses ["2026-10-01","2026-10-02","2026-10-05"] into "1, 2, 5 (3 days)".
 func describeWorkedDays(days []string) string {
-	sort.Strings(days)
-	parts := make([]string, 0, len(days))
-	var total float64
-	for _, d := range days {
-		half := strings.HasSuffix(d, ":0.5")
-		d = strings.TrimSuffix(d, ":0.5")
-		if len(d) < 10 {
-			continue
+	cp := append([]string{}, days...)
+	sort.Strings(cp)
+	parts := make([]string, 0, len(cp))
+	for _, d := range cp {
+		if len(d) >= 10 {
+			parts = append(parts, strings.TrimLeft(d[8:10], "0"))
 		}
-		day := strings.TrimLeft(d[8:10], "0")
-		if half {
-			day += "(½)"
-			total += 0.5
-		} else {
-			total++
-		}
-		parts = append(parts, day)
 	}
-	return fmt.Sprintf("%s (%s days)", strings.Join(parts, ", "), strconv.FormatFloat(total, 'f', -1, 64))
+	return fmt.Sprintf("%s (%d days)", strings.Join(parts, ", "), len(parts))
 }

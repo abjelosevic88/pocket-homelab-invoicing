@@ -192,6 +192,7 @@ type Invoice struct {
 	UpdatedAt     string  `json:"updated_at"`
 
 	CustomFields map[string]string `json:"custom_fields"`
+	WorkedDays   []string          `json:"worked_days"` // dates picked in the day calendar (YYYY-MM-DD)
 
 	Items       []InvoiceItem  `json:"items,omitempty"`
 	Payments    []Payment      `json:"payments,omitempty"`

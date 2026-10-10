@@ -40,9 +40,12 @@ func (s *Server) handleWorkingDays(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	f, _ := time.Parse("2006-01-02", res.From)
+	t, _ := time.Parse("2006-01-02", res.To)
+	allHol := calendar.Count(f, t, calendar.ParseWorkWeek("1,2,3,4,5,6,7"), st.Holidays).Holidays
 	writeJSON(w, http.StatusOK, map[string]any{
 		"from": res.From, "to": res.To, "working_days": res.WorkingDays, "week_days": res.WeekDays,
-		"holidays": res.Holidays, "hours_per_day": st.HoursPerDay, "working_hours": float64(res.WorkingDays) * st.HoursPerDay,
+		"holidays": res.Holidays, "all_holidays": allHol, "hours_per_day": st.HoursPerDay, "working_hours": float64(res.WorkingDays) * st.HoursPerDay,
 		"work_week": calendar.NormalizeWorkWeek(st.WorkWeek),
 	})
 }
