@@ -5,7 +5,7 @@ All notable changes to this project are documented here. Format follows [Keep a 
 ## [Unreleased]
 
 ### Added
-- Month-end wizard: per-client day calendar (working days pre-selected as full days; click for half day / off / add a weekend) driving the day or hour quantity; the picked dates are logged on the invoice.
+- Day calendar: in the month-end wizard and the invoice editor ("Days worked" card). Working days pre-selected, days toggle on/off, week numbers toggle a whole week; the selection drives the day (or hour) quantity. Picked dates are stored on the invoice (`worked_days`, migration 0010) and shown on the invoice page.
 - Month-end wizard (sidebar → Month-end): proposes one invoice per client for a month from the recurring profile, tracked time or the working-days calendar, pre-fills counter-style custom fields (`14/15ПП` → `15/16ПП`), creates all drafts in one click and lists the month's invoices with upload / email / mark-sent actions. `GET|POST /api/v1/month-end`.
 - Working-days calendar (Settings → Invoicing): configurable work week, yearly holidays and one-off days off, presets for Republika Srpska, Federation of BiH and Orthodox Easter, monthly preview. `GET /api/v1/calendar/working-days`, `/calendar/presets`.
 - Recurring profiles: "Quantity: working days of the period" (days, or days × hours per day) and "Service period: previous period (in arrears)" so a run on the 1st bills the month that just ended.

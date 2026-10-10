@@ -16,10 +16,10 @@ has two parts:
      or clients billed daily/hourly without a profile), or the fixed quantity of
      the profile,
    - clients billed in days (or in hours derived from days) get a **calendar of
-     the month**: every working day is pre-selected as a full day; click a day to
-     make it a half day, click again to drop it, click a weekend to add it. The
-     day or hour quantity follows the selection, and the chosen dates are written
-     to the invoice timeline ("days worked: 1, 2, 5(½) … (20.5 days)"),
+     the month**: every working day is pre-selected; click a day to turn it off
+     or on, click a week number to clear that week or put its working days back.
+     The day or hour quantity follows the selection and the dates are saved on
+     the invoice (`worked_days`), shown on the invoice page and in its timeline,
    - custom fields that look like counters (`14/15ПП`, `0031`) are pre-filled
      with the next value; the last used value is shown as a hint,
    - clients that already have an invoice for that service period are unticked
@@ -39,6 +39,15 @@ has two parts:
 
 API: `GET /api/v1/month-end?month=YYYY-MM` returns the proposal; `POST
 /api/v1/month-end` with `{month, issue_date, rows:[...]}` creates the drafts.
+
+### Days worked in the invoice editor
+
+The same calendar is available when creating or editing any invoice that has a
+*day* (or *hour*) line: the **Days worked** card covers the service period (or
+the issue month when no period is set). *Pick days* selects all working days and
+sets the line quantity; every further click updates it. The picked dates are
+stored with the invoice and restored when you edit it again. API: `worked_days`
+(array of `YYYY-MM-DD`) on invoice create/update.
 
 ## Working-days calendar
 

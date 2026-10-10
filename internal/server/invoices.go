@@ -40,6 +40,7 @@ type invoiceInput struct {
 	TimeEntryIDs  []int64             `json:"time_entry_ids"`
 	ExpenseIDs    []int64             `json:"expense_ids"`
 	CustomFields  map[string]string   `json:"custom_fields"`
+	WorkedDays    []string            `json:"worked_days"`
 }
 
 func emptyToNil(p *string) *string {
@@ -99,6 +100,16 @@ func (s *Server) applyInput(ctx context.Context, inv *store.Invoice, in invoiceI
 		for k, v := range in.CustomFields {
 			if strings.TrimSpace(v) != "" {
 				inv.CustomFields[k] = strings.TrimSpace(v)
+			}
+		}
+	}
+
+	if in.WorkedDays != nil {
+		inv.WorkedDays = inv.WorkedDays[:0]
+		for _, d := range in.WorkedDays {
+			d = strings.TrimSpace(d)
+			if _, err := time.Parse("2006-01-02", d); err == nil {
+				inv.WorkedDays = append(inv.WorkedDays, d)
 			}
 		}
 	}

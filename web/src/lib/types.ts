@@ -22,12 +22,13 @@ export interface Payment { id: number; invoice_id: number; invoice_number?: stri
 export interface Invoice {
   id: number; number: string; client_id: number; client_name: string; status: string; issue_date: string; due_date: string; currency: string; exchange_rate: number; billing_mode: string;
   period_start: string | null; period_end: string | null; po_number: string; discount_type: string; discount_value: number; subtotal: number; discount_total: number; tax_total: number; total: number; amount_paid: number; balance: number;
+  worked_days: string[];
   notes: string; terms: string; footer: string; template_id: number | null; recurring_id: number | null; public_token: string; sent_at: string | null; viewed_at: string | null; paid_at: string | null; created_at: string; updated_at: string;
   custom_fields: Record<string, string>;
   items?: InvoiceItem[]; payments?: Payment[]; attachments?: Attachment[]; paperless?: PaperlessLink;
 }
 export interface Holiday { date: string; name: string; yearly: boolean }
-export interface WorkingDays { from: string; to: string; working_days: number; week_days: number; holidays: { date: string; name: string; weekday: string }[]; hours_per_day: number; working_hours: number; work_week: string }
+export interface WorkingDays { from: string; to: string; working_days: number; week_days: number; holidays: { date: string; name: string; weekday: string }[]; all_holidays: { date: string; name: string; weekday: string }[]; hours_per_day: number; working_hours: number; work_week: string }
 export interface RecurringItem { description: string; unit: string; quantity: number; unit_price: number; tax_rate: number; discount: number }
 export interface Recurring {
   id: number; name: string; client_id: number; client_name: string; status: string; frequency: string; interval: number; start_date: string; end_date: string | null; next_run: string; last_run: string | null; occurrences: number; max_occurrences: number; due_days: number; currency: string; billing_mode: string; items: RecurringItem[]; discount_type: string; discount_value: number; notes: string; terms: string; auto_send: boolean; template_id: number | null; quantity_mode: string; period_mode: string;
