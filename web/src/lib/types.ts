@@ -61,5 +61,6 @@ export interface MonthEndRow {
 export interface MonthEndPlan {
   month: string; month_label: string; period_start: string; period_end: string; issue_date: string; hours_per_day: number; smtp_configured: boolean;
   calendar: { from: string; to: string; working_days: number; week_days: number; holidays: { date: string; name: string; weekday: string }[] };
+  all_holidays: { date: string; name: string; weekday: string }[]; work_week: string;
   custom_fields: CustomFieldDef[]; rows: MonthEndRow[]; invoices: Invoice[]
 }

@@ -15,6 +15,11 @@ has two parts:
      (hours), the working-days calendar (profiles with *Quantity: working days*
      or clients billed daily/hourly without a profile), or the fixed quantity of
      the profile,
+   - clients billed in days (or in hours derived from days) get a **calendar of
+     the month**: every working day is pre-selected as a full day; click a day to
+     make it a half day, click again to drop it, click a weekend to add it. The
+     day or hour quantity follows the selection, and the chosen dates are written
+     to the invoice timeline ("days worked: 1, 2, 5(½) … (20.5 days)"),
    - custom fields that look like counters (`14/15ПП`, `0031`) are pre-filled
      with the next value; the last used value is shown as a hint,
    - clients that already have an invoice for that service period are unticked
