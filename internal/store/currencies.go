@@ -135,6 +135,18 @@ func (s *Store) DeleteRate(ctx context.Context, base, quote string) error {
 	return err
 }
 
+// PruneRates deletes every stored rate that is not quoted against keepBase. Rates only
+// make sense against the current base currency: after a base change the old rows are
+// invisible in the UI and would feed wrong cross rates. Returns the number of rows removed.
+func (s *Store) PruneRates(ctx context.Context, keepBase string) (int64, error) {
+	res, err := s.DB.ExecContext(ctx, `DELETE FROM exchange_rates WHERE base != ?`, keepBase)
+	if err != nil {
+		return 0, err
+	}
+	n, _ := res.RowsAffected()
+	return n, nil
+}
+
 // DefaultCurrencies is the seed list.
 var DefaultCurrencies = []Currency{
 	{Code: "EUR", Name: "Euro", Symbol: "€", Decimals: 2},
