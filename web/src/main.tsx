@@ -13,6 +13,7 @@ import Invoices from './pages/Invoices'
 import InvoiceEditor from './pages/InvoiceEditor'
 import InvoiceDetail from './pages/InvoiceDetail'
 import Recurring from './pages/Recurring'
+import MonthEnd from './pages/MonthEnd'
 import TimeTracking from './pages/TimeTracking'
 import Expenses from './pages/Expenses'
 import Documents from './pages/Documents'
@@ -43,6 +44,7 @@ function App() {
         <Route path="/invoices/:id" element={<InvoiceDetail />} />
         <Route path="/invoices/:id/edit" element={<InvoiceEditor />} />
         <Route path="/recurring" element={<Recurring />} />
+        <Route path="/month-end" element={<MonthEnd />} />
         <Route path="/time" element={<TimeTracking />} />
         <Route path="/expenses" element={<Expenses />} />
         <Route path="/documents" element={<Documents />} />

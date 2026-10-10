@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"encoding/csv"
 	"fmt"
 	"net/http"
@@ -130,19 +131,40 @@ func (s *Server) handleReportYears(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, out)
 }
 
-// handleReportIncomeTax estimates the owner's income tax for a year.
-func (s *Server) handleReportIncomeTax(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	st, err := s.store.GetSettings(ctx)
-	if err != nil {
-		s.fail(w, err, "settings")
-		return
-	}
-	year := qInt(r, "year", time.Now().Year())
+type incomeRow struct {
+	Month         string  `json:"month"`
+	Income        float64 `json:"income"`
+	Expenses      float64 `json:"expenses"`
+	Taxable       float64 `json:"taxable"`
+	Tax           float64 `json:"tax"`
+	Contributions float64 `json:"contributions"`
+	Net           float64 `json:"net"`
+	Elapsed       bool    `json:"elapsed"`
+}
+
+type incomeYear struct {
+	Year          string  `json:"year"`
+	Income        float64 `json:"income"`
+	Expenses      float64 `json:"expenses"`
+	Taxable       float64 `json:"taxable"`
+	Tax           float64 `json:"tax"`
+	Contributions float64 `json:"contributions"`
+	Net           float64 `json:"net"`
+}
+
+type incomeTaxReport struct {
+	Year     int            `json:"year"`
+	Rows     []incomeRow    `json:"rows"`
+	Total    incomeRow      `json:"total"`
+	Years    []incomeYear   `json:"years"`
+	Settings map[string]any `json:"settings"`
+}
+
+// incomeTax estimates the owner's income tax for a year from the configured rules.
+func (s *Server) incomeTax(ctx context.Context, st store.Settings, year int) (*incomeTaxReport, error) {
 	months, err := s.store.RevenueByMonth(ctx, fmt.Sprintf("%d-01-01", year), fmt.Sprintf("%d-12-31", year))
 	if err != nil {
-		s.fail(w, err, "revenue")
-		return
+		return nil, err
 	}
 	byMonth := map[string]store.MonthlyRevenue{}
 	for _, m := range months {
@@ -150,18 +172,8 @@ func (s *Server) handleReportIncomeTax(w http.ResponseWriter, r *http.Request) {
 	}
 	rate := st.IncomeTaxRate / 100
 	now := time.Now()
-	type row struct {
-		Month         string  `json:"month"`
-		Income        float64 `json:"income"`
-		Expenses      float64 `json:"expenses"`
-		Taxable       float64 `json:"taxable"`
-		Tax           float64 `json:"tax"`
-		Contributions float64 `json:"contributions"`
-		Net           float64 `json:"net"`
-		Elapsed       bool    `json:"elapsed"`
-	}
-	rows := make([]row, 0, 12)
-	var tot row
+	rows := make([]incomeRow, 0, 12)
+	var tot incomeRow
 	for m := 1; m <= 12; m++ {
 		key := fmt.Sprintf("%d-%02d", year, m)
 		mr := byMonth[key]
@@ -181,7 +193,7 @@ func (s *Server) handleReportIncomeTax(w http.ResponseWriter, r *http.Request) {
 		if elapsed {
 			contrib = st.ContributionsMonthly
 		}
-		rw := row{Month: key, Income: income, Expenses: mr.Expenses, Taxable: taxable, Tax: taxable * rate, Contributions: contrib, Elapsed: elapsed}
+		rw := incomeRow{Month: key, Income: income, Expenses: mr.Expenses, Taxable: taxable, Tax: taxable * rate, Contributions: contrib, Elapsed: elapsed}
 		rw.Net = income - mr.Expenses - rw.Tax - contrib
 		rows = append(rows, rw)
 		tot.Income += income
@@ -203,16 +215,7 @@ func (s *Server) handleReportIncomeTax(w http.ResponseWriter, r *http.Request) {
 	tot.Month = fmt.Sprint(year)
 
 	years, _ := s.store.RevenueByYear(ctx)
-	type ySum struct {
-		Year          string  `json:"year"`
-		Income        float64 `json:"income"`
-		Expenses      float64 `json:"expenses"`
-		Taxable       float64 `json:"taxable"`
-		Tax           float64 `json:"tax"`
-		Contributions float64 `json:"contributions"`
-		Net           float64 `json:"net"`
-	}
-	var ys []ySum
+	ys := []incomeYear{}
 	for _, y := range years {
 		inc := y.Paid
 		if !st.IncomeTaxByPaymentDate {
@@ -237,12 +240,28 @@ func (s *Server) handleReportIncomeTax(w http.ResponseWriter, r *http.Request) {
 			months = float64(now.Month())
 		}
 		contrib := st.ContributionsMonthly * months
-		ys = append(ys, ySum{Year: y.Year, Income: inc, Expenses: y.Expenses, Taxable: taxable, Tax: tax, Contributions: contrib, Net: inc - y.Expenses - tax - contrib})
+		ys = append(ys, incomeYear{Year: y.Year, Income: inc, Expenses: y.Expenses, Taxable: taxable, Tax: tax, Contributions: contrib, Net: inc - y.Expenses - tax - contrib})
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"year": year, "rows": rows, "total": tot, "years": ys,
-		"settings": map[string]any{"rate": st.IncomeTaxRate, "basis": st.IncomeTaxBasis, "by_payment_date": st.IncomeTaxByPaymentDate, "min_yearly": st.IncomeTaxMinYearly, "deduction": st.IncomeTaxDeduction, "contributions_monthly": st.ContributionsMonthly, "label": st.IncomeTaxLabel},
-	})
+	return &incomeTaxReport{
+		Year: year, Rows: rows, Total: tot, Years: ys,
+		Settings: map[string]any{"rate": st.IncomeTaxRate, "basis": st.IncomeTaxBasis, "by_payment_date": st.IncomeTaxByPaymentDate, "min_yearly": st.IncomeTaxMinYearly, "deduction": st.IncomeTaxDeduction, "contributions_monthly": st.ContributionsMonthly, "label": st.IncomeTaxLabel},
+	}, nil
+}
+
+// handleReportIncomeTax estimates the owner's income tax for a year.
+func (s *Server) handleReportIncomeTax(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	st, err := s.store.GetSettings(ctx)
+	if err != nil {
+		s.fail(w, err, "settings")
+		return
+	}
+	rep, err := s.incomeTax(ctx, st, qInt(r, "year", time.Now().Year()))
+	if err != nil {
+		s.fail(w, err, "revenue")
+		return
+	}
+	writeJSON(w, http.StatusOK, rep)
 }
 
 func f2s(v float64) string { return strconv.FormatFloat(v, 'f', 2, 64) }

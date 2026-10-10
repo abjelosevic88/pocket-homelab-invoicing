@@ -9,6 +9,7 @@ const nav = [
   { to: '/', label: 'Dashboard', ico: '◫' },
   { section: 'Billing' },
   { to: '/invoices', label: 'Invoices', ico: '▤' },
+  { to: '/month-end', label: 'Month-end', ico: '◴' },
   { to: '/recurring', label: 'Recurring', ico: '↻' },
   { to: '/payments', label: 'Payments', ico: '◎' },
   { to: '/clients', label: 'Clients', ico: '◉' },

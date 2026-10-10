@@ -5,6 +5,10 @@ All notable changes to this project are documented here. Format follows [Keep a 
 ## [Unreleased]
 
 ### Added
+- Month-end wizard (sidebar → Month-end): proposes one invoice per client for a month from the recurring profile, tracked time or the working-days calendar, pre-fills counter-style custom fields (`14/15ПП` → `15/16ПП`), creates all drafts in one click and lists the month's invoices with upload / email / mark-sent actions. `GET|POST /api/v1/month-end`.
+- Working-days calendar (Settings → Invoicing): configurable work week, yearly holidays and one-off days off, presets for Republika Srpska, Federation of BiH and Orthodox Easter, monthly preview. `GET /api/v1/calendar/working-days`, `/calendar/presets`.
+- Recurring profiles: "Quantity: working days of the period" (days, or days × hours per day) and "Service period: previous period (in arrears)" so a run on the 1st bills the month that just ended.
+- Accountant package: `GET /api/v1/reports/accountant-package.zip?year=` and a card under Reports → Income tax. One ZIP with every invoice PDF, uploaded originals, `invoices.csv` (with base-currency totals, custom fields and the exchange-rate sentence), `payments.csv`, `expenses.csv`, `exchange-rates.csv`, `income-tax.csv` and `SUMMARY.md`.
 - `docs/homelab-integration.md`: backup (restic/Backrest, consistent SQLite snapshots), Uptime Kuma, Prometheus and Homepage customapi recipes.
 
 ### Fixed

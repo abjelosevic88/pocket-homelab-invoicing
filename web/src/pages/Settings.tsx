@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { api, V1 } from '../lib/api'
 import { useApp } from '../lib/app-context'
-import { BILLING_MODES, fmtDateTime, money, UNITS } from '../lib/format'
-import type { APIToken, Currency, CustomFieldDef, ExchangeRate, InvoiceTemplate, Product, Settings as S, TaxRate, User, Webhook } from '../lib/types'
+import { BILLING_MODES, UNITS, fmtDate, fmtDateTime, money, today } from '../lib/format'
+import type { APIToken, Currency, CustomFieldDef, ExchangeRate, Holiday, InvoiceTemplate, Product, Settings as S, TaxRate, User, Webhook, WorkingDays } from '../lib/types'
 import { Card, Confirm, Empty, Field, Loading, Modal, Tabs, useAsync, useToast } from '../components/ui'
 
 type Tab = 'company' | 'invoicing' | 'currencies' | 'taxes' | 'catalog' | 'templates' | 'email' | 'paperless' | 'api' | 'webhooks' | 'users' | 'backup' | 'system'
@@ -151,6 +151,7 @@ function Invoicing() {
         </div>
         <SaveBar onSave={save} busy={busy} />
       </Card>
+      <WorkingDaysCard s={s} setS={setS} save={save} busy={busy} />
       <Card title="Custom invoice fields" className="full">
         <p className="muted small">Extra fields per invoice (e.g. fiscal receipt number, local invoice number, project code). They appear in the invoice editor and, if enabled, in the PDF header block.</p>
         <CustomFieldsEditor value={s.custom_fields || []} onChange={v => setS(x => x ? { ...x, custom_fields: v } : x)} />
@@ -165,6 +166,62 @@ function Invoicing() {
         <SaveBar onSave={save} busy={busy} />
       </Card>
     </div>
+  )
+}
+
+// ---------- Working days & holidays ----------
+const WEEKDAYS: [number, string][] = [[1, 'Mon'], [2, 'Tue'], [3, 'Wed'], [4, 'Thu'], [5, 'Fri'], [6, 'Sat'], [7, 'Sun']]
+function WorkingDaysCard({ s, setS, save, busy }: { s: S; setS: React.Dispatch<React.SetStateAction<S | null>>; save: () => Promise<void>; busy: boolean }) {
+  const toast = useToast()
+  const { data: presets } = useAsync(() => api.get<{ id: string; label: string }[]>(`${V1}/calendar/presets`))
+  const [preset, setPreset] = useState('rs')
+  const [year, setYear] = useState(new Date().getFullYear())
+  const [month, setMonth] = useState(new Date().toISOString().slice(0, 7))
+  const { data: wd } = useAsync(() => api.get<WorkingDays>(`${V1}/calendar/working-days?month=${month}`), [month, s.work_week, JSON.stringify(s.holidays)])
+  const week = new Set((s.work_week || '1,2,3,4,5').split(',').map(Number))
+  const holidays = s.holidays || []
+  const setHol = (h: Holiday[]) => setS(x => x ? { ...x, holidays: h } : x)
+  const toggleDay = (d: number) => { const w = new Set(week); if (w.has(d)) w.delete(d); else w.add(d); setS(x => x ? { ...x, work_week: Array.from(w).sort().join(',') } : x) }
+  const addPreset = async () => {
+    try { const list = await api.get<Holiday[]>(`${V1}/calendar/presets?set=${preset}&year=${year}`); const keys = new Set(holidays.map(h => h.yearly ? 'Y' + h.date.slice(5) : h.date)); const add = list.filter(h => !keys.has(h.yearly ? 'Y' + h.date.slice(5) : h.date)); setHol([...holidays, ...add]); toast(add.length ? `${add.length} holidays added — save to keep them` : 'Nothing new to add', add.length ? 'success' : 'info') } catch (e) { toast((e as Error).message, 'error') }
+  }
+  const sorted = [...holidays].sort((a, b) => (a.yearly === b.yearly ? (a.yearly ? a.date.slice(5).localeCompare(b.date.slice(5)) : a.date.localeCompare(b.date)) : a.yearly ? -1 : 1))
+  return (
+    <Card title="Working days & holidays" className="full">
+      <p className="muted small">Used by recurring profiles with "Quantity: working days of the period" and by the month-end wizard to prefill the number of days or hours. Yearly holidays repeat every year; one-off entries (vacation, movable feasts such as Orthodox Easter) apply to that date only.</p>
+      <div className="grid split-2-1">
+        <div>
+          <Field label="Work week"><div className="row wrap" style={{ gap: 10 }}>{WEEKDAYS.map(([d, l]) => <label key={d} className="check"><input type="checkbox" checked={week.has(d)} onChange={() => toggleDay(d)} /> {l}</label>)}</div></Field>
+          <div className="row wrap mt" style={{ gap: 8, alignItems: 'flex-end' }}>
+            <Field label="Add public holidays"><select value={preset} onChange={e => setPreset(e.target.value)}>{presets?.filter(p => p.id !== 'weekend').map(p => <option key={p.id} value={p.id}>{p.label}</option>)}</select></Field>
+            <Field label="Year" help="Only matters for movable feasts"><input type="number" value={year} onChange={e => setYear(Number(e.target.value) || year)} style={{ width: 90 }} /></Field>
+            <button className="btn" onClick={addPreset} style={{ marginBottom: 6 }}>Add</button>
+          </div>
+          <div className="table-wrap mt"><table className="table">
+            <thead><tr><th>Date</th><th>Name</th><th>Repeats yearly</th><th></th></tr></thead>
+            <tbody>
+              {sorted.map(h => { const i = holidays.indexOf(h); return <tr key={h.date + h.name + i}>
+                <td><input type="date" value={h.date} onChange={e => setHol(holidays.map((x, j) => j === i ? { ...x, date: e.target.value } : x))} /></td>
+                <td><input value={h.name} onChange={e => setHol(holidays.map((x, j) => j === i ? { ...x, name: e.target.value } : x))} /></td>
+                <td><label className="check"><input type="checkbox" checked={h.yearly} onChange={e => setHol(holidays.map((x, j) => j === i ? { ...x, yearly: e.target.checked } : x))} /> {h.yearly ? 'every year' : 'this date only'}</label></td>
+                <td className="actions"><button className="btn ghost sm danger" onClick={() => setHol(holidays.filter((_, j) => j !== i))}>Remove</button></td>
+              </tr> })}
+              <tr><td colSpan={4}><button className="btn sm" onClick={() => setHol([...holidays, { date: today(), name: '', yearly: false }])}>+ Add day off</button></td></tr>
+            </tbody>
+          </table></div>
+        </div>
+        <Card title="Preview">
+          <Field label="Month"><input type="month" value={month} onChange={e => setMonth(e.target.value)} /></Field>
+          {wd && <div className="mt">
+            <div style={{ fontSize: 28, fontWeight: 600 }}>{wd.working_days} <span className="muted" style={{ fontSize: 14, fontWeight: 400 }}>working days · {wd.working_hours} h</span></div>
+            <div className="muted small">{wd.week_days} work-week days, {wd.holidays.length} holiday{wd.holidays.length === 1 ? '' : 's'} on working days</div>
+            {wd.holidays.length > 0 && <ul className="small mt" style={{ paddingLeft: 18 }}>{wd.holidays.map(h => <li key={h.date}>{fmtDate(h.date)} ({h.weekday}) – {h.name}</li>)}</ul>}
+            <div className="muted small mt">Saved settings are used; unsaved changes above are previewed live.</div>
+          </div>}
+        </Card>
+      </div>
+      <SaveBar onSave={save} busy={busy} />
+    </Card>
   )
 }
 

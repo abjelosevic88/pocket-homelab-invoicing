@@ -468,6 +468,11 @@ func (s *Server) renderPDF(ctx context.Context, inv *store.Invoice) ([]byte, err
 	if err != nil {
 		return nil, err
 	}
+	return s.renderDoc(ctx, doc, tpl, logo, logoType)
+}
+
+// renderDoc turns a built document into PDF bytes with the template's engine.
+func (s *Server) renderDoc(ctx context.Context, doc *pdf.Document, tpl *store.InvoiceTemplate, logo []byte, logoType string) ([]byte, error) {
 	s.pdfCount.Add(1)
 	if tpl.Kind == "docx" {
 		filled, err := s.fillDocx(tpl, doc)

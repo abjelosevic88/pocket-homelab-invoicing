@@ -25,7 +25,8 @@ On the go, **[Pocket Homelab](https://pockethomelab.com/)** is its companion app
 |---|---|
 | **Billing modes** | Hourly, daily, monthly retainer, fixed price, or per unit. Mix them on one invoice. |
 | **Time tracking** | Start/stop timer, manual entries, rounding (e.g. 15 min), bill unbilled time as hours *or* days in one click, grouped per entry / day / project / total. |
-| **Recurring invoices** | Weekly → yearly schedules, "every N" intervals, end date or max occurrences, `{month}` / `{period}` placeholders, optional auto-send. Missed runs catch up after downtime. |
+| **Recurring invoices** | Weekly → yearly schedules, "every N" intervals, end date or max occurrences, `{month}` / `{period}` placeholders, optional auto-send, bill in arrears, quantity from the working-days calendar. Missed runs catch up after downtime. |
+| **Month-end wizard** | One screen per month: proposed invoice per client (working days, tracked hours or profile), fiscal counters pre-filled, create all drafts at once, then upload the fiscal PDF and email from the same list. Working-days calendar with holiday presets (RS, FBiH, Orthodox Easter). |
 | **Multi-currency** | Invoice each client in its own currency. Rates from the ECB or the Central Bank of BiH (free, no key) or entered manually. Payments can arrive in a third currency. Reports convert everything to your base currency at the rate locked on each invoice. 56 currencies seeded, add your own (incl. crypto). |
 | **PDF & templates** | Three built-in layouts (Classic, Modern, Minimal), accent colour, logo, per-template label overrides for localisation (RECHNUNG / FAKTURA / …), optional custom HTML template. **Word templates:** upload any `.docx` with `{{placeholders}}`, keep several, assign per client, converted by Gotenberg. Pure-Go PDF engine by default. |
 | **Documents** | Company papers (contracts, registration, tax, bank, certificates) in one place with categories, client link, expiry reminders. Optional **Paperless-ngx** integration: archive invoices and documents, browse and pull from your archive. |
@@ -33,7 +34,7 @@ On the go, **[Pocket Homelab](https://pockethomelab.com/)** is its companion app
 | **Client portal link** | Every invoice has a share link (`/i/<token>`) with web view, PDF download and view tracking. No client accounts needed. |
 | **Email** | SMTP with PDF attachment, test button, BCC yourself, automatic payment reminders (e.g. 3, 7, 14 days after due). |
 | **Expenses** | Track costs, re-bill them to clients, see net income. |
-| **Reports** | Revenue by month, by client, aging (outstanding by days overdue), tax summary by rate, currency breakdown, time summary. CSV exports for everything. |
+| **Reports** | Revenue by month, by client, aging (outstanding by days overdue), tax summary by rate, income-tax estimate, currency breakdown, time summary. CSV exports for everything, plus a yearly **accountant package** ZIP (all PDFs, originals, CSVs, summary). |
 | **Catalog** | Products / rate cards for one-click line items. Tax rates with a default. |
 | **Local compliance** | Custom invoice fields (fiscal numbers), total in your base currency with a legal sentence, per-currency bank details, European number formats, signature line, attach your own signed PDF. |
 | **Automation** | REST API with personal access tokens, outgoing webhooks (HMAC-signed), Prometheus `/metrics`, `/healthz` + `/readyz`. |

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/abjelosevic88/pocket-homelab-invoicing/internal/calendar"
 	"io"
 	"net/http"
 	"os"
@@ -94,6 +95,8 @@ func (s *Server) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 	default:
 		st.EmailAttachmentMode = "generated"
 	}
+	st.WorkWeek = calendar.NormalizeWorkWeek(st.WorkWeek)
+	st.Holidays = calendar.Clean(st.Holidays)
 	cleaned := st.CustomFields[:0]
 	for _, f := range st.CustomFields {
 		f.Label = strings.TrimSpace(f.Label)

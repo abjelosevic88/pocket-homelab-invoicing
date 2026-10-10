@@ -249,6 +249,12 @@ func (s *Server) Router() http.Handler {
 			r.Get("/reports/income-tax", s.handleReportIncomeTax)
 			r.Get("/reports/years", s.handleReportYears)
 			r.Get("/reports/export.csv", s.handleExportCSV)
+			r.Get("/reports/accountant-package.zip", s.handleAccountantPackage)
+
+			r.Get("/calendar/working-days", s.handleWorkingDays)
+			r.Get("/calendar/presets", s.handleHolidayPresets)
+			r.Get("/month-end", s.handleMonthEndPlan)
+			r.Post("/month-end", s.handleMonthEndCreate)
 
 			r.Get("/tokens", s.handleListTokens)
 			r.Post("/tokens", s.handleCreateToken)

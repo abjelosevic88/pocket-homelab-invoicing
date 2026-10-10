@@ -123,6 +123,18 @@ All accept `from`, `to` (default: last 12 months) and return base-currency figur
 
 `GET /dashboard` · `/reports/revenue` · `/reports/clients` · `/reports/aging` · `/reports/tax` · `/reports/currencies` · `/reports/time` · `/reports/export.csv?type=invoices|items|payments|time|expenses&from=&to=`
 
+## Month-end, calendar, accountant package
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/month-end?month=YYYY-MM` | Proposed invoice per client for the month, existing invoices, working days, counter suggestions for custom fields |
+| POST | `/month-end` | `{month, issue_date, rows:[{client_id, recurring_id, template_id, currency, billing_mode, items, custom_fields, time_entry_ids, due_date, notes, terms}]}` → `{invoices, errors}`; creates drafts and advances the recurring profiles |
+| GET | `/calendar/working-days?month=YYYY-MM` or `?from=&to=` | Working days, weekdays, skipped holidays, hours |
+| GET | `/calendar/presets[?set=rs&year=2026]` | Holiday presets (`rs`, `fbih`, `rs-orthodox`) |
+| GET | `/reports/accountant-package.zip?year=2026[&drafts=1][&pdf=both]` | ZIP with invoice PDFs, uploaded files, CSVs, income-tax estimate and SUMMARY.md |
+
+See [month-end.md](month-end.md).
+
 ## Ops
 | Path | Notes |
 |---|---|

@@ -32,7 +32,7 @@ function PaymentForm({ inv, onDone }: { inv: Invoice; onDone: () => void }) {
   )
 }
 
-function SendForm({ inv, onDone }: { inv: Invoice; onDone: () => void }) {
+export function SendForm({ inv, onDone }: { inv: Invoice; onDone: () => void }) {
   const toast = useToast()
   const { settings } = useApp()
   const { data: clientInfo } = useAsync(() => api.get<{ client: Client }>(`${V1}/clients/${inv.client_id}`), [inv.client_id])

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { api, V1 } from '../lib/api'
 import { useApp } from '../lib/app-context'
 import { BILLING_MODES, fmtDate, money, today, UNITS, unitForBilling } from '../lib/format'
@@ -14,7 +14,7 @@ function RecurringForm({ initial, clients, onSaved, onClose }: { initial?: Recur
   const toast = useToast()
   const { data: taxRates } = useAsync(() => api.get<TaxRate[]>(`${V1}/tax-rates`))
   const { data: templates } = useAsync(() => api.get<InvoiceTemplate[]>(`${V1}/templates`))
-  const [r, setR] = useState<Partial<Recurring>>(initial ?? { name: '', client_id: clients[0]?.id || 0, status: 'active', frequency: 'monthly', interval: 1, start_date: today(), end_date: null, next_run: today(), max_occurrences: 0, due_days: settings?.default_due_days || 14, currency: clients[0]?.currency || settings?.base_currency, billing_mode: 'monthly', items: [{ description: 'Monthly retainer – {month}', unit: 'month', quantity: 1, unit_price: clients[0]?.default_rate || settings?.default_monthly_rate || 0, tax_rate: settings?.default_tax_rate || 0, discount: 0 }], discount_type: 'none', discount_value: 0, notes: settings?.default_notes || '', terms: (settings?.default_terms || '').replace('{due_days}', String(settings?.default_due_days || 14)), auto_send: false, template_id: null })
+  const [r, setR] = useState<Partial<Recurring>>(initial ?? { name: '', client_id: clients[0]?.id || 0, status: 'active', frequency: 'monthly', interval: 1, start_date: today(), end_date: null, next_run: today(), max_occurrences: 0, due_days: settings?.default_due_days || 14, currency: clients[0]?.currency || settings?.base_currency, billing_mode: 'monthly', items: [{ description: 'Monthly retainer – {month}', unit: 'month', quantity: 1, unit_price: clients[0]?.default_rate || settings?.default_monthly_rate || 0, tax_rate: settings?.default_tax_rate || 0, discount: 0 }], discount_type: 'none', discount_value: 0, notes: settings?.default_notes || '', terms: (settings?.default_terms || '').replace('{due_days}', String(settings?.default_due_days || 14)), auto_send: false, template_id: null, quantity_mode: 'fixed', period_mode: 'forward' })
   const [busy, setBusy] = useState(false)
   const set = (k: keyof Recurring, v: unknown) => setR(x => ({ ...x, [k]: v }))
   const items = r.items || []
@@ -45,6 +45,8 @@ function RecurringForm({ initial, clients, onSaved, onClose }: { initial?: Recur
         <Field label="Currency"><select value={r.currency} onChange={e => set('currency', e.target.value)}>{currencies.filter(c => c.enabled).map(c => <option key={c.code} value={c.code}>{c.code}</option>)}</select></Field>
         <Field label="Billing mode"><select value={r.billing_mode} onChange={e => set('billing_mode', e.target.value)}>{BILLING_MODES.map(b => <option key={b.value} value={b.value}>{b.label}</option>)}</select></Field>
         <Field label="Template"><select value={r.template_id || ''} onChange={e => set('template_id', Number(e.target.value) || null)}><option value="">Default</option>{templates?.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select></Field>
+        <Field label="Service period" help={r.period_mode === 'arrears' ? 'Run on Nov 1 bills October (previous period)' : 'Run on Nov 1 bills November (period starts on the run date)'}><select value={r.period_mode || 'forward'} onChange={e => set('period_mode', e.target.value)}><option value="forward">Period starts on run date</option><option value="arrears">Previous period (in arrears)</option></select></Field>
+        <Field label="Quantity" help={r.quantity_mode === 'working_days' ? <>Day lines get the working days of the period, hour lines working days × {settings?.hours_per_day || 8} h (<Link to="/settings/invoicing">calendar</Link>)</> : 'Quantities are taken as entered below'}><select value={r.quantity_mode || 'fixed'} onChange={e => set('quantity_mode', e.target.value)}><option value="fixed">Fixed (as entered)</option><option value="working_days">Working days of the period</option></select></Field>
         <Field label="Auto-send" help="Email the invoice automatically when generated"><label className="check" style={{ marginTop: 8 }}><input type="checkbox" checked={!!r.auto_send} onChange={e => set('auto_send', e.target.checked)} /> Send by email on generation</label></Field>
       </div>
       <h3 className="mt mb">Line items <span className="muted small" style={{ fontWeight: 400 }}>— placeholders: {'{month} {year} {period}'}</span></h3>
@@ -91,7 +93,7 @@ export default function RecurringPage() {
           <tbody>{data.map(r => { const t = computeTotals(r.items, r.discount_type, r.discount_value); return <tr key={r.id}>
             <td className="bold">{r.name}{r.auto_send && <span className="badge accent" style={{ marginLeft: 8 }}>auto-send</span>}</td>
             <td>{r.client_name}</td>
-            <td>{FREQ.find(f => f[0] === r.frequency)?.[1]}{r.interval > 1 ? ` ×${r.interval}` : ''}<div className="muted small">{r.occurrences} generated{r.max_occurrences ? ` of ${r.max_occurrences}` : ''}{r.end_date ? ` · ends ${fmtDate(r.end_date)}` : ''}</div></td>
+            <td>{FREQ.find(f => f[0] === r.frequency)?.[1]}{r.interval > 1 ? ` ×${r.interval}` : ''}{r.period_mode === 'arrears' && <span className="muted"> · in arrears</span>}{r.quantity_mode === 'working_days' && <span className="muted"> · working days</span>}<div className="muted small">{r.occurrences} generated{r.max_occurrences ? ` of ${r.max_occurrences}` : ''}{r.end_date ? ` · ends ${fmtDate(r.end_date)}` : ''}</div></td>
             <td>{fmtDate(r.next_run)}</td><td className="muted">{fmtDate(r.last_run)}</td>
             <td className="num">{money(t.total, r.currency)}</td>
             <td><Badge status={r.status} /></td>
