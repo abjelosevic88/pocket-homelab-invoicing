@@ -19,6 +19,8 @@ Pocket Invoicing is an Invoice-Ninja-style app trimmed down to what a one-person
 
 On the go, **[Pocket Homelab](https://pockethomelab.com/)** is its companion app for iPhone, iPad, Mac and Android: what clients owe, the timer and your invoices in your pocket. See [Companion app](#companion-app-pocket-homelab).
 
+<p align="center"><img src="docs/screenshots/dashboard.png" width="900" alt="Dashboard: outstanding, overdue, paid this month and unbilled time, revenue by month, what needs attention, earned by year and by client"></p>
+
 ## Features
 
 | Area | What you get |
