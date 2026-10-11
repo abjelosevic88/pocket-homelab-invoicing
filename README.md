@@ -159,6 +159,16 @@ Setup:
 
 The token is kept in the device's secure store (the Keychain on Apple devices). Details: [pockethomelab.com/docs/services/invoicing](https://pockethomelab.com/docs/services/invoicing).
 
+<p align="center">
+  <img src="docs/screenshots/app/invoicing.png" width="24%" alt="Pocket Homelab: the Invoices screen with what clients owe, the timer and the open invoices">
+  <img src="docs/screenshots/app/invoicing-invoice.png" width="24%" alt="Pocket Homelab: an invoice's page with the next step, lines and totals">
+  <img src="docs/screenshots/app/invoicing-time.png" width="24%" alt="Pocket Homelab: time tracking with the running timer and the entries">
+  <img src="docs/screenshots/app/invoicing-reports.png" width="24%" alt="Pocket Homelab: reports with the year's figures and the months">
+</p>
+<p align="center"><sub>Pocket Homelab on the iPhone: the Invoices screen, an invoice, time tracking, reports.</sub></p>
+<p align="center"><img src="docs/screenshots/app/invoicing-mac.png" width="900" alt="Pocket Homelab on the Mac: the Invoices workspace with the figures, the sortable table and the timer, chart and recurring runs at the right"></p>
+<p align="center"><sub>The Invoices workspace on the Mac.</sub></p>
+
 ## Backups
 
 Download a consistent `.db` snapshot from **Settings → Backup**, via `GET /api/v1/backup`, or from cron:
