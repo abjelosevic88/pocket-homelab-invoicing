@@ -310,3 +310,9 @@ table.table tfoot td { font-weight: 600; background: var(--surface-2); }
 .daypick button.blank { visibility: hidden; }
 .daypick button.out { opacity: .35; cursor: default; }
 .daypick button:hover:not(:disabled) { filter: brightness(.95); }
+
+/* ---- version in the sidebar footer ---- */
+.sidebar .foot .foot-id { display: flex; flex-direction: column; line-height: 1.25; min-width: 0; }
+.sidebar .foot .foot-id > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sidebar .foot .ver { font-family: var(--mono); font-size: 10.5px; color: var(--muted); }
+.sidebar .foot .ver:hover { color: var(--accent-hover); text-decoration: none; }
