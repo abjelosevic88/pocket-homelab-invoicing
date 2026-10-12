@@ -48,7 +48,7 @@ export default function Login({ mode }: { mode: 'login' | 'setup' }) {
             <button className="btn primary lg" disabled={busy}>{busy ? 'Please wait…' : mode === 'setup' ? 'Create account' : 'Sign in'}</button>
           </form>
         </Card>
-        {status?.version && <p className="muted small right mt">v{status.version}</p>}
+        {status?.version && <p className="muted small right mt">v{status.version.replace(/^v/, '')}</p>}
       </div>
     </div>
   )

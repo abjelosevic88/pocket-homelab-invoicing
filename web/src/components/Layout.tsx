@@ -61,7 +61,7 @@ export default function Layout() {
             : <NavLink key={n.to} to={n.to!} end={n.to === '/'} className={({ isActive }) => isActive ? 'active' : ''}><span className="ico">{n.ico}</span>{n.label}</NavLink>)}
         </nav>
         <div className="foot">
-          <span className="foot-id" title={user?.email}><span>{user?.name || user?.email}</span>{status?.version && <a className="ver" href="https://github.com/abjelosevic88/pocket-homelab-invoicing/releases" target="_blank" rel="noreferrer" title="Version — click for release notes">v{status.version}</a>}</span>
+          <span className="foot-id" title={user?.email}><span>{user?.name || user?.email}</span>{status?.version && <a className="ver" href="https://github.com/abjelosevic88/pocket-homelab-invoicing/releases" target="_blank" rel="noreferrer" title="Version — click for release notes">v{status.version.replace(/^v/, '')}</a>}</span>
           <span className="row">
             <button className="btn ghost sm" onClick={toggleTheme} title="Toggle theme">{theme === 'dark' ? '☀' : '☾'}</button>
             {status?.auth_mode === 'local' && <button className="btn ghost sm" onClick={logout} title="Sign out">⎋</button>}

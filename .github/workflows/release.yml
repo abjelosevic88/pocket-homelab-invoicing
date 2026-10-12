@@ -20,6 +20,8 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      - id: ver
+        run: echo "v=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
       - id: meta
         uses: docker/metadata-action@v5
         with:
@@ -35,7 +37,7 @@ jobs:
           context: .
           platforms: linux/amd64,linux/arm64,linux/arm/v7
           push: true
-          build-args: VERSION=${{ github.ref_name }}
+          build-args: VERSION=${{ steps.ver.outputs.v }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
@@ -75,7 +77,7 @@ jobs:
         run: |
           ext=""; [ "$GOOS" = windows ] && ext=".exe"
           name="pocket-invoicing_${{ github.ref_name }}_${GOOS}_${GOARCH}${GOARM:+v$GOARM}"
-          go build -trimpath -ldflags "-s -w -X main.version=${{ github.ref_name }}" -o "dist/$name/pocket-invoicing$ext" ./cmd/pocket-invoicing
+          go build -trimpath -ldflags "-s -w -X main.version=${GITHUB_REF_NAME#v}" -o "dist/$name/pocket-invoicing$ext" ./cmd/pocket-invoicing
           cp README.md LICENSE .env.example "dist/$name/"
           cd dist && tar czf "$name.tar.gz" "$name"
       - uses: softprops/action-gh-release@v2
