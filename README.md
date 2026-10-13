@@ -218,6 +218,8 @@ deploy/                unraid, kubernetes, reverse-proxy, systemd
 
 Quotes/estimates with "convert to invoice" · credit notes · Stripe/PayPal pay-now links on the public page · OIDC login · i18n of the UI itself · multi-business profiles. PRs welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
 
+Sibling projects built the same way: [Pocket Habits](https://github.com/abjelosevic88/pocket-homelab-habit-tracker), [Pocket Inventory](https://github.com/abjelosevic88/pocket-homelab-inventory), [Pocket Bookshelf](https://github.com/abjelosevic88/pocket-homelab-bookshelf), [Pocket Split](https://github.com/abjelosevic88/pocket-homelab-cost-split) and [Pocket Subtitles](https://github.com/abjelosevic88/pocket-homelab-subtitles).
+
 ## License
 
 [MIT](LICENSE). Fonts: DejaVu (Bitstream Vera license).
