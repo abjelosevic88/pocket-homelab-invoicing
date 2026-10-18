@@ -316,3 +316,8 @@ table.table tfoot td { font-weight: 600; background: var(--surface-2); }
 .sidebar .foot .foot-id > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sidebar .foot .ver { font-family: var(--mono); font-size: 10.5px; color: var(--muted); }
 .sidebar .foot .ver:hover { color: var(--accent-hover); text-decoration: none; }
+
+/* ---- the app icon is the brand mark ---- */
+.logo { background: transparent !important; overflow: visible; }
+.logo > img { width: 100%; height: 100%; display: block; filter: drop-shadow(0 1px 2px rgba(0,0,0,.2)); }
+.sidebar .brand .logo { width: 32px; height: 32px; }
