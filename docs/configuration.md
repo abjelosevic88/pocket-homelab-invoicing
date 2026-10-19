@@ -64,6 +64,8 @@ Jobs per tick: generate due recurring invoices (catching up missed periods), mar
 |---|---|---|
 | `DEMO_DATA` | `false` | Seed sample clients, invoices, time entries on first start (only if the DB is empty) |
 | `TZ` | `UTC` | Container timezone (affects "today" for due dates and schedules) |
+| `CORE_URL` / `CORE_REGISTRATION_KEY` | – | [Pocket Core](https://git.bjelke.org/abjelosevic88/pocket-homelab-core): register on start (the key is needed once; the minted app token lives in `$DATA_DIR/core.token`), publish `invoicing.invoice_created` / `invoicing.invoice_sent` / `invoicing.invoice_paid`, and accept the tokens Core hands to paired phones |
+| `CORE_APP_URL` | `BASE_URL` | How Core reaches this app for health checks (e.g. `http://host.docker.internal:8168`) |
 
 ## CLI
 

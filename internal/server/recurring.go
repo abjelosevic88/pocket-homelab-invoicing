@@ -292,11 +292,13 @@ func (s *Server) runRecurring(ctx context.Context, rec *store.RecurringInvoice, 
 	}
 	full, _ := s.store.GetInvoice(ctx, inv.ID)
 	s.hooks.Emit("invoice.created", full)
+	s.publishInvoice("invoicing.invoice_created", full)
 	if rec.AutoSend {
 		if err := s.sendInvoiceEmail(ctx, full, "", "", ""); err != nil {
 			s.log.Warn("recurring: auto-send failed", "invoice", full.Number, "err", err)
 		} else {
 			s.hooks.Emit("invoice.sent", full)
+			s.publishInvoice("invoicing.invoice_sent", full)
 		}
 	}
 	return full, nil

@@ -39,7 +39,7 @@ On the go, **[Pocket Homelab](https://pockethomelab.com/)** is its companion app
 | **Reports** | Revenue by month, by client, aging (outstanding by days overdue), tax summary by rate, income-tax estimate, currency breakdown, time summary. CSV exports for everything, plus a yearly **accountant package** ZIP (all PDFs, originals, CSVs, summary). |
 | **Catalog** | Products / rate cards for one-click line items. Tax rates with a default. |
 | **Local compliance** | Custom invoice fields (fiscal numbers), total in your base currency with a legal sentence, per-currency bank details, European number formats, signature line, attach your own signed PDF. |
-| **Automation** | REST API with personal access tokens, outgoing webhooks (HMAC-signed), Prometheus `/metrics`, `/healthz` + `/readyz`. |
+| **Automation** | REST API with personal access tokens, outgoing webhooks (HMAC-signed), Prometheus `/metrics`, `/healthz` + `/readyz`. With **Pocket Core** on the box: registers itself, publishes `invoicing.invoice_created`, `invoicing.invoice_sent` and `invoicing.invoice_paid`, accepts paired-phone tokens. |
 | **Ops-friendly** | Single static binary, embedded SPA, SQLite with WAL, `VACUUM INTO` backups from the UI/CLI/API, JSON export, structured logs, graceful shutdown, non-root container, dark mode. |
 
 ## Quick start

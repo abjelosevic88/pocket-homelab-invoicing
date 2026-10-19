@@ -21,6 +21,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 
 	"github.com/abjelosevic88/pocket-homelab-invoicing/internal/config"
+	"github.com/abjelosevic88/pocket-homelab-invoicing/internal/core"
 	"github.com/abjelosevic88/pocket-homelab-invoicing/internal/currency"
 	"github.com/abjelosevic88/pocket-homelab-invoicing/internal/docx"
 	"github.com/abjelosevic88/pocket-homelab-invoicing/internal/paperless"
@@ -52,21 +53,137 @@ type Server struct {
 	requests atomic.Int64
 	errors   atomic.Int64
 	pdfCount atomic.Int64
+
+	core     *core.Client
+	coreMu   sync.Mutex
+	coreOK   bool
+	coreErr  string
+	resolved map[string]resolvedURL
+}
+
+type resolvedURL struct {
+	url string
+	at  time.Time
 }
 
 // New creates a server.
 func New(cfg *config.Config, st *store.Store, log *slog.Logger, webFS fs.FS) *Server {
 	return &Server{
-		cfg:     cfg,
-		store:   st,
-		log:     log,
-		pdf:     pdf.NewEngine(cfg.PDFEngine, cfg.ChromiumPath, cfg.GotenbergURL),
-		docx:    docx.NewConverter(cfg.DocxConverter, cfg.GotenbergURL, cfg.LibreOfficePath),
-		rates:   currency.New(cfg.ExchangeRateProvider),
-		hooks:   webhook.New(st, log),
-		webFS:   webFS,
-		started: time.Now(),
+		cfg:      cfg,
+		store:    st,
+		log:      log,
+		pdf:      pdf.NewEngine(cfg.PDFEngine, cfg.ChromiumPath, cfg.GotenbergURL),
+		docx:     docx.NewConverter(cfg.DocxConverter, cfg.GotenbergURL, cfg.LibreOfficePath),
+		rates:    currency.New(cfg.ExchangeRateProvider),
+		hooks:    webhook.New(st, log),
+		webFS:    webFS,
+		started:  time.Now(),
+		core:     core.New(cfg.CoreURL, core.Options{TokenFile: cfg.DataDir + "/core.token"}),
+		resolved: map[string]resolvedURL{},
 	}
+}
+
+// ---- Pocket Core ----
+
+// coreLoop registers with Core on start (retrying until it answers) and
+// re-registers every 30 minutes so version and last-seen stay fresh.
+func (s *Server) coreLoop(ctx context.Context) {
+	wait := 5 * time.Second
+	for {
+		err := s.registerWithCore(ctx)
+		s.coreMu.Lock()
+		s.coreOK, s.coreErr = err == nil, ""
+		if err != nil {
+			s.coreErr = err.Error()
+		}
+		s.coreMu.Unlock()
+		if err != nil {
+			s.log.Warn("pocket core: registration failed, retrying", "err", err, "in", wait.String())
+		} else {
+			wait = 30 * time.Minute
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(wait):
+		}
+		if err != nil && wait < 5*time.Minute {
+			wait *= 2
+		}
+	}
+}
+
+func (s *Server) registerWithCore(ctx context.Context) error {
+	reg, err := s.core.Register(ctx, s.cfg.CoreRegistrationKey, core.Manifest{
+		Slug: "invoicing", Name: "Pocket Invoicing",
+		Description: "Self-hosted invoicing for freelancers, consultants and homelabbers.",
+		Icon:        "/favicon.svg", Version: Version,
+		URL: s.cfg.CoreAppURL, PublicURL: s.cfg.BaseURL, HealthPath: "/healthz", EnvPrefix: "INVOICING",
+		Publishes: []string{"invoicing.invoice_created", "invoicing.invoice_sent", "invoicing.invoice_paid"},
+	})
+	if err != nil {
+		return err
+	}
+	if reg.Token != "" {
+		s.log.Info("pocket core: registered, app token stored", "core", s.cfg.CoreURL)
+	} else {
+		s.log.Debug("pocket core: re-registered", "core", s.cfg.CoreURL)
+	}
+	return nil
+}
+
+// publish sends an event to Core without blocking the request.
+func (s *Server) publish(topic, subject string, payload map[string]any) {
+	if !s.core.Configured() {
+		return
+	}
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := s.core.Publish(ctx, topic, subject, payload); err != nil {
+			s.log.Warn("pocket core: publish failed", "topic", topic, "err", err)
+		}
+	}()
+}
+
+// publishInvoice sends one invoice event (created / sent / paid) to Core.
+func (s *Server) publishInvoice(topic string, inv *store.Invoice) {
+	if inv == nil {
+		return
+	}
+	s.publish(topic, fmt.Sprintf("invoice:%d", inv.ID), map[string]any{
+		"invoice_id": inv.ID, "number": inv.Number, "client_id": inv.ClientID, "client": inv.ClientName, "status": inv.Status,
+		"issue_date": inv.IssueDate, "due_date": inv.DueDate, "total": inv.Total, "amount_paid": inv.AmountPaid, "currency": inv.Currency,
+	})
+}
+
+// resolveSibling asks Core where a sibling app lives (cached a minute) so the
+// *_URL settings may stay empty on a box with Core.
+func (s *Server) resolveSibling(ctx context.Context, slug string) string {
+	if !s.core.Configured() {
+		return ""
+	}
+	s.coreMu.Lock()
+	if r, ok := s.resolved[slug]; ok && time.Since(r.at) < time.Minute {
+		s.coreMu.Unlock()
+		return r.url
+	}
+	s.coreMu.Unlock()
+	url := ""
+	if res, err := s.core.Resolve(ctx, slug); err == nil {
+		url = res.URL
+	}
+	s.coreMu.Lock()
+	s.resolved[slug] = resolvedURL{url: url, at: time.Now()}
+	s.coreMu.Unlock()
+	return url
+}
+
+// coreStatus summarises the Pocket Core link for the About page.
+func (s *Server) coreStatus() map[string]any {
+	s.coreMu.Lock()
+	defer s.coreMu.Unlock()
+	return map[string]any{"configured": s.core.Configured(), "url": s.cfg.CoreURL, "registered": s.coreOK, "error": s.coreErr}
 }
 
 // provider returns the exchange rate provider chosen in Settings, falling back to the

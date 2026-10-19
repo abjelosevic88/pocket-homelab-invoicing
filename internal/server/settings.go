@@ -236,6 +236,7 @@ func (s *Server) handleSystemInfo(w http.ResponseWriter, r *http.Request) {
 		"version":       Version,
 		"go":            runtime.Version(),
 		"os":            runtime.GOOS + "/" + runtime.GOARCH,
+		"core":          s.coreStatus(),
 		"pdf_engine":    s.pdf.Name(),
 		"auth_mode":     s.cfg.AuthMode,
 		"rate_provider": s.rates.Name(),

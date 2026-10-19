@@ -347,6 +347,7 @@ func (s *Server) handleMonthEndCreate(w http.ResponseWriter, r *http.Request) {
 		if full != nil {
 			created = append(created, *full)
 			s.hooks.Emit("invoice.created", full)
+			s.publishInvoice("invoicing.invoice_created", full)
 		}
 	}
 	status := http.StatusCreated

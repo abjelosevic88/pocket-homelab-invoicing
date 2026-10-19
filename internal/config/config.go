@@ -57,6 +57,12 @@ type Config struct {
 	PaperlessURL   string
 	PaperlessToken string
 
+	// Pocket Core: when CORE_URL is set the app registers itself on start,
+	// publishes events and accepts the tokens Core hands to paired phones.
+	CoreURL             string
+	CoreRegistrationKey string
+	CoreAppURL          string // how Core reaches this app; defaults to BASE_URL
+
 	// Misc
 	DemoData bool
 }
@@ -136,6 +142,10 @@ func Load() (*Config, error) {
 		SchedulerEnabled:  envBool("SCHEDULER_ENABLED", true),
 		SchedulerInterval: envDuration("SCHEDULER_INTERVAL", 15*time.Minute),
 
+		CoreURL:             strings.TrimRight(env("CORE_URL", ""), "/"),
+		CoreRegistrationKey: env("CORE_REGISTRATION_KEY", ""),
+		CoreAppURL:          strings.TrimRight(env("CORE_APP_URL", ""), "/"),
+
 		DemoData: envBool("DEMO_DATA", false),
 	}
 
@@ -156,6 +166,9 @@ func Load() (*Config, error) {
 	}
 	if c.BaseURL == "" {
 		c.BaseURL = fmt.Sprintf("http://localhost:%d", c.Port)
+	}
+	if c.CoreAppURL == "" {
+		c.CoreAppURL = c.BaseURL
 	}
 	return c, nil
 }

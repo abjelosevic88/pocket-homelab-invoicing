@@ -56,6 +56,9 @@ func (s *Server) Bootstrap(ctx context.Context) error {
 			return err
 		}
 	}
+	if s.core.Configured() {
+		go s.coreLoop(ctx)
+	}
 	return nil
 }
 

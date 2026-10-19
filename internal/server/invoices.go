@@ -272,6 +272,7 @@ func (s *Server) handleCreateInvoice(w http.ResponseWriter, r *http.Request) {
 	s.store.LogActivity(ctx, "invoice", inv.ID, "created", "Invoice "+inv.Number+" created")
 	full, _ := s.store.GetInvoice(ctx, inv.ID)
 	s.hooks.Emit("invoice.created", full)
+	s.publishInvoice("invoicing.invoice_created", full)
 	writeJSON(w, http.StatusCreated, full)
 }
 
@@ -383,6 +384,12 @@ func (s *Server) handleInvoiceStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	s.store.LogActivity(ctx, "invoice", inv.ID, "status", "Status changed to "+full.Status)
 	s.hooks.Emit("invoice."+full.Status, full)
+	switch full.Status {
+	case store.StatusSent:
+		s.publishInvoice("invoicing.invoice_sent", full)
+	case store.StatusPaid:
+		s.publishInvoice("invoicing.invoice_paid", full)
+	}
 	s.paperlessAutoArchive(full)
 	writeJSON(w, http.StatusOK, full)
 }
@@ -727,6 +734,7 @@ func (s *Server) handleSendInvoice(w http.ResponseWriter, r *http.Request) {
 	s.store.LogActivity(ctx, "invoice", inv.ID, "sent", "Emailed to "+firstNonEmpty(in.To, "client"))
 	full, _ := s.store.GetInvoice(ctx, inv.ID)
 	s.hooks.Emit("invoice.sent", full)
+	s.publishInvoice("invoicing.invoice_sent", full)
 	s.paperlessAutoArchive(full)
 	writeJSON(w, http.StatusOK, full)
 }
@@ -939,6 +947,7 @@ func (s *Server) handleInvoiceFromTime(w http.ResponseWriter, r *http.Request) {
 	s.store.LogActivity(ctx, "invoice", inv.ID, "created", fmt.Sprintf("Created from %d time entries", len(ids)))
 	full, _ := s.store.GetInvoice(ctx, inv.ID)
 	s.hooks.Emit("invoice.created", full)
+	s.publishInvoice("invoicing.invoice_created", full)
 	writeJSON(w, http.StatusCreated, full)
 }
 
