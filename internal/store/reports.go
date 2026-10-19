@@ -12,7 +12,7 @@ type MonthlyRevenue struct {
 }
 
 // RevenueByMonth returns invoiced (by issue date) and paid (by payment date) amounts in base currency.
-func (s *Store) RevenueByMonth(ctx context.Context, from, to string) ([]MonthlyRevenue, error) {
+func (s *Store) RevenueByMonth(ctx context.Context, uid int64, from, to string) ([]MonthlyRevenue, error) {
 	months := map[string]*MonthlyRevenue{}
 	get := func(m string) *MonthlyRevenue {
 		if v, ok := months[m]; ok {
@@ -22,7 +22,7 @@ func (s *Store) RevenueByMonth(ctx context.Context, from, to string) ([]MonthlyR
 		months[m] = v
 		return v
 	}
-	rows, err := s.DB.QueryContext(ctx, `SELECT substr(issue_date,1,7), SUM(total * exchange_rate), COUNT(1) FROM invoices WHERE status NOT IN ('draft','cancelled') AND issue_date >= ? AND issue_date <= ? GROUP BY 1`, from, to)
+	rows, err := s.DB.QueryContext(ctx, `SELECT substr(issue_date,1,7), SUM(total * exchange_rate), COUNT(1) FROM invoices WHERE user_id = ? AND status NOT IN ('draft','cancelled') AND issue_date >= ? AND issue_date <= ? GROUP BY 1`, uid, from, to)
 	if err != nil {
 		return nil, err
 	}
@@ -39,7 +39,7 @@ func (s *Store) RevenueByMonth(ctx context.Context, from, to string) ([]MonthlyR
 		r.Count = n
 	}
 	rows.Close()
-	rows, err = s.DB.QueryContext(ctx, `SELECT substr(p.date,1,7), SUM(p.applied_amount * i.exchange_rate) FROM payments p JOIN invoices i ON i.id = p.invoice_id WHERE p.date >= ? AND p.date <= ? GROUP BY 1`, from, to)
+	rows, err = s.DB.QueryContext(ctx, `SELECT substr(p.date,1,7), SUM(p.applied_amount * i.exchange_rate) FROM payments p JOIN invoices i ON i.id = p.invoice_id WHERE i.user_id = ? AND p.date >= ? AND p.date <= ? GROUP BY 1`, uid, from, to)
 	if err != nil {
 		return nil, err
 	}
@@ -53,7 +53,7 @@ func (s *Store) RevenueByMonth(ctx context.Context, from, to string) ([]MonthlyR
 		get(m).Paid = v
 	}
 	rows.Close()
-	rows, err = s.DB.QueryContext(ctx, `SELECT substr(date,1,7), SUM(amount * exchange_rate) FROM expenses WHERE date >= ? AND date <= ? GROUP BY 1`, from, to)
+	rows, err = s.DB.QueryContext(ctx, `SELECT substr(date,1,7), SUM(amount * exchange_rate) FROM expenses WHERE user_id = ? AND date >= ? AND date <= ? GROUP BY 1`, uid, from, to)
 	if err != nil {
 		return nil, err
 	}
@@ -95,14 +95,15 @@ type ClientRevenue struct {
 }
 
 // RevenueByClient aggregates per client.
-func (s *Store) RevenueByClient(ctx context.Context, from, to string) ([]ClientRevenue, error) {
+func (s *Store) RevenueByClient(ctx context.Context, uid int64, from, to string) ([]ClientRevenue, error) {
 	rows, err := s.DB.QueryContext(ctx, `SELECT c.id, c.name, c.currency,
 		COALESCE(SUM(i.total * i.exchange_rate), 0),
 		COALESCE(SUM(i.amount_paid * i.exchange_rate), 0),
 		COALESCE(SUM(CASE WHEN i.status IN ('sent','viewed','partial','overdue') THEN (i.total - i.amount_paid) * i.exchange_rate ELSE 0 END), 0),
 		COUNT(i.id)
 		FROM clients c JOIN invoices i ON i.client_id = c.id AND i.status NOT IN ('draft','cancelled') AND i.issue_date >= ? AND i.issue_date <= ?
-		GROUP BY c.id ORDER BY 4 DESC`, from, to)
+		WHERE c.user_id = ? AND i.user_id = ?
+		GROUP BY c.id ORDER BY 4 DESC`, from, to, uid, uid)
 	if err != nil {
 		return nil, err
 	}
@@ -126,7 +127,7 @@ type AgingBucket struct {
 }
 
 // Aging returns outstanding balances bucketed by days overdue (base currency).
-func (s *Store) Aging(ctx context.Context) ([]AgingBucket, error) {
+func (s *Store) Aging(ctx context.Context, uid int64) ([]AgingBucket, error) {
 	rows, err := s.DB.QueryContext(ctx, `SELECT
 		CASE WHEN julianday(?) - julianday(due_date) <= 0 THEN 'current'
 		     WHEN julianday(?) - julianday(due_date) <= 30 THEN '1-30'
@@ -134,7 +135,7 @@ func (s *Store) Aging(ctx context.Context) ([]AgingBucket, error) {
 		     WHEN julianday(?) - julianday(due_date) <= 90 THEN '61-90'
 		     ELSE '90+' END AS bucket,
 		SUM((total - amount_paid) * exchange_rate), COUNT(1)
-		FROM invoices WHERE status IN ('sent','viewed','partial','overdue') GROUP BY bucket`, Today(), Today(), Today(), Today())
+		FROM invoices WHERE user_id = ? AND status IN ('sent','viewed','partial','overdue') GROUP BY bucket`, Today(), Today(), Today(), Today(), uid)
 	if err != nil {
 		return nil, err
 	}
@@ -164,13 +165,13 @@ type TaxSummary struct {
 }
 
 // TaxByRate aggregates tax per rate for issued invoices in range.
-func (s *Store) TaxByRate(ctx context.Context, from, to string) ([]TaxSummary, error) {
+func (s *Store) TaxByRate(ctx context.Context, uid int64, from, to string) ([]TaxSummary, error) {
 	rows, err := s.DB.QueryContext(ctx, `SELECT it.tax_rate,
 		SUM(it.line_total * (1 - CASE WHEN i.subtotal > 0 THEN i.discount_total / i.subtotal ELSE 0 END) * i.exchange_rate),
 		SUM(it.line_total * (1 - CASE WHEN i.subtotal > 0 THEN i.discount_total / i.subtotal ELSE 0 END) * it.tax_rate / 100 * i.exchange_rate)
 		FROM invoice_items it JOIN invoices i ON i.id = it.invoice_id
-		WHERE i.status NOT IN ('draft','cancelled') AND i.issue_date >= ? AND i.issue_date <= ?
-		GROUP BY it.tax_rate ORDER BY it.tax_rate`, from, to)
+		WHERE i.user_id = ? AND i.status NOT IN ('draft','cancelled') AND i.issue_date >= ? AND i.issue_date <= ?
+		GROUP BY it.tax_rate ORDER BY it.tax_rate`, uid, from, to)
 	if err != nil {
 		return nil, err
 	}
@@ -197,11 +198,11 @@ type CurrencySummary struct {
 }
 
 // ByCurrency aggregates per invoice currency.
-func (s *Store) ByCurrency(ctx context.Context, from, to string) ([]CurrencySummary, error) {
+func (s *Store) ByCurrency(ctx context.Context, uid int64, from, to string) ([]CurrencySummary, error) {
 	rows, err := s.DB.QueryContext(ctx, `SELECT currency, SUM(total), SUM(amount_paid),
 		SUM(CASE WHEN status IN ('sent','viewed','partial','overdue') THEN total - amount_paid ELSE 0 END),
 		SUM(total * exchange_rate), COUNT(1)
-		FROM invoices WHERE status NOT IN ('draft','cancelled') AND issue_date >= ? AND issue_date <= ? GROUP BY currency ORDER BY 5 DESC`, from, to)
+		FROM invoices WHERE user_id = ? AND status NOT IN ('draft','cancelled') AND issue_date >= ? AND issue_date <= ? GROUP BY currency ORDER BY 5 DESC`, uid, from, to)
 	if err != nil {
 		return nil, err
 	}
@@ -229,15 +230,15 @@ type TimeSummary struct {
 }
 
 // TimeByClient aggregates time entries.
-func (s *Store) TimeByClient(ctx context.Context, from, to string) ([]TimeSummary, error) {
+func (s *Store) TimeByClient(ctx context.Context, uid int64, from, to string) ([]TimeSummary, error) {
 	rows, err := s.DB.QueryContext(ctx, `SELECT c.id, c.name, t.project,
 		SUM(t.duration_minutes),
 		SUM(CASE WHEN t.billable = 1 THEN t.duration_minutes ELSE 0 END),
 		SUM(CASE WHEN t.billable = 1 AND t.invoice_id IS NULL THEN t.duration_minutes ELSE 0 END),
 		COUNT(1)
 		FROM time_entries t JOIN clients c ON c.id = t.client_id
-		WHERE t.ended_at IS NOT NULL AND t.started_at >= ? AND t.started_at < date(?, '+1 day')
-		GROUP BY c.id, t.project ORDER BY c.name, t.project`, from, to)
+		WHERE t.user_id = ? AND t.ended_at IS NOT NULL AND t.started_at >= ? AND t.started_at < date(?, '+1 day')
+		GROUP BY c.id, t.project ORDER BY c.name, t.project`, uid, from, to)
 	if err != nil {
 		return nil, err
 	}
@@ -269,7 +270,7 @@ type DashboardStats struct {
 }
 
 // Dashboard computes headline stats.
-func (s *Store) Dashboard(ctx context.Context) (DashboardStats, error) {
+func (s *Store) Dashboard(ctx context.Context, uid int64) (DashboardStats, error) {
 	var d DashboardStats
 	today := Today()
 	month := today[:7]
@@ -277,31 +278,31 @@ func (s *Store) Dashboard(ctx context.Context) (DashboardStats, error) {
 	q := func(dest []any, query string, args ...any) error {
 		return s.DB.QueryRowContext(ctx, query, args...).Scan(dest...)
 	}
-	if err := q([]any{&d.Outstanding, &d.OutstandingCount}, `SELECT COALESCE(SUM((total - amount_paid) * exchange_rate),0), COUNT(1) FROM invoices WHERE status IN ('sent','viewed','partial','overdue')`); err != nil {
+	if err := q([]any{&d.Outstanding, &d.OutstandingCount}, `SELECT COALESCE(SUM((total - amount_paid) * exchange_rate),0), COUNT(1) FROM invoices WHERE user_id = ? AND status IN ('sent','viewed','partial','overdue')`, uid); err != nil {
 		return d, err
 	}
-	if err := q([]any{&d.Overdue, &d.OverdueCount}, `SELECT COALESCE(SUM((total - amount_paid) * exchange_rate),0), COUNT(1) FROM invoices WHERE status IN ('sent','viewed','partial','overdue') AND due_date < ?`, today); err != nil {
+	if err := q([]any{&d.Overdue, &d.OverdueCount}, `SELECT COALESCE(SUM((total - amount_paid) * exchange_rate),0), COUNT(1) FROM invoices WHERE user_id = ? AND status IN ('sent','viewed','partial','overdue') AND due_date < ?`, uid, today); err != nil {
 		return d, err
 	}
-	if err := q([]any{&d.PaidThisMonth}, `SELECT COALESCE(SUM(p.applied_amount * i.exchange_rate),0) FROM payments p JOIN invoices i ON i.id = p.invoice_id WHERE substr(p.date,1,7) = ?`, month); err != nil {
+	if err := q([]any{&d.PaidThisMonth}, `SELECT COALESCE(SUM(p.applied_amount * i.exchange_rate),0) FROM payments p JOIN invoices i ON i.id = p.invoice_id WHERE i.user_id = ? AND substr(p.date,1,7) = ?`, uid, month); err != nil {
 		return d, err
 	}
-	if err := q([]any{&d.PaidThisYear}, `SELECT COALESCE(SUM(p.applied_amount * i.exchange_rate),0) FROM payments p JOIN invoices i ON i.id = p.invoice_id WHERE substr(p.date,1,4) = ?`, year); err != nil {
+	if err := q([]any{&d.PaidThisYear}, `SELECT COALESCE(SUM(p.applied_amount * i.exchange_rate),0) FROM payments p JOIN invoices i ON i.id = p.invoice_id WHERE i.user_id = ? AND substr(p.date,1,4) = ?`, uid, year); err != nil {
 		return d, err
 	}
-	if err := q([]any{&d.InvoicedThisYear}, `SELECT COALESCE(SUM(total * exchange_rate),0) FROM invoices WHERE status NOT IN ('draft','cancelled') AND substr(issue_date,1,4) = ?`, year); err != nil {
+	if err := q([]any{&d.InvoicedThisYear}, `SELECT COALESCE(SUM(total * exchange_rate),0) FROM invoices WHERE user_id = ? AND status NOT IN ('draft','cancelled') AND substr(issue_date,1,4) = ?`, uid, year); err != nil {
 		return d, err
 	}
-	if err := q([]any{&d.DraftCount}, `SELECT COUNT(1) FROM invoices WHERE status = 'draft'`); err != nil {
+	if err := q([]any{&d.DraftCount}, `SELECT COUNT(1) FROM invoices WHERE user_id = ? AND status = 'draft'`, uid); err != nil {
 		return d, err
 	}
-	if err := q([]any{&d.UnbilledMinutes}, `SELECT COALESCE(SUM(duration_minutes),0) FROM time_entries WHERE billable = 1 AND invoice_id IS NULL AND ended_at IS NOT NULL`); err != nil {
+	if err := q([]any{&d.UnbilledMinutes}, `SELECT COALESCE(SUM(duration_minutes),0) FROM time_entries WHERE user_id = ? AND billable = 1 AND invoice_id IS NULL AND ended_at IS NOT NULL`, uid); err != nil {
 		return d, err
 	}
-	if err := q([]any{&d.UnbilledExpenses}, `SELECT COALESCE(SUM(amount * exchange_rate),0) FROM expenses WHERE billable = 1 AND invoice_id IS NULL`); err != nil {
+	if err := q([]any{&d.UnbilledExpenses}, `SELECT COALESCE(SUM(amount * exchange_rate),0) FROM expenses WHERE user_id = ? AND billable = 1 AND invoice_id IS NULL`, uid); err != nil {
 		return d, err
 	}
-	if err := q([]any{&d.ActiveClients}, `SELECT COUNT(1) FROM clients WHERE archived = 0`); err != nil {
+	if err := q([]any{&d.ActiveClients}, `SELECT COUNT(1) FROM clients WHERE user_id = ? AND archived = 0`, uid); err != nil {
 		return d, err
 	}
 	return d, nil
@@ -317,7 +318,7 @@ type YearRevenue struct {
 }
 
 // RevenueByYear aggregates all years.
-func (s *Store) RevenueByYear(ctx context.Context) ([]YearRevenue, error) {
+func (s *Store) RevenueByYear(ctx context.Context, uid int64) ([]YearRevenue, error) {
 	years := map[string]*YearRevenue{}
 	get := func(y string) *YearRevenue {
 		if v, ok := years[y]; ok {
@@ -327,7 +328,7 @@ func (s *Store) RevenueByYear(ctx context.Context) ([]YearRevenue, error) {
 		years[y] = v
 		return v
 	}
-	rows, err := s.DB.QueryContext(ctx, `SELECT substr(issue_date,1,4), SUM(total * exchange_rate), COUNT(1) FROM invoices WHERE status NOT IN ('draft','cancelled') GROUP BY 1`)
+	rows, err := s.DB.QueryContext(ctx, `SELECT substr(issue_date,1,4), SUM(total * exchange_rate), COUNT(1) FROM invoices WHERE user_id = ? AND status NOT IN ('draft','cancelled') GROUP BY 1`, uid)
 	if err != nil {
 		return nil, err
 	}
@@ -343,7 +344,7 @@ func (s *Store) RevenueByYear(ctx context.Context) ([]YearRevenue, error) {
 		r.Invoiced, r.Count = v, n
 	}
 	rows.Close()
-	rows, err = s.DB.QueryContext(ctx, `SELECT substr(p.date,1,4), SUM(p.applied_amount * i.exchange_rate) FROM payments p JOIN invoices i ON i.id = p.invoice_id GROUP BY 1`)
+	rows, err = s.DB.QueryContext(ctx, `SELECT substr(p.date,1,4), SUM(p.applied_amount * i.exchange_rate) FROM payments p JOIN invoices i ON i.id = p.invoice_id WHERE i.user_id = ? GROUP BY 1`, uid)
 	if err != nil {
 		return nil, err
 	}
@@ -357,7 +358,7 @@ func (s *Store) RevenueByYear(ctx context.Context) ([]YearRevenue, error) {
 		get(y).Paid = v
 	}
 	rows.Close()
-	rows, err = s.DB.QueryContext(ctx, `SELECT substr(date,1,4), SUM(amount * exchange_rate) FROM expenses GROUP BY 1`)
+	rows, err = s.DB.QueryContext(ctx, `SELECT substr(date,1,4), SUM(amount * exchange_rate) FROM expenses WHERE user_id = ? GROUP BY 1`, uid)
 	if err != nil {
 		return nil, err
 	}
@@ -395,20 +396,20 @@ type Lifetime struct {
 }
 
 // LifetimeStats computes all-time figures.
-func (s *Store) LifetimeStats(ctx context.Context) (Lifetime, error) {
+func (s *Store) LifetimeStats(ctx context.Context, uid int64) (Lifetime, error) {
 	var l Lifetime
 	l.PaidByCurrency = map[string]float64{}
 	var first *string
-	if err := s.DB.QueryRowContext(ctx, `SELECT COALESCE(SUM(total * exchange_rate),0), COUNT(1), MIN(issue_date), COUNT(DISTINCT substr(issue_date,1,7)) FROM invoices WHERE status NOT IN ('draft','cancelled')`).Scan(&l.InvoicedTotal, &l.InvoiceCount, &first, &l.MonthsActive); err != nil {
+	if err := s.DB.QueryRowContext(ctx, `SELECT COALESCE(SUM(total * exchange_rate),0), COUNT(1), MIN(issue_date), COUNT(DISTINCT substr(issue_date,1,7)) FROM invoices WHERE user_id = ? AND status NOT IN ('draft','cancelled')`, uid).Scan(&l.InvoicedTotal, &l.InvoiceCount, &first, &l.MonthsActive); err != nil {
 		return l, err
 	}
 	if first != nil {
 		l.FirstInvoice = *first
 	}
-	if err := s.DB.QueryRowContext(ctx, `SELECT COALESCE(SUM(p.applied_amount * i.exchange_rate),0), COUNT(DISTINCT p.invoice_id) FROM payments p JOIN invoices i ON i.id = p.invoice_id`).Scan(&l.PaidTotal, &l.PaidCount); err != nil {
+	if err := s.DB.QueryRowContext(ctx, `SELECT COALESCE(SUM(p.applied_amount * i.exchange_rate),0), COUNT(DISTINCT p.invoice_id) FROM payments p JOIN invoices i ON i.id = p.invoice_id WHERE i.user_id = ?`, uid).Scan(&l.PaidTotal, &l.PaidCount); err != nil {
 		return l, err
 	}
-	rows, err := s.DB.QueryContext(ctx, `SELECT i.currency, SUM(p.applied_amount) FROM payments p JOIN invoices i ON i.id = p.invoice_id GROUP BY i.currency`)
+	rows, err := s.DB.QueryContext(ctx, `SELECT i.currency, SUM(p.applied_amount) FROM payments p JOIN invoices i ON i.id = p.invoice_id WHERE i.user_id = ? GROUP BY i.currency`, uid)
 	if err != nil {
 		return l, err
 	}

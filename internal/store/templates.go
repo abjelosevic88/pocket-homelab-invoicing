@@ -25,8 +25,8 @@ func scanTemplate(row interface{ Scan(...any) error }) (*InvoiceTemplate, error)
 }
 
 // ListTemplates lists templates.
-func (s *Store) ListTemplates(ctx context.Context) ([]InvoiceTemplate, error) {
-	rows, err := s.DB.QueryContext(ctx, `SELECT `+templateCols+` FROM invoice_templates ORDER BY is_default DESC, name`)
+func (s *Store) ListTemplates(ctx context.Context, uid int64) ([]InvoiceTemplate, error) {
+	rows, err := s.DB.QueryContext(ctx, `SELECT `+templateCols+` FROM invoice_templates WHERE user_id = ? ORDER BY is_default DESC, name`, uid)
 	if err != nil {
 		return nil, err
 	}
@@ -43,13 +43,13 @@ func (s *Store) ListTemplates(ctx context.Context) ([]InvoiceTemplate, error) {
 }
 
 // GetTemplate returns a template by id.
-func (s *Store) GetTemplate(ctx context.Context, id int64) (*InvoiceTemplate, error) {
-	return scanTemplate(s.DB.QueryRowContext(ctx, `SELECT `+templateCols+` FROM invoice_templates WHERE id = ?`, id))
+func (s *Store) GetTemplate(ctx context.Context, uid, id int64) (*InvoiceTemplate, error) {
+	return scanTemplate(s.DB.QueryRowContext(ctx, `SELECT `+templateCols+` FROM invoice_templates WHERE id = ? AND user_id = ?`, id, uid))
 }
 
 // GetDefaultTemplate returns the default template (or the first one).
-func (s *Store) GetDefaultTemplate(ctx context.Context) (*InvoiceTemplate, error) {
-	t, err := scanTemplate(s.DB.QueryRowContext(ctx, `SELECT `+templateCols+` FROM invoice_templates ORDER BY is_default DESC, id LIMIT 1`))
+func (s *Store) GetDefaultTemplate(ctx context.Context, uid int64) (*InvoiceTemplate, error) {
+	t, err := scanTemplate(s.DB.QueryRowContext(ctx, `SELECT `+templateCols+` FROM invoice_templates WHERE user_id = ? ORDER BY is_default DESC, id LIMIT 1`, uid))
 	if errors.Is(err, sql.ErrNoRows) {
 		return &InvoiceTemplate{Name: "Classic", Layout: "classic", AccentColor: "#2563eb", Labels: map[string]string{}, Kind: "design"}, nil
 	}
@@ -57,11 +57,16 @@ func (s *Store) GetDefaultTemplate(ctx context.Context) (*InvoiceTemplate, error
 }
 
 // SaveTemplate creates or updates a template.
-func (s *Store) SaveTemplate(ctx context.Context, t *InvoiceTemplate) error {
+func (s *Store) SaveTemplate(ctx context.Context, uid int64, t *InvoiceTemplate) error {
 	labels, _ := json.Marshal(t.Labels)
 	options, _ := json.Marshal(t.Options)
+	if t.ID > 0 {
+		if _, err := s.GetTemplate(ctx, uid, t.ID); err != nil {
+			return err
+		}
+	}
 	if t.IsDefault {
-		if _, err := s.DB.ExecContext(ctx, `UPDATE invoice_templates SET is_default = 0`); err != nil {
+		if _, err := s.DB.ExecContext(ctx, `UPDATE invoice_templates SET is_default = 0 WHERE user_id = ?`, uid); err != nil {
 			return err
 		}
 	}
@@ -69,7 +74,7 @@ func (s *Store) SaveTemplate(ctx context.Context, t *InvoiceTemplate) error {
 		if t.Kind == "" {
 			t.Kind = "design"
 		}
-		res, err := s.DB.ExecContext(ctx, `INSERT INTO invoice_templates (name, layout, accent_color, labels, options, html, is_default, kind, docx_path) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, t.Name, t.Layout, t.AccentColor, string(labels), string(options), t.HTML, t.IsDefault, t.Kind, t.DocxPath)
+		res, err := s.DB.ExecContext(ctx, `INSERT INTO invoice_templates (user_id, name, layout, accent_color, labels, options, html, is_default, kind, docx_path) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, NullInt(uid), t.Name, t.Layout, t.AccentColor, string(labels), string(options), t.HTML, t.IsDefault, t.Kind, t.DocxPath)
 		if err != nil {
 			return err
 		}
@@ -79,19 +84,41 @@ func (s *Store) SaveTemplate(ctx context.Context, t *InvoiceTemplate) error {
 	if t.Kind == "" {
 		t.Kind = "design"
 	}
-	_, err := s.DB.ExecContext(ctx, `UPDATE invoice_templates SET name=?, layout=?, accent_color=?, labels=?, options=?, html=?, is_default=?, kind=?, docx_path=?, updated_at=? WHERE id=?`, t.Name, t.Layout, t.AccentColor, string(labels), string(options), t.HTML, t.IsDefault, t.Kind, t.DocxPath, Now(), t.ID)
+	_, err := s.DB.ExecContext(ctx, `UPDATE invoice_templates SET name=?, layout=?, accent_color=?, labels=?, options=?, html=?, is_default=?, kind=?, docx_path=?, updated_at=? WHERE id=? AND user_id=?`, t.Name, t.Layout, t.AccentColor, string(labels), string(options), t.HTML, t.IsDefault, t.Kind, t.DocxPath, Now(), t.ID, uid)
 	return err
 }
 
 // DeleteTemplate removes a template.
-func (s *Store) DeleteTemplate(ctx context.Context, id int64) error {
-	_, err := s.DB.ExecContext(ctx, `DELETE FROM invoice_templates WHERE id = ? AND is_default = 0`, id)
+func (s *Store) DeleteTemplate(ctx context.Context, uid, id int64) error {
+	_, err := s.DB.ExecContext(ctx, `DELETE FROM invoice_templates WHERE id = ? AND user_id = ? AND is_default = 0`, id, uid)
 	return err
 }
 
-// CountTemplates returns the number of templates.
-func (s *Store) CountTemplates(ctx context.Context) (int, error) {
+// CountTemplates returns the number of templates a user has.
+func (s *Store) CountTemplates(ctx context.Context, uid int64) (int, error) {
 	var n int
-	err := s.DB.QueryRowContext(ctx, `SELECT COUNT(1) FROM invoice_templates`).Scan(&n)
+	err := s.DB.QueryRowContext(ctx, `SELECT COUNT(1) FROM invoice_templates WHERE user_id = ?`, uid).Scan(&n)
 	return n, err
+}
+
+// EnsureDefaultTemplates gives a user the three built-in designs when they have none yet.
+func (s *Store) EnsureDefaultTemplates(ctx context.Context, uid int64) error {
+	if uid <= 0 {
+		return nil
+	}
+	n, err := s.CountTemplates(ctx, uid)
+	if err != nil || n > 0 {
+		return err
+	}
+	for _, t := range []InvoiceTemplate{
+		{Name: "Classic", Layout: "classic", AccentColor: "#2563eb", IsDefault: true}, // empty HTML = built-in, so upgrades pick up improvements
+		{Name: "Modern", Layout: "modern", AccentColor: "#0f766e"},
+		{Name: "Minimal", Layout: "minimal", AccentColor: "#111827"},
+	} {
+		t.Labels = map[string]string{}
+		if err := s.SaveTemplate(ctx, uid, &t); err != nil {
+			return err
+		}
+	}
+	return nil
 }

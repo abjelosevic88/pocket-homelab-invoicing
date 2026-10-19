@@ -11,10 +11,10 @@ type PaymentFilter struct {
 }
 
 // ListPayments lists payments.
-func (s *Store) ListPayments(ctx context.Context, f PaymentFilter) ([]Payment, error) {
+func (s *Store) ListPayments(ctx context.Context, uid int64, f PaymentFilter) ([]Payment, error) {
 	q := `SELECT p.id, p.invoice_id, i.number, c.name, p.date, p.amount, p.currency, p.exchange_rate, p.applied_amount, p.method, p.reference, p.notes, p.created_at
-		FROM payments p JOIN invoices i ON i.id = p.invoice_id JOIN clients c ON c.id = i.client_id WHERE 1=1`
-	args := []any{}
+		FROM payments p JOIN invoices i ON i.id = p.invoice_id JOIN clients c ON c.id = i.client_id WHERE p.user_id = ? AND i.user_id = ?`
+	args := []any{uid, uid}
 	if f.InvoiceID > 0 {
 		q += ` AND p.invoice_id = ?`
 		args = append(args, f.InvoiceID)
@@ -53,20 +53,23 @@ func (s *Store) ListPayments(ctx context.Context, f PaymentFilter) ([]Payment, e
 }
 
 // GetPayment returns one payment.
-func (s *Store) GetPayment(ctx context.Context, id int64) (*Payment, error) {
+func (s *Store) GetPayment(ctx context.Context, uid, id int64) (*Payment, error) {
 	var p Payment
 	err := s.DB.QueryRowContext(ctx, `SELECT p.id, p.invoice_id, i.number, c.name, p.date, p.amount, p.currency, p.exchange_rate, p.applied_amount, p.method, p.reference, p.notes, p.created_at
-		FROM payments p JOIN invoices i ON i.id = p.invoice_id JOIN clients c ON c.id = i.client_id WHERE p.id = ?`, id).Scan(&p.ID, &p.InvoiceID, &p.InvoiceNumber, &p.ClientName, &p.Date, &p.Amount, &p.Currency, &p.ExchangeRate, &p.AppliedAmount, &p.Method, &p.Reference, &p.Notes, &p.CreatedAt)
+		FROM payments p JOIN invoices i ON i.id = p.invoice_id JOIN clients c ON c.id = i.client_id WHERE p.id = ? AND p.user_id = ?`, id, uid).Scan(&p.ID, &p.InvoiceID, &p.InvoiceNumber, &p.ClientName, &p.Date, &p.Amount, &p.Currency, &p.ExchangeRate, &p.AppliedAmount, &p.Method, &p.Reference, &p.Notes, &p.CreatedAt)
 	if err != nil {
 		return nil, err
 	}
 	return &p, nil
 }
 
-// CreatePayment inserts a payment.
-func (s *Store) CreatePayment(ctx context.Context, p *Payment) error {
-	res, err := s.DB.ExecContext(ctx, `INSERT INTO payments (invoice_id, date, amount, currency, exchange_rate, applied_amount, method, reference, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		p.InvoiceID, p.Date, p.Amount, p.Currency, p.ExchangeRate, p.AppliedAmount, p.Method, p.Reference, p.Notes)
+// CreatePayment records a payment against one of the user's invoices.
+func (s *Store) CreatePayment(ctx context.Context, uid int64, p *Payment) error {
+	if !s.ownsInvoice(ctx, uid, p.InvoiceID) {
+		return ErrNotFound
+	}
+	res, err := s.DB.ExecContext(ctx, `INSERT INTO payments (user_id, invoice_id, date, amount, currency, exchange_rate, applied_amount, method, reference, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		NullInt(uid), p.InvoiceID, p.Date, p.Amount, p.Currency, p.ExchangeRate, p.AppliedAmount, p.Method, p.Reference, p.Notes)
 	if err != nil {
 		return err
 	}
@@ -75,11 +78,11 @@ func (s *Store) CreatePayment(ctx context.Context, p *Payment) error {
 }
 
 // DeletePayment removes a payment and returns the invoice id.
-func (s *Store) DeletePayment(ctx context.Context, id int64) (int64, error) {
+func (s *Store) DeletePayment(ctx context.Context, uid, id int64) (int64, error) {
 	var invoiceID int64
-	if err := s.DB.QueryRowContext(ctx, `SELECT invoice_id FROM payments WHERE id = ?`, id).Scan(&invoiceID); err != nil {
+	if err := s.DB.QueryRowContext(ctx, `SELECT invoice_id FROM payments WHERE id = ? AND user_id = ?`, id, uid).Scan(&invoiceID); err != nil {
 		return 0, err
 	}
-	_, err := s.DB.ExecContext(ctx, `DELETE FROM payments WHERE id = ?`, id)
+	_, err := s.DB.ExecContext(ctx, `DELETE FROM payments WHERE id = ? AND user_id = ?`, id, uid)
 	return invoiceID, err
 }

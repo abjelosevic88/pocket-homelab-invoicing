@@ -19,65 +19,76 @@ func testStore(t *testing.T) *Store {
 	return s
 }
 
+// testUser creates an account and returns its id.
+func testUser(t *testing.T, s *Store, email string) int64 {
+	t.Helper()
+	u := &User{Email: email, Name: email, Role: "admin", PasswordHash: "x"}
+	if err := s.CreateUser(context.Background(), u); err != nil {
+		t.Fatal(err)
+	}
+	return u.ID
+}
+
 func TestInvoiceLifecycle(t *testing.T) {
 	s := testStore(t)
 	ctx := context.Background()
+	uid := testUser(t, s, "owner@example.com")
 	if err := s.SeedCurrencies(ctx, "EUR"); err != nil {
 		t.Fatal(err)
 	}
 	c := &Client{Name: "Acme", Currency: "USD", BillingMode: "hourly", PaymentTermsDays: 14}
-	if err := s.CreateClient(ctx, c); err != nil {
+	if err := s.CreateClient(ctx, uid, c); err != nil {
 		t.Fatal(err)
 	}
 	inv := &Invoice{Number: "INV-1", ClientID: c.ID, Status: StatusSent, IssueDate: "2026-01-01", DueDate: "2026-01-15", Currency: "USD", ExchangeRate: 0.9, Total: 100, Subtotal: 100,
 		Items: []InvoiceItem{{Description: "work", Unit: "hour", Quantity: 1, UnitPrice: 100, LineTotal: 100}}}
-	if err := s.CreateInvoice(ctx, inv); err != nil {
+	if err := s.CreateInvoice(ctx, uid, inv); err != nil {
 		t.Fatal(err)
 	}
-	got, err := s.GetInvoice(ctx, inv.ID)
+	got, err := s.GetInvoice(ctx, uid, inv.ID)
 	if err != nil || len(got.Items) != 1 || got.ClientName != "Acme" || got.PublicToken == "" {
 		t.Fatalf("get: %v %+v", err, got)
 	}
 	// overdue marking
-	ids, err := s.MarkOverdue(ctx)
+	ids, err := s.MarkOverdue(ctx, uid)
 	if err != nil || len(ids) != 1 {
 		t.Fatalf("overdue: %v %v", err, ids)
 	}
 	// partial payment
-	if err := s.CreatePayment(ctx, &Payment{InvoiceID: inv.ID, Date: "2026-01-10", Amount: 40, Currency: "USD", ExchangeRate: 1, AppliedAmount: 40}); err != nil {
+	if err := s.CreatePayment(ctx, uid, &Payment{InvoiceID: inv.ID, Date: "2026-01-10", Amount: 40, Currency: "USD", ExchangeRate: 1, AppliedAmount: 40}); err != nil {
 		t.Fatal(err)
 	}
-	got, err = s.RecalcAmountPaid(ctx, inv.ID)
+	got, err = s.RecalcAmountPaid(ctx, uid, inv.ID)
 	if err != nil || got.Status != StatusOverdue || got.Balance != 60 { // partial but past due
 		t.Fatalf("partial: %v %s %v", err, got.Status, got.Balance)
 	}
 	// full payment in another currency
-	if err := s.CreatePayment(ctx, &Payment{InvoiceID: inv.ID, Date: "2026-01-11", Amount: 54, Currency: "EUR", ExchangeRate: 1.1111112, AppliedAmount: 60}); err != nil {
+	if err := s.CreatePayment(ctx, uid, &Payment{InvoiceID: inv.ID, Date: "2026-01-11", Amount: 54, Currency: "EUR", ExchangeRate: 1.1111112, AppliedAmount: 60}); err != nil {
 		t.Fatal(err)
 	}
-	got, _ = s.RecalcAmountPaid(ctx, inv.ID)
+	got, _ = s.RecalcAmountPaid(ctx, uid, inv.ID)
 	if got.Status != StatusPaid || got.Balance != 0 || got.PaidAt == nil {
 		t.Fatalf("paid: %s %v", got.Status, got.Balance)
 	}
 	// reports in base currency
-	stats, err := s.Dashboard(ctx)
+	stats, err := s.Dashboard(ctx, uid)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if stats.Outstanding != 0 {
 		t.Fatalf("outstanding %v", stats.Outstanding)
 	}
-	rev, err := s.RevenueByMonth(ctx, "2026-01-01", "2026-12-31")
+	rev, err := s.RevenueByMonth(ctx, uid, "2026-01-01", "2026-12-31")
 	if err != nil || len(rev) != 1 || rev[0].Invoiced != 90 || rev[0].Paid != 90 {
 		t.Fatalf("revenue: %v %+v", err, rev)
 	}
 	// client stats
-	cl, _ := s.GetClient(ctx, c.ID)
+	cl, _ := s.GetClient(ctx, uid, c.ID)
 	if cl.TotalBilled != 100 || cl.InvoiceCount != 1 {
 		t.Fatalf("client stats %+v", cl)
 	}
 	// delete client should archive since it has invoices
-	deleted, err := s.DeleteClient(ctx, c.ID)
+	deleted, err := s.DeleteClient(ctx, uid, c.ID)
 	if err != nil || deleted {
 		t.Fatalf("delete client: %v %v", err, deleted)
 	}
@@ -125,12 +136,13 @@ func TestRoundMinutes(t *testing.T) {
 func TestTemplatesAndSettings(t *testing.T) {
 	s := testStore(t)
 	ctx := context.Background()
-	st, _ := s.GetSettings(ctx)
+	uid := testUser(t, s, "owner@example.com")
+	st, _ := s.GetSettings(ctx, uid)
 	st.CompanyName = "X"
-	if err := s.SaveSettings(ctx, st); err != nil {
+	if err := s.SaveSettings(ctx, uid, st); err != nil {
 		t.Fatal(err)
 	}
-	st2, _ := s.GetSettings(ctx)
+	st2, _ := s.GetSettings(ctx, uid)
 	if st2.IncomeTaxRate != 10 || st2.NumberFormat == "" || st2.EmailAttachmentMode != "generated" || !st2.IncomeTaxByPaymentDate {
 		t.Fatalf("defaults missing: %+v", st2)
 	}
@@ -138,10 +150,10 @@ func TestTemplatesAndSettings(t *testing.T) {
 		t.Fatalf("%+v", st2)
 	}
 	tpl := &InvoiceTemplate{Name: "A", Layout: "modern", AccentColor: "#000", Labels: map[string]string{"invoice": "RECHNUNG"}, IsDefault: true}
-	if err := s.SaveTemplate(ctx, tpl); err != nil {
+	if err := s.SaveTemplate(ctx, uid, tpl); err != nil {
 		t.Fatal(err)
 	}
-	d, _ := s.GetDefaultTemplate(ctx)
+	d, _ := s.GetDefaultTemplate(ctx, uid)
 	if d.ID != tpl.ID || d.Labels["invoice"] != "RECHNUNG" {
 		t.Fatalf("%+v", d)
 	}
@@ -150,12 +162,13 @@ func TestTemplatesAndSettings(t *testing.T) {
 func TestInvoiceNumberUniquePerClient(t *testing.T) {
 	s := testStore(t)
 	ctx := context.Background()
+	uid := testUser(t, s, "owner@example.com")
 	a := &Client{Name: "A", Currency: "EUR"}
 	b := &Client{Name: "B", Currency: "USD"}
-	_ = s.CreateClient(ctx, a)
-	_ = s.CreateClient(ctx, b)
+	_ = s.CreateClient(ctx, uid, a)
+	_ = s.CreateClient(ctx, uid, b)
 	mk := func(c *Client) error {
-		return s.CreateInvoice(ctx, &Invoice{Number: "INV-001-2026", ClientID: c.ID, Status: StatusDraft, IssueDate: "2026-01-01", DueDate: "2026-01-01", Currency: c.Currency, ExchangeRate: 1})
+		return s.CreateInvoice(ctx, uid, &Invoice{Number: "INV-001-2026", ClientID: c.ID, Status: StatusDraft, IssueDate: "2026-01-01", DueDate: "2026-01-01", Currency: c.Currency, ExchangeRate: 1})
 	}
 	if err := mk(a); err != nil {
 		t.Fatal(err)
@@ -166,12 +179,12 @@ func TestInvoiceNumberUniquePerClient(t *testing.T) {
 	if err := mk(b); err == nil {
 		t.Fatal("same number for the same client must be rejected")
 	}
-	same, others, err := s.NumberUsage(ctx, "INV-001-2026", a.ID, 0)
+	same, others, err := s.NumberUsage(ctx, uid, "INV-001-2026", a.ID, 0)
 	if err != nil || !same || len(others) != 1 || others[0] != "B" {
 		t.Fatalf("usage: %v %v %v", same, others, err)
 	}
 	// migration left the FK graph intact
-	inv, _, _ := s.ListInvoices(ctx, InvoiceFilter{})
+	inv, _, _ := s.ListInvoices(ctx, uid, InvoiceFilter{})
 	if len(inv) != 2 {
 		t.Fatalf("expected 2 invoices, got %d", len(inv))
 	}

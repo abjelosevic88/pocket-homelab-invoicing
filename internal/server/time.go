@@ -9,7 +9,7 @@ import (
 
 func (s *Server) handleListTime(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
-	list, err := s.store.ListTimeEntries(r.Context(), store.TimeFilter{ClientID: qInt64(r, "client_id"), Unbilled: q.Get("unbilled") == "1", From: q.Get("from"), To: q.Get("to"), Limit: qInt(r, "limit", 500)})
+	list, err := s.store.ListTimeEntries(r.Context(), uidOf(r), store.TimeFilter{ClientID: qInt64(r, "client_id"), Unbilled: q.Get("unbilled") == "1", From: q.Get("from"), To: q.Get("to"), Limit: qInt(r, "limit", 500)})
 	if err != nil {
 		s.fail(w, err, "list time")
 		return
@@ -18,7 +18,7 @@ func (s *Server) handleListTime(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleRunningTimer(w http.ResponseWriter, r *http.Request) {
-	t, err := s.store.RunningTimer(r.Context())
+	t, err := s.store.RunningTimer(r.Context(), uidOf(r))
 	if err != nil {
 		s.fail(w, err, "running timer")
 		return
@@ -38,24 +38,24 @@ func (s *Server) handleStartTimer(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "invalid json")
 		return
 	}
-	if _, err := s.store.GetClient(ctx, in.ClientID); err != nil {
+	if _, err := s.store.GetClient(ctx, uidOf(r), in.ClientID); err != nil {
 		writeErr(w, http.StatusBadRequest, "client not found")
 		return
 	}
-	st, _ := s.store.GetSettings(ctx)
-	_, _ = s.store.StopRunningTimers(ctx, st.TimeRoundingMin)
+	st, _ := s.store.GetSettings(ctx, uidOf(r))
+	_, _ = s.store.StopRunningTimers(ctx, uidOf(r), st.TimeRoundingMin)
 	t := &store.TimeEntry{ClientID: in.ClientID, Project: in.Project, Description: in.Description, StartedAt: time.Now().UTC().Format(time.RFC3339), Billable: true, Rate: in.Rate}
-	if err := s.store.SaveTimeEntry(ctx, t); err != nil {
+	if err := s.store.SaveTimeEntry(ctx, uidOf(r), t); err != nil {
 		s.fail(w, err, "start timer")
 		return
 	}
-	full, _ := s.store.GetTimeEntry(ctx, t.ID)
+	full, _ := s.store.GetTimeEntry(ctx, uidOf(r), t.ID)
 	writeJSON(w, http.StatusCreated, full)
 }
 
 func (s *Server) handleStopTimer(w http.ResponseWriter, r *http.Request) {
-	st, _ := s.store.GetSettings(r.Context())
-	stopped, err := s.store.StopRunningTimers(r.Context(), st.TimeRoundingMin)
+	st, _ := s.store.GetSettings(r.Context(), uidOf(r))
+	stopped, err := s.store.StopRunningTimers(r.Context(), uidOf(r), st.TimeRoundingMin)
 	if err != nil {
 		s.fail(w, err, "stop timer")
 		return
@@ -67,7 +67,7 @@ func (s *Server) handleSaveTime(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	var t store.TimeEntry
 	if id := idParam(r, "id"); id > 0 {
-		existing, err := s.store.GetTimeEntry(ctx, id)
+		existing, err := s.store.GetTimeEntry(ctx, uidOf(r), id)
 		if err != nil {
 			s.fail(w, err, "get time entry")
 			return
@@ -81,7 +81,8 @@ func (s *Server) handleSaveTime(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	t.ID = idParam(r, "id")
-	if _, err := s.store.GetClient(ctx, t.ClientID); err != nil {
+	t.InvoiceID = s.ownInvoiceID(ctx, uidOf(r), t.InvoiceID)
+	if _, err := s.store.GetClient(ctx, uidOf(r), t.ClientID); err != nil {
 		writeErr(w, http.StatusBadRequest, "client not found")
 		return
 	}
@@ -113,16 +114,16 @@ func (s *Server) handleSaveTime(w http.ResponseWriter, r *http.Request) {
 	if t.DurationMinutes < 0 {
 		t.DurationMinutes = 0
 	}
-	if err := s.store.SaveTimeEntry(ctx, &t); err != nil {
+	if err := s.store.SaveTimeEntry(ctx, uidOf(r), &t); err != nil {
 		s.fail(w, err, "save time entry")
 		return
 	}
-	full, _ := s.store.GetTimeEntry(ctx, t.ID)
+	full, _ := s.store.GetTimeEntry(ctx, uidOf(r), t.ID)
 	writeJSON(w, http.StatusOK, full)
 }
 
 func (s *Server) handleDeleteTime(w http.ResponseWriter, r *http.Request) {
-	if err := s.store.DeleteTimeEntry(r.Context(), idParam(r, "id")); err != nil {
+	if err := s.store.DeleteTimeEntry(r.Context(), uidOf(r), idParam(r, "id")); err != nil {
 		s.fail(w, err, "delete time entry")
 		return
 	}
@@ -133,7 +134,7 @@ func (s *Server) handleDeleteTime(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleListExpenses(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
-	list, err := s.store.ListExpenses(r.Context(), store.ExpenseFilter{ClientID: qInt64(r, "client_id"), Unbilled: q.Get("unbilled") == "1", From: q.Get("from"), To: q.Get("to")})
+	list, err := s.store.ListExpenses(r.Context(), uidOf(r), store.ExpenseFilter{ClientID: qInt64(r, "client_id"), Unbilled: q.Get("unbilled") == "1", From: q.Get("from"), To: q.Get("to")})
 	if err != nil {
 		s.fail(w, err, "list expenses")
 		return
@@ -145,7 +146,7 @@ func (s *Server) handleSaveExpense(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	var e store.Expense
 	if id := idParam(r, "id"); id > 0 {
-		existing, err := s.store.GetExpense(ctx, id)
+		existing, err := s.store.GetExpense(ctx, uidOf(r), id)
 		if err != nil {
 			s.fail(w, err, "get expense")
 			return
@@ -157,16 +158,15 @@ func (s *Server) handleSaveExpense(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	e.ID = idParam(r, "id")
-	st, _ := s.store.GetSettings(ctx)
+	st, _ := s.store.GetSettings(ctx, uidOf(r))
 	if e.Date == "" {
 		e.Date = store.Today()
 	}
 	if e.Currency == "" {
 		e.Currency = st.BaseCurrency
 	}
-	if e.ClientID != nil && *e.ClientID == 0 {
-		e.ClientID = nil
-	}
+	e.ClientID = s.ownClientID(ctx, uidOf(r), e.ClientID)
+	e.InvoiceID = s.ownInvoiceID(ctx, uidOf(r), e.InvoiceID)
 	if e.ExchangeRate <= 0 {
 		if r, ok := s.store.GetRate(ctx, e.Currency, st.BaseCurrency); ok {
 			e.ExchangeRate = r
@@ -174,16 +174,16 @@ func (s *Server) handleSaveExpense(w http.ResponseWriter, r *http.Request) {
 			e.ExchangeRate = 1
 		}
 	}
-	if err := s.store.SaveExpense(ctx, &e); err != nil {
+	if err := s.store.SaveExpense(ctx, uidOf(r), &e); err != nil {
 		s.fail(w, err, "save expense")
 		return
 	}
-	full, _ := s.store.GetExpense(ctx, e.ID)
+	full, _ := s.store.GetExpense(ctx, uidOf(r), e.ID)
 	writeJSON(w, http.StatusOK, full)
 }
 
 func (s *Server) handleDeleteExpense(w http.ResponseWriter, r *http.Request) {
-	if err := s.store.DeleteExpense(r.Context(), idParam(r, "id")); err != nil {
+	if err := s.store.DeleteExpense(r.Context(), uidOf(r), idParam(r, "id")); err != nil {
 		s.fail(w, err, "delete expense")
 		return
 	}

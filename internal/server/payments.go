@@ -10,7 +10,7 @@ import (
 
 func (s *Server) handleListPayments(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
-	list, err := s.store.ListPayments(r.Context(), store.PaymentFilter{InvoiceID: qInt64(r, "invoice_id"), ClientID: qInt64(r, "client_id"), From: q.Get("from"), To: q.Get("to"), Limit: qInt(r, "limit", 200)})
+	list, err := s.store.ListPayments(r.Context(), uidOf(r), store.PaymentFilter{InvoiceID: qInt64(r, "invoice_id"), ClientID: qInt64(r, "client_id"), From: q.Get("from"), To: q.Get("to"), Limit: qInt(r, "limit", 200)})
 	if err != nil {
 		s.fail(w, err, "list payments")
 		return
@@ -25,9 +25,10 @@ func (s *Server) handleCreatePayment(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "invalid json")
 		return
 	}
-	inv, err := s.store.GetInvoice(ctx, p.InvoiceID)
+	uid := uidOf(r)
+	inv, err := s.store.GetInvoice(ctx, uid, p.InvoiceID)
 	if err != nil {
-		writeErr(w, http.StatusBadRequest, "invoice not found")
+		writeErr(w, http.StatusNotFound, "invoice not found")
 		return
 	}
 	if p.Amount <= 0 {
@@ -60,19 +61,19 @@ func (s *Server) handleCreatePayment(w http.ResponseWriter, r *http.Request) {
 		}
 		p.AppliedAmount = money.Convert(p.Amount, p.ExchangeRate, cur.Decimals)
 	}
-	if err := s.store.CreatePayment(ctx, &p); err != nil {
+	if err := s.store.CreatePayment(ctx, uid, &p); err != nil {
 		s.fail(w, err, "create payment")
 		return
 	}
-	updated, err := s.store.RecalcAmountPaid(ctx, inv.ID)
+	updated, err := s.store.RecalcAmountPaid(ctx, uid, inv.ID)
 	if err != nil {
 		s.fail(w, err, "recalc")
 		return
 	}
-	s.store.LogActivity(ctx, "invoice", inv.ID, "payment", "Payment of "+money.FormatCode(p.Amount, cur.Decimals, p.Currency)+" recorded")
-	s.hooks.Emit("payment.created", map[string]any{"payment": p, "invoice": updated})
+	s.store.LogActivity(ctx, uid, "invoice", inv.ID, "payment", "Payment of "+money.FormatCode(p.Amount, cur.Decimals, p.Currency)+" recorded")
+	s.hooks.Emit(uid, "payment.created", map[string]any{"payment": p, "invoice": updated})
 	if updated.Status == store.StatusPaid {
-		s.hooks.Emit("invoice.paid", updated)
+		s.hooks.Emit(uid, "invoice.paid", updated)
 		s.publishInvoice("invoicing.invoice_paid", updated)
 		s.paperlessAutoArchive(updated)
 	}
@@ -80,16 +81,17 @@ func (s *Server) handleCreatePayment(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleDeletePayment(w http.ResponseWriter, r *http.Request) {
-	invoiceID, err := s.store.DeletePayment(r.Context(), idParam(r, "id"))
+	uid := uidOf(r)
+	invoiceID, err := s.store.DeletePayment(r.Context(), uid, idParam(r, "id"))
 	if err != nil {
 		s.fail(w, err, "delete payment")
 		return
 	}
-	inv, err := s.store.RecalcAmountPaid(r.Context(), invoiceID)
+	inv, err := s.store.RecalcAmountPaid(r.Context(), uid, invoiceID)
 	if err != nil {
 		s.fail(w, err, "recalc")
 		return
 	}
-	s.store.LogActivity(r.Context(), "invoice", invoiceID, "payment", "Payment deleted")
+	s.store.LogActivity(r.Context(), uid, "invoice", invoiceID, "payment", "Payment deleted")
 	writeJSON(w, http.StatusOK, inv)
 }

@@ -35,12 +35,16 @@ type Event struct {
 	Data      any    `json:"data"`
 }
 
-// Emit sends an event to all matching webhooks in the background.
-func (d *Dispatcher) Emit(event string, data any) {
+// Emit sends an event to the matching webhooks of one user (the owner of the record the
+// event is about) in the background. Other people's webhooks never see it.
+func (d *Dispatcher) Emit(uid int64, event string, data any) {
+	if uid <= 0 {
+		return
+	}
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
-		hooks, err := d.store.ListWebhooks(ctx, true)
+		hooks, err := d.store.ListWebhooks(ctx, uid, true)
 		if err != nil {
 			d.log.Error("webhook: list", "err", err)
 			return

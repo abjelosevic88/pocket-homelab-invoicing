@@ -39,7 +39,7 @@ func base64Encode(b []byte) string { return base64.StdEncoding.EncodeToString(b)
 // refreshRates fetches rates for all enabled currencies from the provider.
 // Manual rates are never overwritten.
 func (s *Server) refreshRates(ctx context.Context) (int, error) {
-	st, err := s.store.GetSettings(ctx)
+	st, err := s.store.GetGlobalSettings(ctx)
 	if err != nil {
 		return 0, err
 	}

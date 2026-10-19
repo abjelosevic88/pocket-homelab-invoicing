@@ -4,6 +4,21 @@ All notable changes to this project are documented here. Format follows [Keep a 
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-19
+
+### Changed
+- Every person is their own business. Clients, invoices (with items, attachments, payments and the email log), recurring profiles, time entries, expenses, products, tax rates, templates (including Word files), company documents, webhooks, Paperless links and the activity log belong to exactly one account, and every query, report, CSV/JSON export, accountant package, search, month-end plan and public-link render is scoped to it. Another person's id answers 404, never 403.
+- Settings are per person: company/sender profile, logo, invoice number format and sequence, defaults, custom fields, working-days calendar, income-tax settings, SMTP and email texts, reminders and Paperless credentials. The base currency, exchange-rate provider, enabled currencies and the rate table stay box-wide and only admins change them.
+- Roles: the first account is the admin (box owner); accounts created later, including the ones auto-provisioned by Pocket Core / OIDC sign-in, Core device tokens, proxy or no-auth mode, are members. Admin-only: users, currencies and rates, system info, database backup, running the scheduler. Admins get no extra access to anyone's records.
+- The scheduler runs per person (recurring invoices, overdue marking, reminders with that person's SMTP, Paperless follow-ups); webhooks only fire for the owner of the record; Core events carry `user_email`.
+- `PAPERLESS_URL` / `PAPERLESS_TOKEN` environment defaults now only apply to the owner account.
+- Invoice numbers stay unique per client (clients belong to one person, so no two people can collide) and each person has their own sequence.
+
+### Migration
+- `0011_per_user.sql` adds `user_id` to every content table (invoice items inherit through their invoice), backfills all existing rows to the owner (first admin), moves the personal settings into `user_settings` and demotes accounts that were admin only because they were auto-created (no local password).
+
+## [0.1.1] – [0.1.2]
+
 ### Added
 - Day calendar: in the month-end wizard and the invoice editor ("Days worked" card). Working days pre-selected, days toggle on/off, week numbers toggle a whole week; the selection drives the day (or hour) quantity. Picked dates are stored on the invoice (`worked_days`, migration 0010) and shown on the invoice page.
 - Month-end wizard (sidebar → Month-end): proposes one invoice per client for a month from the recurring profile, tracked time or the working-days calendar, pre-fills counter-style custom fields (`14/15ПП` → `15/16ПП`), creates all drafts in one click and lists the month's invoices with upload / email / mark-sent actions. `GET|POST /api/v1/month-end`.

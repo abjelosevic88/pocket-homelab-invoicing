@@ -90,17 +90,17 @@ func (s *Server) handleListDocuments(w http.ResponseWriter, r *http.Request) {
 	if id := parseClientID(q.Get("client_id")); id != nil {
 		f.ClientID = *id
 	}
-	list, err := s.store.ListDocuments(r.Context(), f)
+	list, err := s.store.ListDocuments(r.Context(), uidOf(r), f)
 	if err != nil {
 		s.fail(w, err, "list documents")
 		return
 	}
-	s.decorateDocuments(r.Context(), list)
+	s.decorateDocuments(r.Context(), uidOf(r), list)
 	writeJSON(w, http.StatusOK, list)
 }
 
 func (s *Server) handleDocumentCategories(w http.ResponseWriter, r *http.Request) {
-	cats, err := s.store.DocumentCategories(r.Context())
+	cats, err := s.store.DocumentCategories(r.Context(), uidOf(r))
 	if err != nil {
 		s.fail(w, err, "categories")
 		return
@@ -112,17 +112,17 @@ func (s *Server) handleDocumentCategories(w http.ResponseWriter, r *http.Request
 		}
 	}
 	until := time.Now().AddDate(0, 0, 30).Format("2006-01-02")
-	expiring, _ := s.store.ExpiringDocuments(r.Context(), until)
+	expiring, _ := s.store.ExpiringDocuments(r.Context(), uidOf(r), until)
 	writeJSON(w, http.StatusOK, map[string]any{"categories": cats, "expiring": expiring})
 }
 
 func (s *Server) handleGetDocument(w http.ResponseWriter, r *http.Request) {
-	d, err := s.store.GetDocument(r.Context(), idParam(r, "id"))
+	d, err := s.store.GetDocument(r.Context(), uidOf(r), idParam(r, "id"))
 	if err != nil {
 		s.fail(w, err, "get document")
 		return
 	}
-	d.Paperless = s.paperlessLink(r.Context(), "document", d.ID)
+	d.Paperless = s.paperlessLink(r.Context(), uidOf(r), "document", d.ID)
 	writeJSON(w, http.StatusOK, d)
 }
 
@@ -141,10 +141,11 @@ func (s *Server) handleUploadDocuments(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "no file field 'file'")
 		return
 	}
+	uid := uidOf(r)
 	meta := store.Document{
 		Title:     strings.TrimSpace(r.FormValue("title")),
 		Category:  strings.TrimSpace(r.FormValue("category")),
-		ClientID:  parseClientID(r.FormValue("client_id")),
+		ClientID:  s.ownClientID(ctx, uid, parseClientID(r.FormValue("client_id"))),
 		DocDate:   validDate(r.FormValue("doc_date")),
 		ExpiresAt: validDate(r.FormValue("expires_at")),
 		Notes:     strings.TrimSpace(r.FormValue("notes")),
@@ -168,26 +169,27 @@ func (s *Server) handleUploadDocuments(w http.ResponseWriter, r *http.Request) {
 		if d.Title == "" || len(files) > 1 {
 			d.Title = titleFromFilename(name)
 		}
-		if err := s.store.CreateDocument(ctx, &d); err != nil {
+		if err := s.store.CreateDocument(ctx, uid, &d); err != nil {
 			os.Remove(filepath.Join(s.cfg.DataDir, "documents", stored))
 			s.fail(w, err, "create document")
 			return
 		}
-		s.store.LogActivity(ctx, "document", d.ID, "created", "Uploaded "+d.Title)
+		s.store.LogActivity(ctx, uid, "document", d.ID, "created", "Uploaded "+d.Title)
 		saved = append(saved, d)
 	}
 	if r.FormValue("paperless") == "1" {
 		for i := range saved {
-			s.paperlessSendDocument(ctx, &saved[i], false)
+			s.paperlessSendDocument(ctx, uid, &saved[i], false)
 		}
 	}
-	s.decorateDocuments(ctx, saved)
+	s.decorateDocuments(ctx, uid, saved)
 	writeJSON(w, http.StatusCreated, saved)
 }
 
 func (s *Server) handleUpdateDocument(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	d, err := s.store.GetDocument(ctx, idParam(r, "id"))
+	uid := uidOf(r)
+	d, err := s.store.GetDocument(ctx, uid, idParam(r, "id"))
 	if err != nil {
 		s.fail(w, err, "get document")
 		return
@@ -209,26 +211,24 @@ func (s *Server) handleUpdateDocument(w http.ResponseWriter, r *http.Request) {
 		d.Title = titleFromFilename(d.Filename)
 	}
 	d.Category = strings.TrimSpace(in.Category)
-	d.ClientID = in.ClientID
-	if d.ClientID != nil && *d.ClientID <= 0 {
-		d.ClientID = nil
-	}
+	d.ClientID = s.ownClientID(ctx, uid, in.ClientID)
 	d.DocDate = validDate(in.DocDate)
 	d.ExpiresAt = validDate(in.ExpiresAt)
 	d.Notes = strings.TrimSpace(in.Notes)
-	if err := s.store.UpdateDocument(ctx, d); err != nil {
+	if err := s.store.UpdateDocument(ctx, uid, d); err != nil {
 		s.fail(w, err, "update document")
 		return
 	}
-	d, _ = s.store.GetDocument(ctx, d.ID)
-	d.Paperless = s.paperlessLink(ctx, "document", d.ID)
+	d, _ = s.store.GetDocument(ctx, uid, d.ID)
+	d.Paperless = s.paperlessLink(ctx, uid, "document", d.ID)
 	writeJSON(w, http.StatusOK, d)
 }
 
 // handleReplaceDocumentFile swaps the file but keeps the metadata.
 func (s *Server) handleReplaceDocumentFile(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	d, err := s.store.GetDocument(ctx, idParam(r, "id"))
+	uid := uidOf(r)
+	d, err := s.store.GetDocument(ctx, uid, idParam(r, "id"))
 	if err != nil {
 		s.fail(w, err, "get document")
 		return
@@ -255,19 +255,19 @@ func (s *Server) handleReplaceDocumentFile(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	old := s.documentPath(d)
-	if err := s.store.ReplaceDocumentFile(ctx, d.ID, name, stored, ct, size); err != nil {
+	if err := s.store.ReplaceDocumentFile(ctx, uid, d.ID, name, stored, ct, size); err != nil {
 		os.Remove(filepath.Join(s.cfg.DataDir, "documents", stored))
 		s.fail(w, err, "replace file")
 		return
 	}
 	_ = os.Remove(old)
-	d, _ = s.store.GetDocument(ctx, d.ID)
-	d.Paperless = s.paperlessLink(ctx, "document", d.ID)
+	d, _ = s.store.GetDocument(ctx, uid, d.ID)
+	d.Paperless = s.paperlessLink(ctx, uid, "document", d.ID)
 	writeJSON(w, http.StatusOK, d)
 }
 
 func (s *Server) handleDocumentFile(w http.ResponseWriter, r *http.Request) {
-	d, err := s.store.GetDocument(r.Context(), idParam(r, "id"))
+	d, err := s.store.GetDocument(r.Context(), uidOf(r), idParam(r, "id"))
 	if err != nil {
 		s.fail(w, err, "get document")
 		return
@@ -288,22 +288,23 @@ func (s *Server) handleDocumentFile(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleDeleteDocument(w http.ResponseWriter, r *http.Request) {
-	d, err := s.store.GetDocument(r.Context(), idParam(r, "id"))
+	uid := uidOf(r)
+	d, err := s.store.GetDocument(r.Context(), uid, idParam(r, "id"))
 	if err != nil {
 		s.fail(w, err, "get document")
 		return
 	}
 	_ = os.Remove(s.documentPath(d))
-	if err := s.store.DeleteDocument(r.Context(), d.ID); err != nil {
+	if err := s.store.DeleteDocument(r.Context(), uid, d.ID); err != nil {
 		s.fail(w, err, "delete document")
 		return
 	}
-	s.store.LogActivity(r.Context(), "document", d.ID, "deleted", "Removed "+d.Title)
+	s.store.LogActivity(r.Context(), uid, "document", d.ID, "deleted", "Removed "+d.Title)
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
 // decorateDocuments attaches Paperless link info to a list.
-func (s *Server) decorateDocuments(ctx context.Context, list []store.Document) {
+func (s *Server) decorateDocuments(ctx context.Context, uid int64, list []store.Document) {
 	if len(list) == 0 {
 		return
 	}
@@ -311,7 +312,7 @@ func (s *Server) decorateDocuments(ctx context.Context, list []store.Document) {
 	for i := range list {
 		ids[i] = list[i].ID
 	}
-	links, err := s.store.PaperlessLinksFor(ctx, "document", ids)
+	links, err := s.store.PaperlessLinksFor(ctx, uid, "document", ids)
 	if err != nil {
 		return
 	}

@@ -127,7 +127,7 @@ func recurringItems(rec *store.RecurringInvoice, st store.Settings, ps, pe strin
 }
 
 func (s *Server) handleListRecurring(w http.ResponseWriter, r *http.Request) {
-	list, err := s.store.ListRecurring(r.Context())
+	list, err := s.store.ListRecurring(r.Context(), uidOf(r))
 	if err != nil {
 		s.fail(w, err, "list recurring")
 		return
@@ -136,12 +136,12 @@ func (s *Server) handleListRecurring(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleGetRecurring(w http.ResponseWriter, r *http.Request) {
-	rec, err := s.store.GetRecurring(r.Context(), idParam(r, "id"))
+	rec, err := s.store.GetRecurring(r.Context(), uidOf(r), idParam(r, "id"))
 	if err != nil {
 		s.fail(w, err, "get recurring")
 		return
 	}
-	invoices, _, _ := s.store.ListInvoices(r.Context(), store.InvoiceFilter{Limit: 100})
+	invoices, _, _ := s.store.ListInvoices(r.Context(), uidOf(r), store.InvoiceFilter{Limit: 100})
 	var generated []store.Invoice
 	for _, inv := range invoices {
 		if inv.RecurringID != nil && *inv.RecurringID == rec.ID {
@@ -153,9 +153,10 @@ func (s *Server) handleGetRecurring(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleSaveRecurring(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	uid := uidOf(r)
 	var rec store.RecurringInvoice
 	if id := idParam(r, "id"); id > 0 {
-		existing, err := s.store.GetRecurring(ctx, id)
+		existing, err := s.store.GetRecurring(ctx, uid, id)
 		if err != nil {
 			s.fail(w, err, "get recurring")
 			return
@@ -167,12 +168,13 @@ func (s *Server) handleSaveRecurring(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rec.ID = idParam(r, "id")
-	client, err := s.store.GetClient(ctx, rec.ClientID)
+	client, err := s.store.GetClient(ctx, uid, rec.ClientID)
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, "client not found")
 		return
 	}
-	st, _ := s.store.GetSettings(ctx)
+	rec.TemplateID = s.ownTemplateID(ctx, uid, rec.TemplateID)
+	st, _ := s.store.GetSettings(ctx, uid)
 	if strings.TrimSpace(rec.Name) == "" {
 		rec.Name = client.Name + " – " + firstNonEmpty(rec.Frequency, "monthly")
 	}
@@ -217,16 +219,16 @@ func (s *Server) handleSaveRecurring(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "at least one line item is required")
 		return
 	}
-	if err := s.store.SaveRecurring(ctx, &rec); err != nil {
+	if err := s.store.SaveRecurring(ctx, uid, &rec); err != nil {
 		s.fail(w, err, "save recurring")
 		return
 	}
-	saved, _ := s.store.GetRecurring(ctx, rec.ID)
+	saved, _ := s.store.GetRecurring(ctx, uid, rec.ID)
 	writeJSON(w, http.StatusOK, saved)
 }
 
 func (s *Server) handleDeleteRecurring(w http.ResponseWriter, r *http.Request) {
-	if err := s.store.DeleteRecurring(r.Context(), idParam(r, "id")); err != nil {
+	if err := s.store.DeleteRecurring(r.Context(), uidOf(r), idParam(r, "id")); err != nil {
 		s.fail(w, err, "delete recurring")
 		return
 	}
@@ -234,12 +236,12 @@ func (s *Server) handleDeleteRecurring(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleRunRecurring(w http.ResponseWriter, r *http.Request) {
-	rec, err := s.store.GetRecurring(r.Context(), idParam(r, "id"))
+	rec, err := s.store.GetRecurring(r.Context(), uidOf(r), idParam(r, "id"))
 	if err != nil {
 		s.fail(w, err, "get recurring")
 		return
 	}
-	inv, err := s.runRecurring(r.Context(), rec, store.Today(), true)
+	inv, err := s.runRecurring(r.Context(), uidOf(r), rec, store.Today(), true)
 	if err != nil {
 		s.fail(w, err, "run recurring")
 		return
@@ -248,8 +250,8 @@ func (s *Server) handleRunRecurring(w http.ResponseWriter, r *http.Request) {
 }
 
 // runRecurring generates one invoice for the profile dated runDate and advances the schedule.
-func (s *Server) runRecurring(ctx context.Context, rec *store.RecurringInvoice, runDate string, manual bool) (*store.Invoice, error) {
-	st, err := s.store.GetSettings(ctx)
+func (s *Server) runRecurring(ctx context.Context, uid int64, rec *store.RecurringInvoice, runDate string, manual bool) (*store.Invoice, error) {
+	st, err := s.store.GetSettings(ctx, uid)
 	if err != nil {
 		return nil, err
 	}
@@ -263,21 +265,21 @@ func (s *Server) runRecurring(ctx context.Context, rec *store.RecurringInvoice, 
 	in.DueDate = t.AddDate(0, 0, rec.DueDays).Format("2006-01-02")
 	in.Items, _ = recurringItems(rec, st, ps, pe)
 	inv := &store.Invoice{Status: store.StatusDraft}
-	if err := s.applyInput(ctx, inv, in, st); err != nil {
+	if err := s.applyInput(ctx, uid, inv, in, st); err != nil {
 		return nil, err
 	}
 	inv.RecurringID = &rec.ID
-	inv.Number, err = s.nextNumber(ctx, &st, inv.IssueDate, inv.ClientName)
+	inv.Number, err = s.nextNumber(ctx, uid, &st, inv.IssueDate, inv.ClientName)
 	if err != nil {
 		return nil, err
 	}
 	if rec.AutoSend {
 		s.transition(inv, store.StatusSent)
 	}
-	if err := s.store.CreateInvoice(ctx, inv); err != nil {
+	if err := s.store.CreateInvoice(ctx, uid, inv); err != nil {
 		return nil, err
 	}
-	s.store.LogActivity(ctx, "invoice", inv.ID, "created", "Generated by recurring profile "+rec.Name)
+	s.store.LogActivity(ctx, uid, "invoice", inv.ID, "created", "Generated by recurring profile "+rec.Name)
 	// advance schedule
 	if !manual || rec.NextRun <= runDate {
 		rec.NextRun = NextRun(rec.NextRun, rec.Frequency, rec.Interval)
@@ -287,17 +289,17 @@ func (s *Server) runRecurring(ctx context.Context, rec *store.RecurringInvoice, 
 	if (rec.MaxOccurrences > 0 && rec.Occurrences >= rec.MaxOccurrences) || (rec.EndDate != nil && rec.NextRun > *rec.EndDate) {
 		rec.Status = "completed"
 	}
-	if err := s.store.SaveRecurring(ctx, rec); err != nil {
+	if err := s.store.SaveRecurring(ctx, uid, rec); err != nil {
 		return nil, err
 	}
-	full, _ := s.store.GetInvoice(ctx, inv.ID)
-	s.hooks.Emit("invoice.created", full)
+	full, _ := s.store.GetInvoice(ctx, uid, inv.ID)
+	s.hooks.Emit(uid, "invoice.created", full)
 	s.publishInvoice("invoicing.invoice_created", full)
 	if rec.AutoSend {
 		if err := s.sendInvoiceEmail(ctx, full, "", "", ""); err != nil {
 			s.log.Warn("recurring: auto-send failed", "invoice", full.Number, "err", err)
 		} else {
-			s.hooks.Emit("invoice.sent", full)
+			s.hooks.Emit(uid, "invoice.sent", full)
 			s.publishInvoice("invoicing.invoice_sent", full)
 		}
 	}
@@ -305,74 +307,27 @@ func (s *Server) runRecurring(ctx context.Context, rec *store.RecurringInvoice, 
 }
 
 // RunScheduler executes all periodic jobs once. Safe to call concurrently with requests.
+// Content jobs run per user, each with that user's own settings (SMTP, reminders, Paperless)
+// and touching only that user's records; exchange rates are box-wide.
 func (s *Server) RunScheduler(ctx context.Context) map[string]any {
 	result := map[string]any{}
-	// 1. Recurring invoices (catch up if several periods were missed while the container was down)
-	due, err := s.store.DueRecurring(ctx)
+	users, err := s.store.ListUsers(ctx)
 	if err != nil {
-		s.log.Error("scheduler: list due recurring", "err", err)
+		s.log.Error("scheduler: list users", "err", err)
 	}
-	generated := 0
-	for i := range due {
-		rec := &due[i]
-		for guard := 0; guard < 36 && rec.Status == "active" && rec.NextRun <= store.Today(); guard++ {
-			if _, err := s.runRecurring(ctx, rec, rec.NextRun, false); err != nil {
-				s.log.Error("scheduler: recurring failed", "profile", rec.Name, "err", err)
-				break
-			}
-			generated++
-		}
+	generated, overdue, resolved, reminders := 0, 0, 0, 0
+	for _, u := range users {
+		g, o, p, rm := s.runSchedulerFor(ctx, u.ID)
+		generated, overdue, resolved, reminders = generated+g, overdue+o, resolved+p, reminders+rm
 	}
 	result["recurring_generated"] = generated
-
-	// 2. Overdue marking
-	ids, err := s.store.MarkOverdue(ctx)
-	if err != nil {
-		s.log.Error("scheduler: mark overdue", "err", err)
-	}
-	for _, id := range ids {
-		if inv, err := s.store.GetInvoice(ctx, id); err == nil {
-			s.store.LogActivity(ctx, "invoice", id, "status", "Marked overdue")
-			s.hooks.Emit("invoice.overdue", inv)
-		}
-	}
-	result["marked_overdue"] = len(ids)
-
-	// 2b. Finish pending Paperless consume tasks (no-op when the integration is off)
-	if n := s.resolvePendingPaperless(ctx); n > 0 {
-		result["paperless_resolved"] = n
-	}
-
-	// 3. Payment reminders
-	st, _ := s.store.GetSettings(ctx)
-	reminders := 0
-	if st.RemindersEnabled && st.SMTPHost != "" {
-		var days []int
-		for _, d := range strings.Split(st.ReminderDays, ",") {
-			var n int
-			if _, err := fmt.Sscanf(strings.TrimSpace(d), "%d", &n); err == nil && n > 0 {
-				days = append(days, n)
-			}
-		}
-		list, _ := s.store.InvoicesDueForReminder(ctx, days)
-		for _, inv := range list {
-			full, err := s.store.GetInvoice(ctx, inv.ID)
-			if err != nil {
-				continue
-			}
-			subj := "Reminder: invoice {number} is overdue"
-			body := "Hi {client},\n\nThis is a friendly reminder that invoice {number} for {balance} was due on {due_date}.\n\nView it online: {link}\n\nThanks,\n{company}"
-			if err := s.sendInvoiceEmail(ctx, full, "", subj, body); err != nil {
-				s.log.Warn("scheduler: reminder failed", "invoice", full.Number, "err", err)
-				continue
-			}
-			s.store.LogActivity(ctx, "invoice", full.ID, "reminder", "Payment reminder sent")
-			reminders++
-		}
+	result["marked_overdue"] = overdue
+	if resolved > 0 {
+		result["paperless_resolved"] = resolved
 	}
 	result["reminders_sent"] = reminders
 
-	// 4. Exchange rates
+	// Exchange rates (box-wide reference data)
 	if s.rates.Name() != "none" {
 		last, _ := s.store.GetKV(ctx, "rates_last_refresh")
 		var lastT time.Time
@@ -391,6 +346,70 @@ func (s *Server) RunScheduler(ctx context.Context) map[string]any {
 	_ = s.store.PurgeSessions(ctx)
 	_ = s.store.SetKV(ctx, "scheduler_last_run", time.Now().UTC().Format(time.RFC3339))
 	return result
+}
+
+// runSchedulerFor runs one user's recurring invoices, overdue marking, Paperless
+// follow-ups and payment reminders.
+func (s *Server) runSchedulerFor(ctx context.Context, uid int64) (generated, overdue, resolved, reminders int) {
+	// 1. Recurring invoices (catch up if several periods were missed while the container was down)
+	due, err := s.store.DueRecurring(ctx, uid)
+	if err != nil {
+		s.log.Error("scheduler: list due recurring", "user", uid, "err", err)
+	}
+	for i := range due {
+		rec := &due[i]
+		for guard := 0; guard < 36 && rec.Status == "active" && rec.NextRun <= store.Today(); guard++ {
+			if _, err := s.runRecurring(ctx, uid, rec, rec.NextRun, false); err != nil {
+				s.log.Error("scheduler: recurring failed", "profile", rec.Name, "err", err)
+				break
+			}
+			generated++
+		}
+	}
+
+	// 2. Overdue marking
+	ids, err := s.store.MarkOverdue(ctx, uid)
+	if err != nil {
+		s.log.Error("scheduler: mark overdue", "user", uid, "err", err)
+	}
+	for _, id := range ids {
+		if inv, err := s.store.GetInvoice(ctx, uid, id); err == nil {
+			s.store.LogActivity(ctx, uid, "invoice", id, "status", "Marked overdue")
+			s.hooks.Emit(uid, "invoice.overdue", inv)
+		}
+	}
+	overdue = len(ids)
+
+	// 2b. Finish pending Paperless consume tasks (no-op when the user has no Paperless)
+	resolved = s.resolvePendingPaperless(ctx, uid)
+
+	// 3. Payment reminders with the user's own SMTP settings
+	st, _ := s.store.GetSettings(ctx, uid)
+	if st.RemindersEnabled && st.SMTPHost != "" {
+		var days []int
+		for _, d := range strings.Split(st.ReminderDays, ",") {
+			var n int
+			if _, err := fmt.Sscanf(strings.TrimSpace(d), "%d", &n); err == nil && n > 0 {
+				days = append(days, n)
+			}
+		}
+		list, _ := s.store.InvoicesDueForReminder(ctx, uid, days)
+		for _, inv := range list {
+			full, err := s.store.GetInvoice(ctx, uid, inv.ID)
+			if err != nil {
+				continue
+			}
+			subj := "Reminder: invoice {number} is overdue"
+			body := "Hi {client},\n\nThis is a friendly reminder that invoice {number} for {balance} was due on {due_date}.\n\nView it online: {link}\n\nThanks,\n{company}"
+			if err := s.sendInvoiceEmail(ctx, full, "", subj, body); err != nil {
+				s.log.Warn("scheduler: reminder failed", "invoice", full.Number, "err", err)
+				continue
+			}
+			s.store.LogActivity(ctx, uid, "invoice", full.ID, "reminder", "Payment reminder sent")
+			reminders++
+		}
+	}
+	return
 }
 
 func (s *Server) handleRunScheduler(w http.ResponseWriter, r *http.Request) {

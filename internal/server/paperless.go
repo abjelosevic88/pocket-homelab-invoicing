@@ -16,17 +16,20 @@ import (
 	"github.com/abjelosevic88/pocket-homelab-invoicing/internal/store"
 )
 
-// paperlessClient returns a client for the configured instance, or nil when the
-// integration is off. Settings win over environment defaults. The client is
-// cached so its name lookups stay warm between requests.
-func (s *Server) paperlessClient(ctx context.Context) (*paperless.Client, store.Settings) {
-	st, _ := s.store.GetSettings(ctx)
+// paperlessClient returns a client for the user's Paperless instance, or nil when they have
+// not configured one. The PAPERLESS_URL/PAPERLESS_TOKEN environment defaults are a single
+// box-wide credential, so they only stand in for the box owner; members configure their own.
+// Clients are cached per URL+token so name lookups stay warm between requests.
+func (s *Server) paperlessClient(ctx context.Context, uid int64) (*paperless.Client, store.Settings) {
+	st, _ := s.store.GetSettings(ctx, uid)
 	base, token := st.PaperlessURL, st.PaperlessToken
-	if base == "" {
-		base = s.cfg.PaperlessURL
-	}
-	if token == "" {
-		token = s.cfg.PaperlessToken
+	if uid > 0 && uid == s.store.OwnerID(ctx) {
+		if base == "" {
+			base = s.cfg.PaperlessURL
+		}
+		if token == "" {
+			token = s.cfg.PaperlessToken
+		}
 	}
 	if base == "" || token == "" {
 		return nil, st
@@ -34,11 +37,15 @@ func (s *Server) paperlessClient(ctx context.Context) (*paperless.Client, store.
 	key := base + "\x00" + token
 	s.plMu.Lock()
 	defer s.plMu.Unlock()
-	if s.pl == nil || s.plKey != key {
-		s.pl = paperless.New(base, token)
-		s.plKey = key
+	if s.pl == nil {
+		s.pl = map[string]*paperless.Client{}
 	}
-	return s.pl, st
+	cl, ok := s.pl[key]
+	if !ok {
+		cl = paperless.New(base, token)
+		s.pl[key] = cl
+	}
+	return cl, st
 }
 
 // paperlessExternalURL is the base for links opened in the user's browser.
@@ -70,8 +77,8 @@ func paperlessTags(st store.Settings) []string {
 }
 
 // paperlessLink loads a link and resolves a pending task if needed.
-func (s *Server) paperlessLink(ctx context.Context, kind string, refID int64) *store.PaperlessLink {
-	l, err := s.store.GetPaperlessLink(ctx, kind, refID)
+func (s *Server) paperlessLink(ctx context.Context, uid int64, kind string, refID int64) *store.PaperlessLink {
+	l, err := s.store.GetPaperlessLink(ctx, uid, kind, refID)
 	if err != nil || l == nil {
 		return nil
 	}
@@ -80,7 +87,7 @@ func (s *Server) paperlessLink(ctx context.Context, kind string, refID int64) *s
 
 // resolvePaperlessLink fills the browser URL and, for pending uploads, checks the task once.
 func (s *Server) resolvePaperlessLink(ctx context.Context, l *store.PaperlessLink) *store.PaperlessLink {
-	cl, st := s.paperlessClient(ctx)
+	cl, st := s.paperlessClient(ctx, l.UserID)
 	if l.PaperlessID == 0 && l.TaskID != "" && l.Error == "" && cl != nil {
 		if t, err := cl.Task(ctx, l.TaskID); err == nil {
 			s.applyTask(ctx, l, t)
@@ -96,27 +103,27 @@ func (s *Server) applyTask(ctx context.Context, l *store.PaperlessLink, t *paper
 		if t.RelatedDocument > 0 {
 			l.PaperlessID = t.RelatedDocument
 			l.TaskID = ""
-			_ = s.store.SavePaperlessLink(ctx, l)
+			_ = s.store.SavePaperlessLink(ctx, l.UserID, l)
 			return true
 		}
 		// Paperless reports success but no id, e.g. "Not consuming x: It is a duplicate of y (#123)".
 		l.Error = firstNonEmpty(t.Result, "consumed without a document id")
-		_ = s.store.SavePaperlessLink(ctx, l)
+		_ = s.store.SavePaperlessLink(ctx, l.UserID, l)
 		return true
 	case "FAILURE":
 		l.Error = firstNonEmpty(t.Result, "consume task failed")
-		_ = s.store.SavePaperlessLink(ctx, l)
+		_ = s.store.SavePaperlessLink(ctx, l.UserID, l)
 		return true
 	}
 	return false
 }
 
 // watchTask polls a fresh upload for a while so the UI sees the document id without waiting for the scheduler.
-func (s *Server) watchTask(kind string, refID int64, taskID string) {
+func (s *Server) watchTask(uid int64, kind string, refID int64, taskID string) {
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 		defer cancel()
-		cl, _ := s.paperlessClient(ctx)
+		cl, _ := s.paperlessClient(ctx, uid)
 		if cl == nil {
 			return
 		}
@@ -124,15 +131,15 @@ func (s *Server) watchTask(kind string, refID int64, taskID string) {
 		if err != nil || t == nil {
 			return
 		}
-		if l, _ := s.store.GetPaperlessLink(ctx, kind, refID); l != nil && l.TaskID == taskID {
+		if l, _ := s.store.GetPaperlessLink(ctx, uid, kind, refID); l != nil && l.TaskID == taskID {
 			s.applyTask(ctx, l, t)
 		}
 	}()
 }
 
 // paperlessUpload sends bytes to Paperless and records the link. wait=true blocks up to 20 s for the document id.
-func (s *Server) paperlessUpload(ctx context.Context, kind string, refID int64, filename string, data []byte, o paperless.UploadOptions, wait bool) (*store.PaperlessLink, error) {
-	cl, st := s.paperlessClient(ctx)
+func (s *Server) paperlessUpload(ctx context.Context, uid int64, kind string, refID int64, filename string, data []byte, o paperless.UploadOptions, wait bool) (*store.PaperlessLink, error) {
+	cl, st := s.paperlessClient(ctx, uid)
 	if cl == nil {
 		return nil, fmt.Errorf("paperless is not configured (Settings → Paperless)")
 	}
@@ -144,7 +151,7 @@ func (s *Server) paperlessUpload(ctx context.Context, kind string, refID int64, 
 		return nil, err
 	}
 	l := &store.PaperlessLink{Kind: kind, RefID: refID, TaskID: task, Title: o.Title}
-	if err := s.store.SavePaperlessLink(ctx, l); err != nil {
+	if err := s.store.SavePaperlessLink(ctx, uid, l); err != nil {
 		return nil, err
 	}
 	if wait {
@@ -156,15 +163,15 @@ func (s *Server) paperlessUpload(ctx context.Context, kind string, refID int64, 
 		}
 	}
 	if l.PaperlessID == 0 && l.Error == "" {
-		s.watchTask(kind, refID, task)
+		s.watchTask(uid, kind, refID, task)
 	}
 	l.URL = s.paperlessDocURL(st, l.PaperlessID)
 	return l, nil
 }
 
 // paperlessSendDocument archives a company document.
-func (s *Server) paperlessSendDocument(ctx context.Context, d *store.Document, wait bool) (*store.PaperlessLink, error) {
-	_, st := s.paperlessClient(ctx)
+func (s *Server) paperlessSendDocument(ctx context.Context, uid int64, d *store.Document, wait bool) (*store.PaperlessLink, error) {
+	_, st := s.paperlessClient(ctx, uid)
 	data, err := os.ReadFile(s.documentPath(d))
 	if err != nil {
 		return nil, err
@@ -174,11 +181,11 @@ func (s *Server) paperlessSendDocument(ctx context.Context, d *store.Document, w
 		o.DocumentType = d.Category
 	}
 	if d.ClientID != nil {
-		o.CorrespondentID, o.Correspondent = s.clientCorrespondent(ctx, *d.ClientID, d.ClientName, st)
+		o.CorrespondentID, o.Correspondent = s.clientCorrespondent(ctx, uid, *d.ClientID, d.ClientName, st)
 	}
-	l, err := s.paperlessUpload(ctx, "document", d.ID, d.Filename, data, o, wait)
+	l, err := s.paperlessUpload(ctx, uid, "document", d.ID, d.Filename, data, o, wait)
 	if err == nil {
-		s.store.LogActivity(ctx, "document", d.ID, "paperless", "Sent to Paperless")
+		s.store.LogActivity(ctx, uid, "document", d.ID, "paperless", "Sent to Paperless")
 	}
 	return l, err
 }
@@ -186,7 +193,8 @@ func (s *Server) paperlessSendDocument(ctx context.Context, d *store.Document, w
 // paperlessArchiveInvoice archives an invoice: the generated PDF and/or the uploaded
 // files, following the same mode as email attachments. Already-archived parts are skipped.
 func (s *Server) paperlessArchiveInvoice(ctx context.Context, inv *store.Invoice, source string, wait bool) ([]*store.PaperlessLink, error) {
-	cl, st := s.paperlessClient(ctx)
+	uid := inv.UserID
+	cl, st := s.paperlessClient(ctx, uid)
 	if cl == nil {
 		return nil, fmt.Errorf("paperless is not configured (Settings → Paperless)")
 	}
@@ -194,18 +202,18 @@ func (s *Server) paperlessArchiveInvoice(ctx context.Context, inv *store.Invoice
 		source = firstNonEmpty(st.EmailAttachmentMode, "generated")
 	}
 	base := paperless.UploadOptions{Created: inv.IssueDate, DocumentType: st.PaperlessInvoiceType}
-	base.CorrespondentID, base.Correspondent = s.clientCorrespondent(ctx, inv.ClientID, inv.ClientName, st)
+	base.CorrespondentID, base.Correspondent = s.clientCorrespondent(ctx, uid, inv.ClientID, inv.ClientName, st)
 	var out []*store.PaperlessLink
 	var firstErr error
 	if source == "generated" || source == "both" || (source == "uploaded" && len(inv.Attachments) == 0) {
-		if l, _ := s.store.GetPaperlessLink(ctx, "invoice", inv.ID); l == nil || (l.PaperlessID == 0 && l.Error != "") {
+		if l, _ := s.store.GetPaperlessLink(ctx, uid, "invoice", inv.ID); l == nil || (l.PaperlessID == 0 && l.Error != "") {
 			data, err := s.renderPDF(ctx, inv)
 			if err != nil {
 				return nil, err
 			}
 			o := base
 			o.Title = fmt.Sprintf("Invoice %s – %s", inv.Number, inv.ClientName)
-			l, err := s.paperlessUpload(ctx, "invoice", inv.ID, safeFilename(inv.Number)+".pdf", data, o, wait)
+			l, err := s.paperlessUpload(ctx, uid, "invoice", inv.ID, safeFilename(inv.Number)+".pdf", data, o, wait)
 			if err != nil {
 				firstErr = err
 			} else {
@@ -216,7 +224,7 @@ func (s *Server) paperlessArchiveInvoice(ctx context.Context, inv *store.Invoice
 	if source == "uploaded" || source == "both" {
 		for i := range inv.Attachments {
 			a := inv.Attachments[i]
-			if l, _ := s.store.GetPaperlessLink(ctx, "attachment", a.ID); l != nil && (l.PaperlessID > 0 || l.Error == "") {
+			if l, _ := s.store.GetPaperlessLink(ctx, uid, "attachment", a.ID); l != nil && (l.PaperlessID > 0 || l.Error == "") {
 				continue
 			}
 			data, err := os.ReadFile(s.attachmentPath(&a))
@@ -228,7 +236,7 @@ func (s *Server) paperlessArchiveInvoice(ctx context.Context, inv *store.Invoice
 			if len(inv.Attachments) > 1 {
 				o.Title += " (" + strings.TrimSuffix(a.Filename, filepath.Ext(a.Filename)) + ")"
 			}
-			l, err := s.paperlessUpload(ctx, "attachment", a.ID, a.Filename, data, o, wait)
+			l, err := s.paperlessUpload(ctx, uid, "attachment", a.ID, a.Filename, data, o, wait)
 			if err != nil {
 				if firstErr == nil {
 					firstErr = err
@@ -239,7 +247,7 @@ func (s *Server) paperlessArchiveInvoice(ctx context.Context, inv *store.Invoice
 		}
 	}
 	if len(out) > 0 {
-		s.store.LogActivity(ctx, "invoice", inv.ID, "paperless", fmt.Sprintf("Archived to Paperless (%d file(s))", len(out)))
+		s.store.LogActivity(ctx, uid, "invoice", inv.ID, "paperless", fmt.Sprintf("Archived to Paperless (%d file(s))", len(out)))
 	}
 	return out, firstErr
 }
@@ -251,7 +259,8 @@ func (s *Server) paperlessAutoArchive(inv *store.Invoice) {
 		return
 	}
 	ctx := context.Background()
-	cl, st := s.paperlessClient(ctx)
+	uid := inv.UserID
+	cl, st := s.paperlessClient(ctx, uid)
 	if cl == nil {
 		return
 	}
@@ -269,7 +278,7 @@ func (s *Server) paperlessAutoArchive(inv *store.Invoice) {
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 		defer cancel()
-		full, err := s.store.GetInvoice(ctx, id)
+		full, err := s.store.GetInvoice(ctx, uid, id)
 		if err != nil {
 			return
 		}
@@ -281,17 +290,17 @@ func (s *Server) paperlessAutoArchive(inv *store.Invoice) {
 
 // decorateInvoicePaperless adds link info to an invoice and its attachments.
 func (s *Server) decorateInvoicePaperless(ctx context.Context, inv *store.Invoice) {
-	cl, _ := s.paperlessClient(ctx)
+	cl, _ := s.paperlessClient(ctx, inv.UserID)
 	if cl == nil {
 		return
 	}
-	inv.Paperless = s.paperlessLink(ctx, "invoice", inv.ID)
+	inv.Paperless = s.paperlessLink(ctx, inv.UserID, "invoice", inv.ID)
 	if len(inv.Attachments) > 0 {
 		ids := make([]int64, len(inv.Attachments))
 		for i := range inv.Attachments {
 			ids[i] = inv.Attachments[i].ID
 		}
-		links, _ := s.store.PaperlessLinksFor(ctx, "attachment", ids)
+		links, _ := s.store.PaperlessLinksFor(ctx, inv.UserID, "attachment", ids)
 		for i := range inv.Attachments {
 			if l, ok := links[inv.Attachments[i].ID]; ok {
 				inv.Attachments[i].Paperless = s.resolvePaperlessLink(ctx, l)
@@ -300,13 +309,14 @@ func (s *Server) decorateInvoicePaperless(ctx context.Context, inv *store.Invoic
 	}
 }
 
-// resolvePendingPaperless is the scheduler step that finishes consume tasks.
-func (s *Server) resolvePendingPaperless(ctx context.Context) int {
-	cl, _ := s.paperlessClient(ctx)
+// resolvePendingPaperless is the scheduler step that finishes one user's consume tasks
+// with that user's Paperless credentials.
+func (s *Server) resolvePendingPaperless(ctx context.Context, uid int64) int {
+	cl, _ := s.paperlessClient(ctx, uid)
 	if cl == nil {
 		return 0
 	}
-	pending, err := s.store.PendingPaperlessLinks(ctx)
+	pending, err := s.store.PendingPaperlessLinks(ctx, uid)
 	if err != nil {
 		return 0
 	}
@@ -324,7 +334,7 @@ func (s *Server) resolvePendingPaperless(ctx context.Context) int {
 		// A task that never shows up (Paperless restarted, queue purged) is marked after a day.
 		if created, err := time.Parse(time.RFC3339Nano, l.CreatedAt); err == nil && time.Since(created) > 24*time.Hour {
 			l.Error = "consume task did not finish within 24 h"
-			_ = s.store.SavePaperlessLink(ctx, l)
+			_ = s.store.SavePaperlessLink(ctx, uid, l)
 		}
 	}
 	return n
@@ -333,7 +343,7 @@ func (s *Server) resolvePendingPaperless(ctx context.Context) int {
 // ---------- HTTP handlers ----------
 
 func (s *Server) handlePaperlessStatus(w http.ResponseWriter, r *http.Request) {
-	cl, st := s.paperlessClient(r.Context())
+	cl, st := s.paperlessClient(r.Context(), uidOf(r))
 	if cl == nil {
 		writeJSON(w, http.StatusOK, map[string]any{"configured": false})
 		return
@@ -359,12 +369,17 @@ func (s *Server) handleTestPaperless(w http.ResponseWriter, r *http.Request) {
 		Token string `json:"token"`
 	}
 	_ = decode(r, &in)
-	st, _ := s.store.GetSettings(r.Context())
+	uid := uidOf(r)
+	st, _ := s.store.GetSettings(r.Context(), uid)
+	envURL, envToken := "", ""
+	if uid == s.store.OwnerID(r.Context()) { // the environment credential is the owner's
+		envURL, envToken = s.cfg.PaperlessURL, s.cfg.PaperlessToken
+	}
 	if in.Token == "" {
-		in.Token = firstNonEmpty(st.PaperlessToken, s.cfg.PaperlessToken)
+		in.Token = firstNonEmpty(st.PaperlessToken, envToken)
 	}
 	if in.URL == "" {
-		in.URL = firstNonEmpty(st.PaperlessURL, s.cfg.PaperlessURL)
+		in.URL = firstNonEmpty(st.PaperlessURL, envURL)
 	}
 	cl := paperless.New(in.URL, in.Token)
 	if !cl.Configured() {
@@ -382,7 +397,7 @@ func (s *Server) handleTestPaperless(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) requirePaperless(w http.ResponseWriter, r *http.Request) (*paperless.Client, store.Settings, bool) {
-	cl, st := s.paperlessClient(r.Context())
+	cl, st := s.paperlessClient(r.Context(), uidOf(r))
 	if cl == nil {
 		writeErr(w, http.StatusConflict, "paperless is not configured (Settings → Paperless)")
 		return nil, st, false
@@ -415,7 +430,7 @@ func (s *Server) handlePaperlessSearch(w http.ResponseWriter, r *http.Request) {
 	}
 	linked := map[int64]*store.PaperlessLink{}
 	for _, d := range res.Results {
-		if l, _ := s.store.PaperlessLinkByPaperlessID(r.Context(), d.ID); l != nil {
+		if l, _ := s.store.PaperlessLinkByPaperlessID(r.Context(), uidOf(r), d.ID); l != nil {
 			linked[d.ID] = l
 		}
 	}
@@ -475,6 +490,7 @@ func (s *Server) handlePaperlessImport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := r.Context()
+	uid := uidOf(r)
 	id := idParam(r, "pid")
 	if id <= 0 {
 		writeErr(w, http.StatusBadRequest, "invalid paperless document id")
@@ -486,8 +502,9 @@ func (s *Server) handlePaperlessImport(w http.ResponseWriter, r *http.Request) {
 		Original bool   `json:"original"`
 	}
 	_ = decode(r, &in)
-	if l, _ := s.store.PaperlessLinkByPaperlessID(ctx, id); l != nil && l.Kind == "document" {
-		if d, err := s.store.GetDocument(ctx, l.RefID); err == nil {
+	in.ClientID = s.ownClientID(ctx, uid, in.ClientID)
+	if l, _ := s.store.PaperlessLinkByPaperlessID(ctx, uid, id); l != nil && l.Kind == "document" {
+		if d, err := s.store.GetDocument(ctx, uid, l.RefID); err == nil {
 			d.Paperless = s.resolvePaperlessLink(ctx, l)
 			writeJSON(w, http.StatusOK, d)
 			return
@@ -522,7 +539,7 @@ func (s *Server) handlePaperlessImport(w http.ResponseWriter, r *http.Request) {
 		d.Category = pd.DocumentType
 	}
 	if d.ClientID == nil && pd.Correspondent != "" {
-		if clients, err := s.store.ListClients(ctx, true, pd.Correspondent); err == nil {
+		if clients, err := s.store.ListClients(ctx, uid, true, pd.Correspondent); err == nil {
 			for _, c := range clients {
 				if strings.EqualFold(c.Name, pd.Correspondent) {
 					cid := c.ID
@@ -532,15 +549,15 @@ func (s *Server) handlePaperlessImport(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	if err := s.store.CreateDocument(ctx, d); err != nil {
+	if err := s.store.CreateDocument(ctx, uid, d); err != nil {
 		os.Remove(filepath.Join(s.cfg.DataDir, "documents", stored))
 		s.fail(w, err, "create document")
 		return
 	}
-	_ = s.store.SavePaperlessLink(ctx, &store.PaperlessLink{Kind: "document", RefID: d.ID, PaperlessID: pd.ID, Title: pd.Title})
-	s.store.LogActivity(ctx, "document", d.ID, "created", "Imported from Paperless #"+strconv.FormatInt(pd.ID, 10))
-	d, _ = s.store.GetDocument(ctx, d.ID)
-	d.Paperless = s.paperlessLink(ctx, "document", d.ID)
+	_ = s.store.SavePaperlessLink(ctx, uid, &store.PaperlessLink{Kind: "document", RefID: d.ID, PaperlessID: pd.ID, Title: pd.Title})
+	s.store.LogActivity(ctx, uid, "document", d.ID, "created", "Imported from Paperless #"+strconv.FormatInt(pd.ID, 10))
+	d, _ = s.store.GetDocument(ctx, uid, d.ID)
+	d.Paperless = s.paperlessLink(ctx, uid, "document", d.ID)
 	writeJSON(w, http.StatusCreated, d)
 }
 
@@ -548,16 +565,17 @@ func (s *Server) handleDocumentToPaperless(w http.ResponseWriter, r *http.Reques
 	if _, _, ok := s.requirePaperless(w, r); !ok {
 		return
 	}
-	d, err := s.store.GetDocument(r.Context(), idParam(r, "id"))
+	uid := uidOf(r)
+	d, err := s.store.GetDocument(r.Context(), uid, idParam(r, "id"))
 	if err != nil {
 		s.fail(w, err, "get document")
 		return
 	}
-	if l, _ := s.store.GetPaperlessLink(r.Context(), "document", d.ID); l != nil && l.PaperlessID > 0 && r.URL.Query().Get("force") != "1" {
+	if l, _ := s.store.GetPaperlessLink(r.Context(), uid, "document", d.ID); l != nil && l.PaperlessID > 0 && r.URL.Query().Get("force") != "1" {
 		writeJSON(w, http.StatusOK, s.resolvePaperlessLink(r.Context(), l))
 		return
 	}
-	l, err := s.paperlessSendDocument(r.Context(), d, true)
+	l, err := s.paperlessSendDocument(r.Context(), uid, d, true)
 	if err != nil {
 		writeErr(w, http.StatusBadGateway, err.Error())
 		return
@@ -569,7 +587,7 @@ func (s *Server) handleInvoiceToPaperless(w http.ResponseWriter, r *http.Request
 	if _, _, ok := s.requirePaperless(w, r); !ok {
 		return
 	}
-	inv, err := s.store.GetInvoice(r.Context(), idParam(r, "id"))
+	inv, err := s.store.GetInvoice(r.Context(), uidOf(r), idParam(r, "id"))
 	if err != nil {
 		s.fail(w, err, "get invoice")
 		return
@@ -583,7 +601,7 @@ func (s *Server) handleInvoiceToPaperless(w http.ResponseWriter, r *http.Request
 		writeErr(w, http.StatusBadGateway, err.Error())
 		return
 	}
-	full, _ := s.store.GetInvoice(r.Context(), inv.ID)
+	full, _ := s.store.GetInvoice(r.Context(), uidOf(r), inv.ID)
 	s.decorateInvoicePaperless(r.Context(), full)
 	writeJSON(w, http.StatusOK, full)
 }
@@ -592,12 +610,13 @@ func (s *Server) handleAttachmentToPaperless(w http.ResponseWriter, r *http.Requ
 	if _, st, ok := s.requirePaperless(w, r); !ok {
 		return
 	} else {
-		a, err := s.store.GetAttachment(r.Context(), idParam(r, "aid"))
+		uid := uidOf(r)
+		a, err := s.store.GetAttachment(r.Context(), uid, idParam(r, "aid"))
 		if err != nil {
 			s.fail(w, err, "get attachment")
 			return
 		}
-		inv, err := s.store.GetInvoice(r.Context(), a.InvoiceID)
+		inv, err := s.store.GetInvoice(r.Context(), uid, a.InvoiceID)
 		if err != nil {
 			s.fail(w, err, "get invoice")
 			return
@@ -608,13 +627,13 @@ func (s *Server) handleAttachmentToPaperless(w http.ResponseWriter, r *http.Requ
 			return
 		}
 		o := paperless.UploadOptions{Title: fmt.Sprintf("Invoice %s – %s", inv.Number, inv.ClientName), Created: inv.IssueDate, DocumentType: st.PaperlessInvoiceType}
-		o.CorrespondentID, o.Correspondent = s.clientCorrespondent(r.Context(), inv.ClientID, inv.ClientName, st)
-		l, err := s.paperlessUpload(r.Context(), "attachment", a.ID, a.Filename, data, o, true)
+		o.CorrespondentID, o.Correspondent = s.clientCorrespondent(r.Context(), uid, inv.ClientID, inv.ClientName, st)
+		l, err := s.paperlessUpload(r.Context(), uid, "attachment", a.ID, a.Filename, data, o, true)
 		if err != nil {
 			writeErr(w, http.StatusBadGateway, err.Error())
 			return
 		}
-		s.store.LogActivity(r.Context(), "invoice", inv.ID, "paperless", "Sent "+a.Filename+" to Paperless")
+		s.store.LogActivity(r.Context(), uid, "invoice", inv.ID, "paperless", "Sent "+a.Filename+" to Paperless")
 		writeJSON(w, http.StatusOK, l)
 	}
 }
@@ -628,7 +647,7 @@ func (s *Server) handleUnlinkPaperless(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "kind must be document, invoice or attachment")
 		return
 	}
-	if err := s.store.DeletePaperlessLink(r.Context(), kind, idParam(r, "id")); err != nil {
+	if err := s.store.DeletePaperlessLink(r.Context(), uidOf(r), kind, idParam(r, "id")); err != nil {
 		s.fail(w, err, "unlink")
 		return
 	}
@@ -637,9 +656,9 @@ func (s *Server) handleUnlinkPaperless(w http.ResponseWriter, r *http.Request) {
 
 // clientCorrespondent decides which Paperless correspondent an upload for a client gets:
 // the one linked on the client, else (when enabled) one named after the client.
-func (s *Server) clientCorrespondent(ctx context.Context, clientID int64, clientName string, st store.Settings) (int64, string) {
+func (s *Server) clientCorrespondent(ctx context.Context, uid, clientID int64, clientName string, st store.Settings) (int64, string) {
 	if clientID > 0 {
-		if c, err := s.store.GetClient(ctx, clientID); err == nil && c.PaperlessCorrespondentID > 0 {
+		if c, err := s.store.GetClient(ctx, uid, clientID); err == nil && c.PaperlessCorrespondentID > 0 {
 			return c.PaperlessCorrespondentID, ""
 		}
 	}
@@ -682,9 +701,9 @@ func (s *Server) handleCreateCorrespondent(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	if in.ClientID > 0 {
-		if c, err := s.store.GetClient(r.Context(), in.ClientID); err == nil {
+		if c, err := s.store.GetClient(r.Context(), uidOf(r), in.ClientID); err == nil {
 			c.PaperlessCorrespondentID, c.PaperlessCorrespondent = id, cl.Name(r.Context(), "correspondents", id)
-			_ = s.store.UpdateClient(r.Context(), c)
+			_ = s.store.UpdateClient(r.Context(), uidOf(r), c)
 		}
 	}
 	writeJSON(w, http.StatusOK, paperless.Entry{ID: id, Name: cl.Name(r.Context(), "correspondents", id)})
@@ -702,7 +721,8 @@ func (s *Server) handleSyncCorrespondents(w http.ResponseWriter, r *http.Request
 	_ = decode(r, &in)
 	ctx := r.Context()
 	cl.Refresh()
-	clients, err := s.store.ListClients(ctx, false, "")
+	uid := uidOf(r)
+	clients, err := s.store.ListClients(ctx, uid, false, "")
 	if err != nil {
 		s.fail(w, err, "clients")
 		return
@@ -742,7 +762,7 @@ func (s *Server) handleSyncCorrespondents(w http.ResponseWriter, r *http.Request
 			continue
 		}
 		c.PaperlessCorrespondentID, c.PaperlessCorrespondent = id, cl.Name(ctx, "correspondents", id)
-		if err := s.store.UpdateClient(ctx, c); err != nil {
+		if err := s.store.UpdateClient(ctx, uid, c); err != nil {
 			skipped = append(skipped, c.Name+": "+err.Error())
 		}
 	}

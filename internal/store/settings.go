@@ -136,9 +136,20 @@ func DefaultSettings() Settings {
 	}
 }
 
-// GetSettings loads settings, applying defaults for missing keys.
-func (s *Store) GetSettings(ctx context.Context) (Settings, error) {
-	out := DefaultSettings()
+// boxKeys are the settings that stay box-wide (admin-only): they describe the shared
+// exchange-rate table, not anyone's business. Everything else in Settings is personal.
+var boxKeys = []string{"base_currency", "exchange_rate_provider", "setup_complete"}
+
+// boxSettings is the box-wide part stored in the global settings row 'app'.
+type boxSettings struct {
+	BaseCurrency         string `json:"base_currency"`
+	ExchangeRateProvider string `json:"exchange_rate_provider"`
+	SetupComplete        bool   `json:"setup_complete"`
+}
+
+func (s *Store) getBox(ctx context.Context) (boxSettings, error) {
+	d := DefaultSettings()
+	out := boxSettings{BaseCurrency: d.BaseCurrency}
 	var raw string
 	err := s.DB.QueryRowContext(ctx, `SELECT value FROM settings WHERE key = 'app'`).Scan(&raw)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -150,17 +161,75 @@ func (s *Store) GetSettings(ctx context.Context) (Settings, error) {
 	if err := json.Unmarshal([]byte(raw), &out); err != nil {
 		return out, err
 	}
+	if out.BaseCurrency == "" {
+		out.BaseCurrency = d.BaseCurrency
+	}
 	return out, nil
 }
 
-// SaveSettings persists settings.
-func (s *Store) SaveSettings(ctx context.Context, st Settings) error {
+// GetGlobalSettings returns defaults plus the box-wide fields (base currency, rate
+// provider, setup flag). It carries no personal data; use GetSettings for a user.
+func (s *Store) GetGlobalSettings(ctx context.Context) (Settings, error) {
+	out := DefaultSettings()
+	box, err := s.getBox(ctx)
+	if err != nil {
+		return out, err
+	}
+	out.BaseCurrency, out.ExchangeRateProvider, out.SetupComplete = box.BaseCurrency, box.ExchangeRateProvider, box.SetupComplete
+	return out, nil
+}
+
+// SaveGlobalSettings persists only the box-wide fields of st.
+func (s *Store) SaveGlobalSettings(ctx context.Context, st Settings) error {
+	b, err := json.Marshal(boxSettings{BaseCurrency: st.BaseCurrency, ExchangeRateProvider: st.ExchangeRateProvider, SetupComplete: st.SetupComplete})
+	if err != nil {
+		return err
+	}
+	return s.SetKV(ctx, "app", string(b))
+}
+
+// GetSettings loads one user's settings (defaults for missing keys) merged with the
+// box-wide fields.
+func (s *Store) GetSettings(ctx context.Context, uid int64) (Settings, error) {
+	out := DefaultSettings()
+	var raw string
+	err := s.DB.QueryRowContext(ctx, `SELECT value FROM user_settings WHERE user_id = ?`, uid).Scan(&raw)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return out, err
+	}
+	if err == nil {
+		if err := json.Unmarshal([]byte(raw), &out); err != nil {
+			return out, err
+		}
+	}
+	box, err := s.getBox(ctx)
+	if err != nil {
+		return out, err
+	}
+	out.BaseCurrency, out.ExchangeRateProvider, out.SetupComplete = box.BaseCurrency, box.ExchangeRateProvider, box.SetupComplete
+	return out, nil
+}
+
+// SaveSettings persists a user's personal settings. Box-wide fields are ignored here;
+// they are written by SaveGlobalSettings (admins only).
+func (s *Store) SaveSettings(ctx context.Context, uid int64, st Settings) error {
+	if uid <= 0 {
+		return errors.New("save settings: no user")
+	}
 	b, err := json.Marshal(st)
 	if err != nil {
 		return err
 	}
-	_, err = s.DB.ExecContext(ctx, `INSERT INTO settings (key, value, updated_at) VALUES ('app', ?, ?)
-		ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`, string(b), Now())
+	var m map[string]any
+	if err := json.Unmarshal(b, &m); err != nil {
+		return err
+	}
+	for _, k := range boxKeys {
+		delete(m, k)
+	}
+	b, _ = json.Marshal(m)
+	_, err = s.DB.ExecContext(ctx, `INSERT INTO user_settings (user_id, value, updated_at) VALUES (?, ?, ?)
+		ON CONFLICT(user_id) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`, uid, string(b), Now())
 	return err
 }
 

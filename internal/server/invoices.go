@@ -51,8 +51,8 @@ func emptyToNil(p *string) *string {
 }
 
 // applyInput copies validated input onto an invoice and recomputes totals.
-func (s *Server) applyInput(ctx context.Context, inv *store.Invoice, in invoiceInput, st store.Settings) error {
-	client, err := s.store.GetClient(ctx, in.ClientID)
+func (s *Server) applyInput(ctx context.Context, uid int64, inv *store.Invoice, in invoiceInput, st store.Settings) error {
+	client, err := s.store.GetClient(ctx, uid, in.ClientID)
 	if err != nil {
 		return fmt.Errorf("client not found")
 	}
@@ -91,10 +91,7 @@ func (s *Server) applyInput(ctx context.Context, inv *store.Invoice, in invoiceI
 	}
 	inv.DiscountValue = in.DiscountValue
 	inv.Notes, inv.Terms, inv.Footer = in.Notes, in.Terms, in.Footer
-	inv.TemplateID = in.TemplateID
-	if inv.TemplateID != nil && *inv.TemplateID == 0 {
-		inv.TemplateID = nil
-	}
+	inv.TemplateID = s.ownTemplateID(ctx, uid, in.TemplateID)
 	if in.CustomFields != nil {
 		inv.CustomFields = map[string]string{}
 		for k, v := range in.CustomFields {
@@ -149,7 +146,7 @@ func (s *Server) applyInput(ctx context.Context, inv *store.Invoice, in invoiceI
 }
 
 // nextNumber allocates the next invoice number and bumps the sequence.
-func (s *Server) nextNumber(ctx context.Context, st *store.Settings, issueDate string, clientName string) (string, error) {
+func (s *Server) nextNumber(ctx context.Context, uid int64, st *store.Settings, issueDate string, clientName string) (string, error) {
 	t, err := time.Parse("2006-01-02", issueDate)
 	if err != nil {
 		t = time.Now()
@@ -163,13 +160,13 @@ func (s *Server) nextNumber(ctx context.Context, st *store.Settings, issueDate s
 	}
 	for tries := 0; tries < 1000; tries++ {
 		n := numbering.Format(st.InvoiceNumberFmt, st.InvoiceNextSeq, t, numbering.ClientCode(clientName))
-		exists, err := s.store.NumberExists(ctx, n, 0)
+		exists, err := s.store.NumberExists(ctx, uid, n, 0)
 		if err != nil {
 			return "", err
 		}
 		st.InvoiceNextSeq++
 		if !exists {
-			return n, s.store.SaveSettings(ctx, *st)
+			return n, s.store.SaveSettings(ctx, uid, *st)
 		}
 	}
 	return "", fmt.Errorf("could not allocate invoice number")
@@ -178,7 +175,7 @@ func (s *Server) nextNumber(ctx context.Context, st *store.Settings, issueDate s
 // handleCheckNumber tells the editor whether a number is free, taken by this client, or used by others.
 func (s *Server) handleCheckNumber(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
-	same, others, err := s.store.NumberUsage(r.Context(), q.Get("number"), qInt64(r, "client_id"), qInt64(r, "exclude"))
+	same, others, err := s.store.NumberUsage(r.Context(), uidOf(r), q.Get("number"), qInt64(r, "client_id"), qInt64(r, "exclude"))
 	if err != nil {
 		s.fail(w, err, "check number")
 		return
@@ -190,7 +187,7 @@ func (s *Server) handleCheckNumber(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleNextNumber(w http.ResponseWriter, r *http.Request) {
-	st, err := s.store.GetSettings(r.Context())
+	st, err := s.store.GetSettings(r.Context(), uidOf(r))
 	if err != nil {
 		s.fail(w, err, "settings")
 		return
@@ -206,7 +203,7 @@ func (s *Server) handleNextNumber(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleListInvoices(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	f := store.InvoiceFilter{Status: q.Get("status"), ClientID: qInt64(r, "client_id"), Search: q.Get("q"), From: q.Get("from"), To: q.Get("to"), Limit: qInt(r, "limit", 50), Offset: qInt(r, "offset", 0)}
-	list, total, err := s.store.ListInvoices(r.Context(), f)
+	list, total, err := s.store.ListInvoices(r.Context(), uidOf(r), f)
 	if err != nil {
 		s.fail(w, err, "list invoices")
 		return
@@ -215,7 +212,7 @@ func (s *Server) handleListInvoices(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleGetInvoice(w http.ResponseWriter, r *http.Request) {
-	inv, err := s.store.GetInvoice(r.Context(), idParam(r, "id"))
+	inv, err := s.store.GetInvoice(r.Context(), uidOf(r), idParam(r, "id"))
 	if err != nil {
 		s.fail(w, err, "get invoice")
 		return
@@ -231,7 +228,8 @@ func (s *Server) handleCreateInvoice(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "invalid json: "+err.Error())
 		return
 	}
-	st, err := s.store.GetSettings(ctx)
+	uid := uidOf(r)
+	st, err := s.store.GetSettings(ctx, uid)
 	if err != nil {
 		s.fail(w, err, "settings")
 		return
@@ -242,43 +240,44 @@ func (s *Server) handleCreateInvoice(w http.ResponseWriter, r *http.Request) {
 		now := store.Now()
 		inv.SentAt = &now
 	}
-	if err := s.applyInput(ctx, inv, in, st); err != nil {
+	if err := s.applyInput(ctx, uid, inv, in, st); err != nil {
 		writeErr(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	if in.Number != "" {
-		if same, _, _ := s.store.NumberUsage(ctx, in.Number, inv.ClientID, 0); same {
+		if same, _, _ := s.store.NumberUsage(ctx, uid, in.Number, inv.ClientID, 0); same {
 			writeErr(w, http.StatusConflict, "this client already has an invoice with that number")
 			return
 		}
 		inv.Number = in.Number
 	} else {
-		inv.Number, err = s.nextNumber(ctx, &st, inv.IssueDate, inv.ClientName)
+		inv.Number, err = s.nextNumber(ctx, uid, &st, inv.IssueDate, inv.ClientName)
 		if err != nil {
 			s.fail(w, err, "allocate number")
 			return
 		}
 	}
-	if err := s.store.CreateInvoice(ctx, inv); err != nil {
+	if err := s.store.CreateInvoice(ctx, uid, inv); err != nil {
 		s.fail(w, err, "create invoice")
 		return
 	}
 	if len(in.TimeEntryIDs) > 0 {
-		_ = s.store.LinkTimeEntries(ctx, inv.ID, in.TimeEntryIDs)
+		_ = s.store.LinkTimeEntries(ctx, uid, inv.ID, in.TimeEntryIDs)
 	}
 	if len(in.ExpenseIDs) > 0 {
-		_ = s.store.LinkExpenses(ctx, inv.ID, in.ExpenseIDs)
+		_ = s.store.LinkExpenses(ctx, uid, inv.ID, in.ExpenseIDs)
 	}
-	s.store.LogActivity(ctx, "invoice", inv.ID, "created", "Invoice "+inv.Number+" created")
-	full, _ := s.store.GetInvoice(ctx, inv.ID)
-	s.hooks.Emit("invoice.created", full)
+	s.store.LogActivity(ctx, uid, "invoice", inv.ID, "created", "Invoice "+inv.Number+" created")
+	full, _ := s.store.GetInvoice(ctx, uid, inv.ID)
+	s.hooks.Emit(uid, "invoice.created", full)
 	s.publishInvoice("invoicing.invoice_created", full)
 	writeJSON(w, http.StatusCreated, full)
 }
 
 func (s *Server) handleUpdateInvoice(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	inv, err := s.store.GetInvoice(ctx, idParam(r, "id"))
+	uid := uidOf(r)
+	inv, err := s.store.GetInvoice(ctx, uid, idParam(r, "id"))
 	if err != nil {
 		s.fail(w, err, "get invoice")
 		return
@@ -288,13 +287,13 @@ func (s *Server) handleUpdateInvoice(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "invalid json: "+err.Error())
 		return
 	}
-	st, _ := s.store.GetSettings(ctx)
-	if err := s.applyInput(ctx, inv, in, st); err != nil {
+	st, _ := s.store.GetSettings(ctx, uid)
+	if err := s.applyInput(ctx, uid, inv, in, st); err != nil {
 		writeErr(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	if in.Number != "" && in.Number != inv.Number {
-		if same, _, _ := s.store.NumberUsage(ctx, in.Number, inv.ClientID, inv.ID); same {
+		if same, _, _ := s.store.NumberUsage(ctx, uid, in.Number, inv.ClientID, inv.ID); same {
 			writeErr(w, http.StatusConflict, "this client already has an invoice with that number")
 			return
 		}
@@ -303,20 +302,20 @@ func (s *Server) handleUpdateInvoice(w http.ResponseWriter, r *http.Request) {
 	if in.Status != "" && in.Status != inv.Status {
 		s.transition(inv, in.Status)
 	}
-	if err := s.store.UpdateInvoice(ctx, inv); err != nil {
+	if err := s.store.UpdateInvoice(ctx, uid, inv); err != nil {
 		s.fail(w, err, "update invoice")
 		return
 	}
 	if len(in.TimeEntryIDs) > 0 {
-		_ = s.store.LinkTimeEntries(ctx, inv.ID, in.TimeEntryIDs)
+		_ = s.store.LinkTimeEntries(ctx, uid, inv.ID, in.TimeEntryIDs)
 	}
-	full, err := s.store.RecalcAmountPaid(ctx, inv.ID)
+	full, err := s.store.RecalcAmountPaid(ctx, uid, inv.ID)
 	if err != nil {
 		s.fail(w, err, "recalc")
 		return
 	}
-	s.store.LogActivity(ctx, "invoice", inv.ID, "updated", "Invoice "+inv.Number+" updated")
-	s.hooks.Emit("invoice.updated", full)
+	s.store.LogActivity(ctx, uid, "invoice", inv.ID, "updated", "Invoice "+inv.Number+" updated")
+	s.hooks.Emit(uid, "invoice.updated", full)
 	writeJSON(w, http.StatusOK, full)
 }
 
@@ -342,7 +341,8 @@ func (s *Server) transition(inv *store.Invoice, status string) {
 
 func (s *Server) handleInvoiceStatus(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	inv, err := s.store.GetInvoice(ctx, idParam(r, "id"))
+	uid := uidOf(r)
+	inv, err := s.store.GetInvoice(ctx, uid, idParam(r, "id"))
 	if err != nil {
 		s.fail(w, err, "get invoice")
 		return
@@ -363,27 +363,27 @@ func (s *Server) handleInvoiceStatus(w http.ResponseWriter, r *http.Request) {
 	if in.Status == store.StatusPaid && inv.Total-inv.AmountPaid > 0 {
 		// Record the remaining balance as a payment so reports stay consistent.
 		p := &store.Payment{InvoiceID: inv.ID, Date: store.Today(), Amount: inv.Total - inv.AmountPaid, Currency: inv.Currency, ExchangeRate: 1, AppliedAmount: inv.Total - inv.AmountPaid, Method: "other", Notes: "Marked as paid"}
-		if err := s.store.CreatePayment(ctx, p); err != nil {
+		if err := s.store.CreatePayment(ctx, uid, p); err != nil {
 			s.fail(w, err, "create payment")
 			return
 		}
 	}
 	s.transition(inv, in.Status)
-	if err := s.store.UpdateInvoiceStatus(ctx, inv.ID, inv.Status, inv.SentAt, inv.ViewedAt, inv.PaidAt); err != nil {
+	if err := s.store.UpdateInvoiceStatus(ctx, uid, inv.ID, inv.Status, inv.SentAt, inv.ViewedAt, inv.PaidAt); err != nil {
 		s.fail(w, err, "update status")
 		return
 	}
-	full, err := s.store.RecalcAmountPaid(ctx, inv.ID)
+	full, err := s.store.RecalcAmountPaid(ctx, uid, inv.ID)
 	if err != nil {
 		s.fail(w, err, "recalc")
 		return
 	}
 	if in.Status == store.StatusDraft || in.Status == store.StatusCancelled {
-		_ = s.store.UpdateInvoiceStatus(ctx, inv.ID, in.Status, nil, nil, nil)
-		full, _ = s.store.GetInvoice(ctx, inv.ID)
+		_ = s.store.UpdateInvoiceStatus(ctx, uid, inv.ID, in.Status, nil, nil, nil)
+		full, _ = s.store.GetInvoice(ctx, uid, inv.ID)
 	}
-	s.store.LogActivity(ctx, "invoice", inv.ID, "status", "Status changed to "+full.Status)
-	s.hooks.Emit("invoice."+full.Status, full)
+	s.store.LogActivity(ctx, uid, "invoice", inv.ID, "status", "Status changed to "+full.Status)
+	s.hooks.Emit(uid, "invoice."+full.Status, full)
 	switch full.Status {
 	case store.StatusSent:
 		s.publishInvoice("invoicing.invoice_sent", full)
@@ -396,40 +396,42 @@ func (s *Server) handleInvoiceStatus(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleDeleteInvoice(w http.ResponseWriter, r *http.Request) {
 	id := idParam(r, "id")
-	inv, err := s.store.GetInvoice(r.Context(), id)
+	uid := uidOf(r)
+	inv, err := s.store.GetInvoice(r.Context(), uid, id)
 	if err != nil {
 		s.fail(w, err, "get invoice")
 		return
 	}
-	if err := s.store.DeleteInvoice(r.Context(), id); err != nil {
+	if err := s.store.DeleteInvoice(r.Context(), uid, id); err != nil {
 		s.fail(w, err, "delete invoice")
 		return
 	}
 	s.removeAttachmentFiles(id)
-	_ = s.store.DeletePaperlessLink(r.Context(), "invoice", id)
+	_ = s.store.DeletePaperlessLink(r.Context(), uid, "invoice", id)
 	for _, a := range inv.Attachments {
-		_ = s.store.DeletePaperlessLink(r.Context(), "attachment", a.ID)
+		_ = s.store.DeletePaperlessLink(r.Context(), uid, "attachment", a.ID)
 	}
-	s.store.LogActivity(r.Context(), "invoice", id, "deleted", "Invoice "+inv.Number+" deleted")
-	s.hooks.Emit("invoice.deleted", map[string]any{"id": id, "number": inv.Number})
+	s.store.LogActivity(r.Context(), uid, "invoice", id, "deleted", "Invoice "+inv.Number+" deleted")
+	s.hooks.Emit(uid, "invoice.deleted", map[string]any{"id": id, "number": inv.Number})
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
 func (s *Server) handleDuplicateInvoice(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	src, err := s.store.GetInvoice(ctx, idParam(r, "id"))
+	uid := uidOf(r)
+	src, err := s.store.GetInvoice(ctx, uid, idParam(r, "id"))
 	if err != nil {
 		s.fail(w, err, "get invoice")
 		return
 	}
-	st, _ := s.store.GetSettings(ctx)
+	st, _ := s.store.GetSettings(ctx, uid)
 	dup := *src
 	dup.ID, dup.Status, dup.AmountPaid, dup.PublicToken = 0, store.StatusDraft, 0, ""
 	dup.SentAt, dup.ViewedAt, dup.PaidAt, dup.RecurringID = nil, nil, nil, nil
 	dup.IssueDate = store.Today()
 	t, _ := time.Parse("2006-01-02", dup.IssueDate)
 	days := st.DefaultDueDays
-	if c, err := s.store.GetClient(ctx, dup.ClientID); err == nil && c.PaymentTermsDays > 0 {
+	if c, err := s.store.GetClient(ctx, uid, dup.ClientID); err == nil && c.PaymentTermsDays > 0 {
 		days = c.PaymentTermsDays
 	}
 	dup.DueDate = t.AddDate(0, 0, days).Format("2006-01-02")
@@ -437,36 +439,38 @@ func (s *Server) handleDuplicateInvoice(w http.ResponseWriter, r *http.Request) 
 	for i := range dup.Items {
 		dup.Items[i].ID = 0
 	}
-	dup.Number, err = s.nextNumber(ctx, &st, dup.IssueDate, dup.ClientName)
+	dup.Number, err = s.nextNumber(ctx, uid, &st, dup.IssueDate, dup.ClientName)
 	if err != nil {
 		s.fail(w, err, "allocate number")
 		return
 	}
-	if err := s.store.CreateInvoice(ctx, &dup); err != nil {
+	if err := s.store.CreateInvoice(ctx, uid, &dup); err != nil {
 		s.fail(w, err, "create invoice")
 		return
 	}
-	s.store.LogActivity(ctx, "invoice", dup.ID, "created", "Duplicated from "+src.Number)
-	full, _ := s.store.GetInvoice(ctx, dup.ID)
+	s.store.LogActivity(ctx, uid, "invoice", dup.ID, "created", "Duplicated from "+src.Number)
+	full, _ := s.store.GetInvoice(ctx, uid, dup.ID)
 	writeJSON(w, http.StatusCreated, full)
 }
 
-// buildDocument assembles the render model for an invoice.
+// buildDocument assembles the render model for an invoice with its owner's company
+// profile, logo and templates (also for the public link, where nobody is signed in).
 func (s *Server) buildDocument(ctx context.Context, inv *store.Invoice, templateID *int64) (*pdf.Document, *store.InvoiceTemplate, []byte, string, error) {
-	st, err := s.store.GetSettings(ctx)
+	uid := inv.UserID
+	st, err := s.store.GetSettings(ctx, uid)
 	if err != nil {
 		return nil, nil, nil, "", err
 	}
-	client, _ := s.store.GetClient(ctx, inv.ClientID)
+	client, _ := s.store.GetClient(ctx, uid, inv.ClientID)
 	var tpl *store.InvoiceTemplate
 	if templateID != nil && *templateID > 0 {
-		tpl, _ = s.store.GetTemplate(ctx, *templateID)
+		tpl, _ = s.store.GetTemplate(ctx, uid, *templateID)
 	}
 	if tpl == nil && client != nil && client.TemplateID != nil && *client.TemplateID > 0 {
-		tpl, _ = s.store.GetTemplate(ctx, *client.TemplateID) // per-client default
+		tpl, _ = s.store.GetTemplate(ctx, uid, *client.TemplateID) // per-client default
 	}
 	if tpl == nil {
-		tpl, _ = s.store.GetDefaultTemplate(ctx)
+		tpl, _ = s.store.GetDefaultTemplate(ctx, uid)
 	}
 	logo, logoType, logoMime := s.readLogo(ctx, st)
 	logoURL := ""
@@ -515,7 +519,7 @@ func (s *Server) fillDocx(tpl *store.InvoiceTemplate, doc *pdf.Document) ([]byte
 }
 
 func (s *Server) handleInvoiceDocx(w http.ResponseWriter, r *http.Request) {
-	inv, err := s.store.GetInvoice(r.Context(), idParam(r, "id"))
+	inv, err := s.store.GetInvoice(r.Context(), uidOf(r), idParam(r, "id"))
 	if err != nil {
 		s.fail(w, err, "get invoice")
 		return
@@ -527,7 +531,7 @@ func (s *Server) handleInvoiceDocx(w http.ResponseWriter, r *http.Request) {
 	}
 	if tpl.Kind != "docx" {
 		if id := qInt64(r, "template_id"); id > 0 {
-			tpl, err = s.store.GetTemplate(r.Context(), id)
+			tpl, err = s.store.GetTemplate(r.Context(), uidOf(r), id)
 			if err != nil {
 				s.fail(w, err, "get template")
 				return
@@ -548,7 +552,7 @@ func (s *Server) handleInvoiceDocx(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleInvoicePDF(w http.ResponseWriter, r *http.Request) {
-	inv, err := s.store.GetInvoice(r.Context(), idParam(r, "id"))
+	inv, err := s.store.GetInvoice(r.Context(), uidOf(r), idParam(r, "id"))
 	if err != nil {
 		s.fail(w, err, "get invoice")
 		return
@@ -582,7 +586,7 @@ func safeFilename(s string) string {
 }
 
 func (s *Server) handleInvoiceHTML(w http.ResponseWriter, r *http.Request) {
-	inv, err := s.store.GetInvoice(r.Context(), idParam(r, "id"))
+	inv, err := s.store.GetInvoice(r.Context(), uidOf(r), idParam(r, "id"))
 	if err != nil {
 		s.fail(w, err, "get invoice")
 		return
@@ -606,12 +610,14 @@ func (s *Server) serveHTML(w http.ResponseWriter, r *http.Request, inv *store.In
 }
 
 // sendInvoiceEmail renders the PDF and emails it to the client.
+// sendInvoiceEmail renders the PDF and emails it with the invoice owner's SMTP settings.
 func (s *Server) sendInvoiceEmail(ctx context.Context, inv *store.Invoice, to, subjectOverride, bodyOverride string) error {
-	st, err := s.store.GetSettings(ctx)
+	uid := inv.UserID
+	st, err := s.store.GetSettings(ctx, uid)
 	if err != nil {
 		return err
 	}
-	client, err := s.store.GetClient(ctx, inv.ClientID)
+	client, err := s.store.GetClient(ctx, uid, inv.ClientID)
 	if err != nil {
 		return err
 	}
@@ -706,13 +712,14 @@ func (s *Server) sendInvoiceEmail(ctx context.Context, inv *store.Invoice, to, s
 	if err != nil {
 		status, errMsg = "failed", err.Error()
 	}
-	s.store.LogEmail(ctx, inv.ID, to, subject, status, errMsg)
+	s.store.LogEmail(ctx, uid, inv.ID, to, subject, status, errMsg)
 	return err
 }
 
 func (s *Server) handleSendInvoice(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	inv, err := s.store.GetInvoice(ctx, idParam(r, "id"))
+	uid := uidOf(r)
+	inv, err := s.store.GetInvoice(ctx, uid, idParam(r, "id"))
 	if err != nil {
 		s.fail(w, err, "get invoice")
 		return
@@ -729,11 +736,11 @@ func (s *Server) handleSendInvoice(w http.ResponseWriter, r *http.Request) {
 	}
 	if inv.Status == store.StatusDraft {
 		s.transition(inv, store.StatusSent)
-		_ = s.store.UpdateInvoiceStatus(ctx, inv.ID, inv.Status, inv.SentAt, nil, nil)
+		_ = s.store.UpdateInvoiceStatus(ctx, uid, inv.ID, inv.Status, inv.SentAt, nil, nil)
 	}
-	s.store.LogActivity(ctx, "invoice", inv.ID, "sent", "Emailed to "+firstNonEmpty(in.To, "client"))
-	full, _ := s.store.GetInvoice(ctx, inv.ID)
-	s.hooks.Emit("invoice.sent", full)
+	s.store.LogActivity(ctx, uid, "invoice", inv.ID, "sent", "Emailed to "+firstNonEmpty(in.To, "client"))
+	full, _ := s.store.GetInvoice(ctx, uid, inv.ID)
+	s.hooks.Emit(uid, "invoice.sent", full)
 	s.publishInvoice("invoicing.invoice_sent", full)
 	s.paperlessAutoArchive(full)
 	writeJSON(w, http.StatusOK, full)
@@ -768,7 +775,12 @@ func firstNonEmpty(v ...string) string {
 }
 
 func (s *Server) handleInvoiceEmails(w http.ResponseWriter, r *http.Request) {
-	list, err := s.store.ListEmailLog(r.Context(), idParam(r, "id"), 50)
+	inv, err := s.store.GetInvoice(r.Context(), uidOf(r), idParam(r, "id"))
+	if err != nil {
+		s.fail(w, err, "get invoice")
+		return
+	}
+	list, err := s.store.ListEmailLog(r.Context(), uidOf(r), inv.ID, 50)
 	if err != nil {
 		s.fail(w, err, "email log")
 		return
@@ -794,13 +806,14 @@ func (s *Server) handleInvoiceFromTime(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "invalid json")
 		return
 	}
-	client, err := s.store.GetClient(ctx, in.ClientID)
+	uid := uidOf(r)
+	client, err := s.store.GetClient(ctx, uid, in.ClientID)
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, "client not found")
 		return
 	}
-	st, _ := s.store.GetSettings(ctx)
-	entries, err := s.store.ListTimeEntries(ctx, store.TimeFilter{ClientID: in.ClientID, Unbilled: true, From: in.From, To: in.To})
+	st, _ := s.store.GetSettings(ctx, uid)
+	entries, err := s.store.ListTimeEntries(ctx, uid, store.TimeFilter{ClientID: in.ClientID, Unbilled: true, From: in.From, To: in.To})
 	if err != nil {
 		s.fail(w, err, "list time")
 		return
@@ -906,7 +919,7 @@ func (s *Server) handleInvoiceFromTime(w http.ResponseWriter, r *http.Request) {
 	// Expenses
 	var expenseIDs []int64
 	if in.IncludeExpenses || len(in.ExpenseIDs) > 0 {
-		exps, _ := s.store.ListExpenses(ctx, store.ExpenseFilter{ClientID: client.ID, Unbilled: true, From: in.From, To: in.To})
+		exps, _ := s.store.ListExpenses(ctx, uid, store.ExpenseFilter{ClientID: client.ID, Unbilled: true, From: in.From, To: in.To})
 		keep := map[int64]bool{}
 		for _, id := range in.ExpenseIDs {
 			keep[id] = true
@@ -929,24 +942,24 @@ func (s *Server) handleInvoiceFromTime(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "nothing to invoice")
 		return
 	}
-	if err := s.applyInput(ctx, inv, input, st); err != nil {
+	if err := s.applyInput(ctx, uid, inv, input, st); err != nil {
 		writeErr(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	inv.Number, err = s.nextNumber(ctx, &st, inv.IssueDate, inv.ClientName)
+	inv.Number, err = s.nextNumber(ctx, uid, &st, inv.IssueDate, inv.ClientName)
 	if err != nil {
 		s.fail(w, err, "allocate number")
 		return
 	}
-	if err := s.store.CreateInvoice(ctx, inv); err != nil {
+	if err := s.store.CreateInvoice(ctx, uid, inv); err != nil {
 		s.fail(w, err, "create invoice")
 		return
 	}
-	_ = s.store.LinkTimeEntries(ctx, inv.ID, ids)
-	_ = s.store.LinkExpenses(ctx, inv.ID, expenseIDs)
-	s.store.LogActivity(ctx, "invoice", inv.ID, "created", fmt.Sprintf("Created from %d time entries", len(ids)))
-	full, _ := s.store.GetInvoice(ctx, inv.ID)
-	s.hooks.Emit("invoice.created", full)
+	_ = s.store.LinkTimeEntries(ctx, uid, inv.ID, ids)
+	_ = s.store.LinkExpenses(ctx, uid, inv.ID, expenseIDs)
+	s.store.LogActivity(ctx, uid, "invoice", inv.ID, "created", fmt.Sprintf("Created from %d time entries", len(ids)))
+	full, _ := s.store.GetInvoice(ctx, uid, inv.ID)
+	s.hooks.Emit(uid, "invoice.created", full)
 	s.publishInvoice("invoicing.invoice_created", full)
 	writeJSON(w, http.StatusCreated, full)
 }

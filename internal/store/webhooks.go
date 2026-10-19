@@ -3,12 +3,12 @@ package store
 import "context"
 
 // ListWebhooks lists webhook subscriptions.
-func (s *Store) ListWebhooks(ctx context.Context, enabledOnly bool) ([]Webhook, error) {
-	q := `SELECT id, url, events, secret, enabled, created_at FROM webhooks`
+func (s *Store) ListWebhooks(ctx context.Context, uid int64, enabledOnly bool) ([]Webhook, error) {
+	q := `SELECT id, url, events, secret, enabled, created_at FROM webhooks WHERE user_id = ?`
 	if enabledOnly {
-		q += ` WHERE enabled = 1`
+		q += ` AND enabled = 1`
 	}
-	rows, err := s.DB.QueryContext(ctx, q+` ORDER BY id`)
+	rows, err := s.DB.QueryContext(ctx, q+` ORDER BY id`, uid)
 	if err != nil {
 		return nil, err
 	}
@@ -25,36 +25,36 @@ func (s *Store) ListWebhooks(ctx context.Context, enabledOnly bool) ([]Webhook, 
 }
 
 // SaveWebhook creates or updates a webhook.
-func (s *Store) SaveWebhook(ctx context.Context, w *Webhook) error {
+func (s *Store) SaveWebhook(ctx context.Context, uid int64, w *Webhook) error {
 	if w.ID == 0 {
-		res, err := s.DB.ExecContext(ctx, `INSERT INTO webhooks (url, events, secret, enabled) VALUES (?, ?, ?, ?)`, w.URL, w.Events, w.Secret, w.Enabled)
+		res, err := s.DB.ExecContext(ctx, `INSERT INTO webhooks (user_id, url, events, secret, enabled) VALUES (?, ?, ?, ?, ?)`, NullInt(uid), w.URL, w.Events, w.Secret, w.Enabled)
 		if err != nil {
 			return err
 		}
 		w.ID, _ = res.LastInsertId()
 		return nil
 	}
-	_, err := s.DB.ExecContext(ctx, `UPDATE webhooks SET url=?, events=?, secret=?, enabled=? WHERE id=?`, w.URL, w.Events, w.Secret, w.Enabled, w.ID)
-	return err
+	res, err := s.DB.ExecContext(ctx, `UPDATE webhooks SET url=?, events=?, secret=?, enabled=? WHERE id=? AND user_id=?`, w.URL, w.Events, w.Secret, w.Enabled, w.ID, uid)
+	return notFoundIfNone(res, err)
 }
 
 // DeleteWebhook removes a webhook.
-func (s *Store) DeleteWebhook(ctx context.Context, id int64) error {
-	_, err := s.DB.ExecContext(ctx, `DELETE FROM webhooks WHERE id = ?`, id)
-	return err
+func (s *Store) DeleteWebhook(ctx context.Context, uid, id int64) error {
+	res, err := s.DB.ExecContext(ctx, `DELETE FROM webhooks WHERE id = ? AND user_id = ?`, id, uid)
+	return notFoundIfNone(res, err)
 }
 
 // LogActivity appends an audit entry.
-func (s *Store) LogActivity(ctx context.Context, entityType string, entityID int64, action, message string) {
-	_, _ = s.DB.ExecContext(ctx, `INSERT INTO activity_log (entity_type, entity_id, action, message) VALUES (?, ?, ?, ?)`, entityType, entityID, action, message)
+func (s *Store) LogActivity(ctx context.Context, uid int64, entityType string, entityID int64, action, message string) {
+	_, _ = s.DB.ExecContext(ctx, `INSERT INTO activity_log (user_id, entity_type, entity_id, action, message) VALUES (?, ?, ?, ?, ?)`, NullInt(uid), entityType, entityID, action, message)
 }
 
 // ListActivity returns recent activity, optionally for an entity.
-func (s *Store) ListActivity(ctx context.Context, entityType string, entityID int64, limit int) ([]Activity, error) {
-	q := `SELECT id, entity_type, entity_id, action, message, created_at FROM activity_log`
-	args := []any{}
+func (s *Store) ListActivity(ctx context.Context, uid int64, entityType string, entityID int64, limit int) ([]Activity, error) {
+	q := `SELECT id, entity_type, entity_id, action, message, created_at FROM activity_log WHERE user_id = ?`
+	args := []any{uid}
 	if entityType != "" {
-		q += ` WHERE entity_type = ? AND entity_id = ?`
+		q += ` AND entity_type = ? AND entity_id = ?`
 		args = append(args, entityType, entityID)
 	}
 	q += ` ORDER BY id DESC LIMIT ?`
@@ -76,16 +76,16 @@ func (s *Store) ListActivity(ctx context.Context, entityType string, entityID in
 }
 
 // LogEmail records an email attempt.
-func (s *Store) LogEmail(ctx context.Context, invoiceID int64, to, subject, status, errMsg string) {
-	_, _ = s.DB.ExecContext(ctx, `INSERT INTO email_log (invoice_id, to_address, subject, status, error) VALUES (?, ?, ?, ?, ?)`, NullInt(invoiceID), to, subject, status, errMsg)
+func (s *Store) LogEmail(ctx context.Context, uid, invoiceID int64, to, subject, status, errMsg string) {
+	_, _ = s.DB.ExecContext(ctx, `INSERT INTO email_log (user_id, invoice_id, to_address, subject, status, error) VALUES (?, ?, ?, ?, ?, ?)`, NullInt(uid), NullInt(invoiceID), to, subject, status, errMsg)
 }
 
 // ListEmailLog lists email attempts for an invoice.
-func (s *Store) ListEmailLog(ctx context.Context, invoiceID int64, limit int) ([]EmailLog, error) {
-	q := `SELECT id, invoice_id, to_address, subject, status, error, created_at FROM email_log`
-	args := []any{}
+func (s *Store) ListEmailLog(ctx context.Context, uid, invoiceID int64, limit int) ([]EmailLog, error) {
+	q := `SELECT id, invoice_id, to_address, subject, status, error, created_at FROM email_log WHERE user_id = ?`
+	args := []any{uid}
 	if invoiceID > 0 {
-		q += ` WHERE invoice_id = ?`
+		q += ` AND invoice_id = ?`
 		args = append(args, invoiceID)
 	}
 	q += ` ORDER BY id DESC LIMIT ?`

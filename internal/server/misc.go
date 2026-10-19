@@ -15,7 +15,7 @@ import (
 // ---- webhooks ----
 
 func (s *Server) handleListWebhooks(w http.ResponseWriter, r *http.Request) {
-	list, err := s.store.ListWebhooks(r.Context(), false)
+	list, err := s.store.ListWebhooks(r.Context(), uidOf(r), false)
 	if err != nil {
 		s.fail(w, err, "list webhooks")
 		return
@@ -43,7 +43,7 @@ func (s *Server) handleSaveWebhook(w http.ResponseWriter, r *http.Request) {
 	if strings.TrimSpace(h.Events) == "" {
 		h.Events = "*"
 	}
-	if err := s.store.SaveWebhook(r.Context(), &h); err != nil {
+	if err := s.store.SaveWebhook(r.Context(), uidOf(r), &h); err != nil {
 		s.fail(w, err, "save webhook")
 		return
 	}
@@ -51,7 +51,7 @@ func (s *Server) handleSaveWebhook(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleDeleteWebhook(w http.ResponseWriter, r *http.Request) {
-	if err := s.store.DeleteWebhook(r.Context(), idParam(r, "id")); err != nil {
+	if err := s.store.DeleteWebhook(r.Context(), uidOf(r), idParam(r, "id")); err != nil {
 		s.fail(w, err, "delete webhook")
 		return
 	}
@@ -59,7 +59,7 @@ func (s *Server) handleDeleteWebhook(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleTestWebhook(w http.ResponseWriter, r *http.Request) {
-	s.hooks.Emit("test", map[string]any{"message": "Hello from Pocket Invoicing", "sent_at": time.Now().UTC().Format(time.RFC3339)})
+	s.hooks.Emit(uidOf(r), "test", map[string]any{"message": "Hello from Pocket Invoicing", "sent_at": time.Now().UTC().Format(time.RFC3339)})
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
@@ -86,11 +86,11 @@ func (s *Server) publicInvoice(w http.ResponseWriter, r *http.Request) *store.In
 		if status == store.StatusSent {
 			status = store.StatusViewed
 		}
-		_ = s.store.UpdateInvoiceStatus(r.Context(), inv.ID, status, nil, &now, nil)
-		s.store.LogActivity(r.Context(), "invoice", inv.ID, "viewed", "Opened via public link")
+		_ = s.store.UpdateInvoiceStatus(r.Context(), inv.UserID, inv.ID, status, nil, &now, nil)
+		s.store.LogActivity(r.Context(), inv.UserID, "invoice", inv.ID, "viewed", "Opened via public link")
 		inv.ViewedAt = &now
 		inv.Status = status
-		s.hooks.Emit("invoice.viewed", inv)
+		s.hooks.Emit(inv.UserID, "invoice.viewed", inv)
 	}
 	return inv
 }
@@ -153,24 +153,27 @@ func (s *Server) handleBackup(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleExportJSON(w http.ResponseWriter, r *http.Request) {
+	// The export is the signed-in person's own business only; secrets are left out.
 	ctx := r.Context()
-	st, _ := s.store.GetSettings(ctx)
+	uid := uidOf(r)
+	st, _ := s.store.GetSettings(ctx, uid)
 	st.SMTPPassword = ""
-	clients, _ := s.store.ListClients(ctx, true, "")
-	invoices, _, _ := s.store.ListInvoices(ctx, store.InvoiceFilter{})
+	st.PaperlessToken = ""
+	clients, _ := s.store.ListClients(ctx, uid, true, "")
+	invoices, _, _ := s.store.ListInvoices(ctx, uid, store.InvoiceFilter{})
 	full := make([]store.Invoice, 0, len(invoices))
 	for _, inv := range invoices {
-		if f, err := s.store.GetInvoice(ctx, inv.ID); err == nil {
+		if f, err := s.store.GetInvoice(ctx, uid, inv.ID); err == nil {
 			full = append(full, *f)
 		}
 	}
-	payments, _ := s.store.ListPayments(ctx, store.PaymentFilter{})
-	recurring, _ := s.store.ListRecurring(ctx)
-	timeEntries, _ := s.store.ListTimeEntries(ctx, store.TimeFilter{})
-	expenses, _ := s.store.ListExpenses(ctx, store.ExpenseFilter{})
-	products, _ := s.store.ListProducts(ctx, true)
-	taxes, _ := s.store.ListTaxRates(ctx)
-	templates, _ := s.store.ListTemplates(ctx)
+	payments, _ := s.store.ListPayments(ctx, uid, store.PaymentFilter{})
+	recurring, _ := s.store.ListRecurring(ctx, uid)
+	timeEntries, _ := s.store.ListTimeEntries(ctx, uid, store.TimeFilter{})
+	expenses, _ := s.store.ListExpenses(ctx, uid, store.ExpenseFilter{})
+	products, _ := s.store.ListProducts(ctx, uid, true)
+	taxes, _ := s.store.ListTaxRates(ctx, uid)
+	templates, _ := s.store.ListTemplates(ctx, uid)
 	currencies, _ := s.store.ListCurrencies(ctx, false)
 	rates, _ := s.store.ListRates(ctx, st.BaseCurrency)
 	w.Header().Set("Content-Type", "application/json")

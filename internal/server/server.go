@@ -46,8 +46,7 @@ type Server struct {
 	prov     currency.Provider
 	hooks    *webhook.Dispatcher
 	plMu     sync.Mutex
-	plKey    string
-	pl       *paperless.Client
+	pl       map[string]*paperless.Client // per URL+token: each user may point at their own Paperless
 	webFS    fs.FS
 	started  time.Time
 	requests atomic.Int64
@@ -155,14 +154,20 @@ func (s *Server) publish(topic, subject string, payload map[string]any) {
 	}()
 }
 
-// publishInvoice sends one invoice event (created / sent / paid) to Core.
+// publishInvoice sends one invoice event (created / sent / paid) to Core. The payload names
+// the invoice's owner (user_email) so consumers can keep each person's events apart.
 func (s *Server) publishInvoice(topic string, inv *store.Invoice) {
-	if inv == nil {
+	if inv == nil || !s.core.Configured() {
 		return
+	}
+	owner := ""
+	if u, err := s.store.GetUser(context.Background(), inv.UserID); err == nil {
+		owner = u.Email
 	}
 	s.publish(topic, fmt.Sprintf("invoice:%d", inv.ID), map[string]any{
 		"invoice_id": inv.ID, "number": inv.Number, "client_id": inv.ClientID, "client": inv.ClientName, "status": inv.Status,
 		"issue_date": inv.IssueDate, "due_date": inv.DueDate, "total": inv.Total, "amount_paid": inv.AmountPaid, "currency": inv.Currency,
+		"user_email": owner,
 	})
 }
 
@@ -199,7 +204,7 @@ func (s *Server) coreStatus() map[string]any {
 // EXCHANGE_RATE_PROVIDER environment default.
 func (s *Server) provider(ctx context.Context) currency.Provider {
 	name := ""
-	if st, err := s.store.GetSettings(ctx); err == nil {
+	if st, err := s.store.GetGlobalSettings(ctx); err == nil {
 		name = strings.ToLower(strings.TrimSpace(st.ExchangeRateProvider))
 	}
 	if name == "" {
@@ -263,14 +268,11 @@ func (s *Server) Router() http.Handler {
 			r.Delete("/settings/logo", s.handleDeleteLogo)
 			r.Post("/settings/test-email", s.handleTestEmail)
 			r.Post("/settings/test-paperless", s.handleTestPaperless)
-			r.Get("/settings/system", s.handleSystemInfo)
 
+			// Currencies and exchange rates are box-wide reference data: everyone reads them,
+			// only admins change them (see the admin group below).
 			r.Get("/currencies", s.handleListCurrencies)
-			r.Put("/currencies/{code}", s.handleUpdateCurrency)
 			r.Get("/rates", s.handleListRates)
-			r.Put("/rates", s.handlePutRate)
-			r.Delete("/rates/{quote}", s.handleDeleteRate)
-			r.Post("/rates/refresh", s.handleRefreshRates)
 			r.Get("/rates/convert", s.handleConvert)
 
 			r.Get("/tax-rates", s.handleListTaxRates)
@@ -394,14 +396,24 @@ func (s *Server) Router() http.Handler {
 			r.Delete("/webhooks/{id}", s.handleDeleteWebhook)
 			r.Post("/webhooks/test", s.handleTestWebhook)
 
-			r.Get("/users", s.handleListUsers)
-			r.Post("/users", s.handleCreateUser)
-			r.Put("/users/{id}", s.handleUpdateUser)
-			r.Delete("/users/{id}", s.handleDeleteUser)
-
-			r.Get("/backup", s.handleBackup)
 			r.Get("/export.json", s.handleExportJSON)
-			r.Post("/scheduler/run", s.handleRunScheduler)
+
+			// Box-wide administration. Admins get no extra access to anyone's content here
+			// except the whole-database backup, which is the box owner's disaster recovery.
+			r.Group(func(r chi.Router) {
+				r.Use(s.requireAdmin)
+				r.Get("/settings/system", s.handleSystemInfo)
+				r.Put("/currencies/{code}", s.handleUpdateCurrency)
+				r.Put("/rates", s.handlePutRate)
+				r.Delete("/rates/{quote}", s.handleDeleteRate)
+				r.Post("/rates/refresh", s.handleRefreshRates)
+				r.Get("/users", s.handleListUsers)
+				r.Post("/users", s.handleCreateUser)
+				r.Put("/users/{id}", s.handleUpdateUser)
+				r.Delete("/users/{id}", s.handleDeleteUser)
+				r.Get("/backup", s.handleBackup)
+				r.Post("/scheduler/run", s.handleRunScheduler)
+			})
 		})
 	})
 
@@ -504,7 +516,8 @@ func (s *Server) handleReady(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	stats, _ := s.store.Dashboard(ctx)
+	// Counts are box-wide; money figures are the box owner's own (never a sum across people).
+	stats, _ := s.store.Dashboard(ctx, s.store.OwnerID(ctx))
 	var invoices, clients, payments int
 	_ = s.store.DB.QueryRowContext(ctx, `SELECT COUNT(1) FROM invoices`).Scan(&invoices)
 	_ = s.store.DB.QueryRowContext(ctx, `SELECT COUNT(1) FROM clients`).Scan(&clients)

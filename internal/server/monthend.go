@@ -62,8 +62,8 @@ func bumpCounter(v string) string {
 }
 
 // monthEndPlan builds the proposal for a month.
-func (s *Server) monthEndPlan(ctx context.Context, month string) (map[string]any, error) {
-	st, err := s.store.GetSettings(ctx)
+func (s *Server) monthEndPlan(ctx context.Context, uid int64, month string) (map[string]any, error) {
+	st, err := s.store.GetSettings(ctx, uid)
 	if err != nil {
 		return nil, err
 	}
@@ -79,11 +79,11 @@ func (s *Server) monthEndPlan(ctx context.Context, month string) (map[string]any
 	wd, _ := workingDays(st, ps, pe)
 	allHol := calendar.Count(a, b, calendar.ParseWorkWeek("1,2,3,4,5,6,7"), st.Holidays).Holidays
 
-	clients, err := s.store.ListClients(ctx, false, "")
+	clients, err := s.store.ListClients(ctx, uid, false, "")
 	if err != nil {
 		return nil, err
 	}
-	profiles, _ := s.store.ListRecurring(ctx)
+	profiles, _ := s.store.ListRecurring(ctx, uid)
 	profileFor := func(cid int64) *store.RecurringInvoice {
 		var best *store.RecurringInvoice
 		for i := range profiles {
@@ -102,14 +102,14 @@ func (s *Server) monthEndPlan(ctx context.Context, month string) (map[string]any
 	all := []store.Invoice{}
 	for _, c := range clients {
 		row := monthEndRow{ClientID: c.ID, ClientName: c.Name, ClientEmail: c.Email, Currency: firstNonEmpty(c.Currency, st.BaseCurrency), BillingMode: firstNonEmpty(c.BillingMode, st.DefaultBilling), TemplateID: c.TemplateID, TimeEntryIDs: []int64{}, CustomFields: map[string]string{}, CustomLast: map[string]string{}}
-		row.Existing, _ = s.store.InvoicesForPeriod(ctx, c.ID, ps, pe)
+		row.Existing, _ = s.store.InvoicesForPeriod(ctx, uid, c.ID, ps, pe)
 		if row.Existing == nil {
 			row.Existing = []store.Invoice{}
 		}
 		all = append(all, row.Existing...)
 
 		rec := profileFor(c.ID)
-		unbilled, _ := s.store.ListTimeEntries(ctx, store.TimeFilter{ClientID: c.ID, Unbilled: true, From: ps, To: pe})
+		unbilled, _ := s.store.ListTimeEntries(ctx, uid, store.TimeFilter{ClientID: c.ID, Unbilled: true, From: ps, To: pe})
 		for _, t := range unbilled {
 			row.UnbilledMin += t.DurationMinutes
 			row.TimeEntryIDs = append(row.TimeEntryIDs, t.ID)
@@ -165,7 +165,7 @@ func (s *Server) monthEndPlan(ctx context.Context, month string) (map[string]any
 			row.DueDate = t.AddDate(0, 0, dueDays).Format("2006-01-02")
 		}
 		// Fiscal counters: suggest the next value of simple numeric fields.
-		if last, err := s.store.LatestCustomFields(ctx, c.ID, true); err == nil {
+		if last, err := s.store.LatestCustomFields(ctx, uid, c.ID, true); err == nil {
 			for _, f := range st.CustomFields {
 				if v, ok := last[f.Key]; ok {
 					row.CustomLast[f.Key] = v
@@ -226,7 +226,7 @@ func (s *Server) handleMonthEndPlan(w http.ResponseWriter, r *http.Request) {
 	if month == "" {
 		month = time.Now().AddDate(0, -1, 0).Format("2006-01")
 	}
-	plan, err := s.monthEndPlan(r.Context(), month)
+	plan, err := s.monthEndPlan(r.Context(), uidOf(r), month)
 	if err != nil {
 		writeErr(w, http.StatusBadRequest, err.Error())
 		return
@@ -278,7 +278,8 @@ func (s *Server) handleMonthEndCreate(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "no rows selected")
 		return
 	}
-	st, err := s.store.GetSettings(ctx)
+	uid := uidOf(r)
+	st, err := s.store.GetSettings(ctx, uid)
 	if err != nil {
 		s.fail(w, err, "settings")
 		return
@@ -303,30 +304,35 @@ func (s *Server) handleMonthEndCreate(w http.ResponseWriter, r *http.Request) {
 			PeriodStart: &ps, PeriodEnd: &pe, Items: items, CustomFields: row.CustomFields, WorkedDays: row.WorkedDays,
 		}
 		inv := &store.Invoice{Status: store.StatusDraft}
-		if err := s.applyInput(ctx, inv, inp, st); err != nil {
+		if err := s.applyInput(ctx, uid, inv, inp, st); err != nil {
 			errs = append(errs, fmt.Sprintf("client %d: %v", row.ClientID, err))
 			continue
 		}
-		inv.RecurringID = row.RecurringID
-		if inv.Number, err = s.nextNumber(ctx, &st, inv.IssueDate, inv.ClientName); err != nil {
+		inv.RecurringID = nil
+		if row.RecurringID != nil {
+			if rec, err := s.store.GetRecurring(ctx, uid, *row.RecurringID); err == nil && rec.ClientID == row.ClientID {
+				inv.RecurringID = row.RecurringID
+			}
+		}
+		if inv.Number, err = s.nextNumber(ctx, uid, &st, inv.IssueDate, inv.ClientName); err != nil {
 			errs = append(errs, fmt.Sprintf("%s: %v", inv.ClientName, err))
 			continue
 		}
-		if err := s.store.CreateInvoice(ctx, inv); err != nil {
+		if err := s.store.CreateInvoice(ctx, uid, inv); err != nil {
 			errs = append(errs, fmt.Sprintf("%s: %v", inv.ClientName, err))
 			continue
 		}
 		if len(row.TimeEntryIDs) > 0 {
-			_ = s.store.LinkTimeEntries(ctx, inv.ID, row.TimeEntryIDs)
+			_ = s.store.LinkTimeEntries(ctx, uid, inv.ID, row.TimeEntryIDs)
 		}
 		msg := "Created by the month-end wizard for " + a.Format("January 2006")
 		if len(row.WorkedDays) > 0 {
 			msg += " · days worked: " + describeWorkedDays(row.WorkedDays)
 		}
-		s.store.LogActivity(ctx, "invoice", inv.ID, "created", msg)
+		s.store.LogActivity(ctx, uid, "invoice", inv.ID, "created", msg)
 		// Keep the recurring schedule in step so the scheduler does not generate the same period again.
-		if row.RecurringID != nil {
-			if rec, err := s.store.GetRecurring(ctx, *row.RecurringID); err == nil && rec.ClientID == row.ClientID {
+		if inv.RecurringID != nil {
+			if rec, err := s.store.GetRecurring(ctx, uid, *inv.RecurringID); err == nil && rec.ClientID == row.ClientID {
 				runDate := runDateFor(ps, pe, rec.PeriodMode)
 				advanced := false
 				for guard := 0; guard < 24 && rec.NextRun <= runDate; guard++ {
@@ -339,14 +345,14 @@ func (s *Server) handleMonthEndCreate(w http.ResponseWriter, r *http.Request) {
 					if (rec.MaxOccurrences > 0 && rec.Occurrences >= rec.MaxOccurrences) || (rec.EndDate != nil && rec.NextRun > *rec.EndDate) {
 						rec.Status = "completed"
 					}
-					_ = s.store.SaveRecurring(ctx, rec)
+					_ = s.store.SaveRecurring(ctx, uid, rec)
 				}
 			}
 		}
-		full, _ := s.store.GetInvoice(ctx, inv.ID)
+		full, _ := s.store.GetInvoice(ctx, uid, inv.ID)
 		if full != nil {
 			created = append(created, *full)
-			s.hooks.Emit("invoice.created", full)
+			s.hooks.Emit(uid, "invoice.created", full)
 			s.publishInvoice("invoicing.invoice_created", full)
 		}
 	}

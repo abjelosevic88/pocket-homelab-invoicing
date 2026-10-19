@@ -158,6 +158,7 @@ type InvoiceItem struct {
 
 // Invoice is the central document.
 type Invoice struct {
+	UserID        int64   `json:"-"`
 	ID            int64   `json:"id"`
 	Number        string  `json:"number"`
 	ClientID      int64   `json:"client_id"`
@@ -363,6 +364,7 @@ type Document struct {
 
 // PaperlessLink records that a local file was archived in Paperless-ngx.
 type PaperlessLink struct {
+	UserID      int64  `json:"-"`
 	Kind        string `json:"kind"`
 	RefID       int64  `json:"ref_id"`
 	PaperlessID int64  `json:"paperless_id"`

@@ -23,17 +23,18 @@ import (
 //
 //	GET /reports/accountant-package.zip?year=2026[&drafts=1][&pdf=generated|uploaded|both]
 func (s *Server) handleAccountantPackage(w http.ResponseWriter, r *http.Request) {
+	uid := uidOf(r)
 	ctx := r.Context()
 	year := qInt(r, "year", time.Now().Year())
 	includeDrafts := r.URL.Query().Get("drafts") == "1"
 	pdfMode := firstNonEmpty(r.URL.Query().Get("pdf"), "both")
-	st, err := s.store.GetSettings(ctx)
+	st, err := s.store.GetSettings(ctx, uid)
 	if err != nil {
 		s.fail(w, err, "settings")
 		return
 	}
 	from, to := fmt.Sprintf("%d-01-01", year), fmt.Sprintf("%d-12-31", year)
-	list, _, err := s.store.ListInvoices(ctx, store.InvoiceFilter{From: from, To: to})
+	list, _, err := s.store.ListInvoices(ctx, uid, store.InvoiceFilter{From: from, To: to})
 	if err != nil {
 		s.fail(w, err, "invoices")
 		return
@@ -90,7 +91,7 @@ func (s *Server) handleAccountantPackage(w http.ResponseWriter, r *http.Request)
 		if li.Status == store.StatusCancelled || (li.Status == store.StatusDraft && !includeDrafts) {
 			continue
 		}
-		inv, err := s.store.GetInvoice(ctx, li.ID)
+		inv, err := s.store.GetInvoice(ctx, uid, li.ID)
 		if err != nil {
 			errs = append(errs, li.Number+": "+err.Error())
 			continue
@@ -178,7 +179,7 @@ func (s *Server) handleAccountantPackage(w http.ResponseWriter, r *http.Request)
 	cw.Flush()
 
 	// ---- payments.csv ----
-	payments, _ := s.store.ListPayments(ctx, store.PaymentFilter{From: from, To: to})
+	payments, _ := s.store.ListPayments(ctx, uid, store.PaymentFilter{From: from, To: to})
 	sort.Slice(payments, func(i, j int) bool { return payments[i].Date < payments[j].Date })
 	cw = csv.NewWriter(add("payments.csv"))
 	_ = cw.Write([]string{"date", "invoice", "client", "amount", "currency", "exchange_rate", "applied_amount", "method", "reference", "notes"})
@@ -196,7 +197,7 @@ func (s *Server) handleAccountantPackage(w http.ResponseWriter, r *http.Request)
 	cw.Flush()
 
 	// ---- expenses.csv ----
-	expenses, _ := s.store.ListExpenses(ctx, store.ExpenseFilter{From: from, To: to})
+	expenses, _ := s.store.ListExpenses(ctx, uid, store.ExpenseFilter{From: from, To: to})
 	cw = csv.NewWriter(add("expenses.csv"))
 	_ = cw.Write([]string{"date", "client", "category", "description", "amount", "currency", "exchange_rate", "amount_" + strings.ToLower(st.BaseCurrency), "billable", "invoice_id"})
 	var expBase float64
@@ -211,7 +212,7 @@ func (s *Server) handleAccountantPackage(w http.ResponseWriter, r *http.Request)
 	cw.Flush()
 
 	// ---- income-tax.csv + summary ----
-	tax, _ := s.incomeTax(ctx, st, year)
+	tax, _ := s.incomeTax(ctx, uid, st, year)
 	if tax != nil {
 		cw = csv.NewWriter(add("income-tax.csv"))
 		_ = cw.Write([]string{"month", "income", "expenses", "taxable", "tax", "contributions", "net"})

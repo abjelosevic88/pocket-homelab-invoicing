@@ -15,7 +15,7 @@ func workingDays(st store.Settings, from, to string) (calendar.Result, error) {
 
 // handleWorkingDays: GET /calendar/working-days?month=YYYY-MM  or  ?from=&to=
 func (s *Server) handleWorkingDays(w http.ResponseWriter, r *http.Request) {
-	st, err := s.store.GetSettings(r.Context())
+	st, err := s.store.GetSettings(r.Context(), uidOf(r))
 	if err != nil {
 		s.fail(w, err, "settings")
 		return

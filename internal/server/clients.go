@@ -9,7 +9,7 @@ import (
 )
 
 func (s *Server) handleListClients(w http.ResponseWriter, r *http.Request) {
-	list, err := s.store.ListClients(r.Context(), r.URL.Query().Get("archived") == "1", r.URL.Query().Get("q"))
+	list, err := s.store.ListClients(r.Context(), uidOf(r), r.URL.Query().Get("archived") == "1", r.URL.Query().Get("q"))
 	if err != nil {
 		s.fail(w, err, "list clients")
 		return
@@ -18,20 +18,21 @@ func (s *Server) handleListClients(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleGetClient(w http.ResponseWriter, r *http.Request) {
-	c, err := s.store.GetClient(r.Context(), idParam(r, "id"))
+	uid := uidOf(r)
+	c, err := s.store.GetClient(r.Context(), uid, idParam(r, "id"))
 	if err != nil {
 		s.fail(w, err, "get client")
 		return
 	}
-	invoices, _, _ := s.store.ListInvoices(r.Context(), store.InvoiceFilter{ClientID: c.ID, Limit: 100})
-	recurring, _ := s.store.ListRecurring(r.Context())
+	invoices, _, _ := s.store.ListInvoices(r.Context(), uid, store.InvoiceFilter{ClientID: c.ID, Limit: 100})
+	recurring, _ := s.store.ListRecurring(r.Context(), uid)
 	var rec []store.RecurringInvoice
 	for _, rr := range recurring {
 		if rr.ClientID == c.ID {
 			rec = append(rec, rr)
 		}
 	}
-	unbilled, _ := s.store.ListTimeEntries(r.Context(), store.TimeFilter{ClientID: c.ID, Unbilled: true})
+	unbilled, _ := s.store.ListTimeEntries(r.Context(), uid, store.TimeFilter{ClientID: c.ID, Unbilled: true})
 	var unbilledMinutes int
 	for _, e := range unbilled {
 		unbilledMinutes += e.DurationMinutes
@@ -61,25 +62,28 @@ func (s *Server) handleCreateClient(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "name is required")
 		return
 	}
-	st, _ := s.store.GetSettings(r.Context())
+	uid := uidOf(r)
+	st, _ := s.store.GetSettings(r.Context(), uid)
 	if c.Currency == "" {
 		c.Currency = st.BaseCurrency
 	}
 	if c.PaymentTermsDays == 0 {
 		c.PaymentTermsDays = st.DefaultDueDays
 	}
-	s.fillCorrespondentName(r.Context(), &c)
-	if err := s.store.CreateClient(r.Context(), &c); err != nil {
+	c.TemplateID = s.ownTemplateID(r.Context(), uid, c.TemplateID)
+	s.fillCorrespondentName(r.Context(), uid, &c)
+	if err := s.store.CreateClient(r.Context(), uid, &c); err != nil {
 		s.fail(w, err, "create client")
 		return
 	}
-	s.store.LogActivity(r.Context(), "client", c.ID, "created", "Client "+c.Name+" created")
-	s.hooks.Emit("client.created", c)
+	s.store.LogActivity(r.Context(), uid, "client", c.ID, "created", "Client "+c.Name+" created")
+	s.hooks.Emit(uid, "client.created", c)
 	writeJSON(w, http.StatusCreated, c)
 }
 
 func (s *Server) handleUpdateClient(w http.ResponseWriter, r *http.Request) {
-	existing, err := s.store.GetClient(r.Context(), idParam(r, "id"))
+	uid := uidOf(r)
+	existing, err := s.store.GetClient(r.Context(), uid, idParam(r, "id"))
 	if err != nil {
 		s.fail(w, err, "get client")
 		return
@@ -94,19 +98,20 @@ func (s *Server) handleUpdateClient(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "name is required")
 		return
 	}
-	s.fillCorrespondentName(r.Context(), &c)
-	if err := s.store.UpdateClient(r.Context(), &c); err != nil {
+	c.TemplateID = s.ownTemplateID(r.Context(), uid, c.TemplateID)
+	s.fillCorrespondentName(r.Context(), uid, &c)
+	if err := s.store.UpdateClient(r.Context(), uid, &c); err != nil {
 		s.fail(w, err, "update client")
 		return
 	}
-	s.hooks.Emit("client.updated", c)
-	updated, _ := s.store.GetClient(r.Context(), c.ID)
+	s.hooks.Emit(uid, "client.updated", c)
+	updated, _ := s.store.GetClient(r.Context(), uid, c.ID)
 	writeJSON(w, http.StatusOK, updated)
 }
 
 func (s *Server) handleDeleteClient(w http.ResponseWriter, r *http.Request) {
 	id := idParam(r, "id")
-	deleted, err := s.store.DeleteClient(r.Context(), id)
+	deleted, err := s.store.DeleteClient(r.Context(), uidOf(r), id)
 	if err != nil {
 		s.fail(w, err, "delete client")
 		return
@@ -115,14 +120,47 @@ func (s *Server) handleDeleteClient(w http.ResponseWriter, r *http.Request) {
 }
 
 // fillCorrespondentName caches the Paperless correspondent name on the client record.
-func (s *Server) fillCorrespondentName(ctx context.Context, c *store.Client) {
+func (s *Server) fillCorrespondentName(ctx context.Context, uid int64, c *store.Client) {
 	if c.PaperlessCorrespondentID <= 0 {
 		c.PaperlessCorrespondentID, c.PaperlessCorrespondent = 0, ""
 		return
 	}
-	if cl, _ := s.paperlessClient(ctx); cl != nil {
+	if cl, _ := s.paperlessClient(ctx, uid); cl != nil {
 		if n := cl.Name(ctx, "correspondents", c.PaperlessCorrespondentID); n != "" {
 			c.PaperlessCorrespondent = n
 		}
 	}
+}
+
+// ownTemplateID keeps a template reference only when the template belongs to uid.
+func (s *Server) ownTemplateID(ctx context.Context, uid int64, id *int64) *int64 {
+	if id == nil || *id <= 0 {
+		return nil
+	}
+	if _, err := s.store.GetTemplate(ctx, uid, *id); err != nil {
+		return nil
+	}
+	return id
+}
+
+// ownClientID keeps an optional client reference only when the client belongs to uid.
+func (s *Server) ownClientID(ctx context.Context, uid int64, id *int64) *int64 {
+	if id == nil || *id <= 0 {
+		return nil
+	}
+	if _, err := s.store.GetClient(ctx, uid, *id); err != nil {
+		return nil
+	}
+	return id
+}
+
+// ownInvoiceID keeps an optional invoice reference only when the invoice belongs to uid.
+func (s *Server) ownInvoiceID(ctx context.Context, uid int64, id *int64) *int64 {
+	if id == nil || *id <= 0 {
+		return nil
+	}
+	if !s.store.OwnsInvoice(ctx, uid, *id) {
+		return nil
+	}
+	return id
 }

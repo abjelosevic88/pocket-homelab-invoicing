@@ -9,12 +9,12 @@ import (
 	"strings"
 )
 
-const invoiceCols = `i.id, i.number, i.client_id, c.name, i.status, i.issue_date, i.due_date, i.currency, i.exchange_rate, i.billing_mode, i.period_start, i.period_end, i.po_number, i.discount_type, i.discount_value, i.subtotal, i.discount_total, i.tax_total, i.total, i.amount_paid, i.notes, i.terms, i.footer, i.template_id, i.recurring_id, i.public_token, i.sent_at, i.viewed_at, i.paid_at, i.created_at, i.updated_at, i.custom_fields, i.worked_days`
+const invoiceCols = `i.id, i.number, i.client_id, c.name, i.status, i.issue_date, i.due_date, i.currency, i.exchange_rate, i.billing_mode, i.period_start, i.period_end, i.po_number, i.discount_type, i.discount_value, i.subtotal, i.discount_total, i.tax_total, i.total, i.amount_paid, i.notes, i.terms, i.footer, i.template_id, i.recurring_id, i.public_token, i.sent_at, i.viewed_at, i.paid_at, i.created_at, i.updated_at, i.custom_fields, i.worked_days, COALESCE(i.user_id, 0)`
 
 func scanInvoice(row interface{ Scan(...any) error }) (*Invoice, error) {
 	var inv Invoice
 	var cf, wd string
-	if err := row.Scan(&inv.ID, &inv.Number, &inv.ClientID, &inv.ClientName, &inv.Status, &inv.IssueDate, &inv.DueDate, &inv.Currency, &inv.ExchangeRate, &inv.BillingMode, &inv.PeriodStart, &inv.PeriodEnd, &inv.PONumber, &inv.DiscountType, &inv.DiscountValue, &inv.Subtotal, &inv.DiscountTotal, &inv.TaxTotal, &inv.Total, &inv.AmountPaid, &inv.Notes, &inv.Terms, &inv.Footer, &inv.TemplateID, &inv.RecurringID, &inv.PublicToken, &inv.SentAt, &inv.ViewedAt, &inv.PaidAt, &inv.CreatedAt, &inv.UpdatedAt, &cf, &wd); err != nil {
+	if err := row.Scan(&inv.ID, &inv.Number, &inv.ClientID, &inv.ClientName, &inv.Status, &inv.IssueDate, &inv.DueDate, &inv.Currency, &inv.ExchangeRate, &inv.BillingMode, &inv.PeriodStart, &inv.PeriodEnd, &inv.PONumber, &inv.DiscountType, &inv.DiscountValue, &inv.Subtotal, &inv.DiscountTotal, &inv.TaxTotal, &inv.Total, &inv.AmountPaid, &inv.Notes, &inv.Terms, &inv.Footer, &inv.TemplateID, &inv.RecurringID, &inv.PublicToken, &inv.SentAt, &inv.ViewedAt, &inv.PaidAt, &inv.CreatedAt, &inv.UpdatedAt, &cf, &wd, &inv.UserID); err != nil {
 		return nil, err
 	}
 	inv.CustomFields = map[string]string{}
@@ -40,9 +40,9 @@ type InvoiceFilter struct {
 }
 
 // ListInvoices returns invoices matching the filter (no items).
-func (s *Store) ListInvoices(ctx context.Context, f InvoiceFilter) ([]Invoice, int, error) {
-	where := ` FROM invoices i JOIN clients c ON c.id = i.client_id WHERE 1=1`
-	args := []any{}
+func (s *Store) ListInvoices(ctx context.Context, uid int64, f InvoiceFilter) ([]Invoice, int, error) {
+	where := ` FROM invoices i JOIN clients c ON c.id = i.client_id WHERE i.user_id = ?`
+	args := []any{uid}
 	if f.Status != "" && f.Status != "all" {
 		switch f.Status {
 		case "open", "outstanding":
@@ -97,15 +97,15 @@ func (s *Store) ListInvoices(ctx context.Context, f InvoiceFilter) ([]Invoice, i
 }
 
 // GetInvoice loads an invoice with items and payments.
-func (s *Store) GetInvoice(ctx context.Context, id int64) (*Invoice, error) {
-	inv, err := scanInvoice(s.DB.QueryRowContext(ctx, `SELECT `+invoiceCols+` FROM invoices i JOIN clients c ON c.id = i.client_id WHERE i.id = ?`, id))
+func (s *Store) GetInvoice(ctx context.Context, uid, id int64) (*Invoice, error) {
+	inv, err := scanInvoice(s.DB.QueryRowContext(ctx, `SELECT `+invoiceCols+` FROM invoices i JOIN clients c ON c.id = i.client_id WHERE i.id = ? AND i.user_id = ?`, id, uid))
 	if err != nil {
 		return nil, err
 	}
 	return s.hydrateInvoice(ctx, inv)
 }
 
-// GetInvoiceByToken loads an invoice via its public token.
+// GetInvoiceByToken loads an invoice via its public token (any owner; UserID tells whose it is).
 func (s *Store) GetInvoiceByToken(ctx context.Context, token string) (*Invoice, error) {
 	inv, err := scanInvoice(s.DB.QueryRowContext(ctx, `SELECT `+invoiceCols+` FROM invoices i JOIN clients c ON c.id = i.client_id WHERE i.public_token = ?`, token))
 	if err != nil {
@@ -131,11 +131,11 @@ func (s *Store) hydrateInvoice(ctx context.Context, inv *Invoice) (*Invoice, err
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-	inv.Payments, err = s.ListPayments(ctx, PaymentFilter{InvoiceID: inv.ID})
+	inv.Payments, err = s.ListPayments(ctx, inv.UserID, PaymentFilter{InvoiceID: inv.ID})
 	if err != nil {
 		return nil, err
 	}
-	inv.Attachments, err = s.ListAttachments(ctx, inv.ID)
+	inv.Attachments, err = s.ListAttachments(ctx, inv.UserID, inv.ID)
 	return inv, err
 }
 
@@ -159,14 +159,15 @@ func marshalCF(m map[string]string) string {
 }
 
 // CreateInvoice inserts an invoice and its items.
-func (s *Store) CreateInvoice(ctx context.Context, inv *Invoice) error {
+func (s *Store) CreateInvoice(ctx context.Context, uid int64, inv *Invoice) error {
+	inv.UserID = uid
 	if inv.PublicToken == "" {
 		inv.PublicToken = RandomToken(16)
 	}
 	return s.Tx(ctx, func(tx *sql.Tx) error {
-		res, err := tx.ExecContext(ctx, `INSERT INTO invoices (number, client_id, status, issue_date, due_date, currency, exchange_rate, billing_mode, period_start, period_end, po_number, discount_type, discount_value, subtotal, discount_total, tax_total, total, amount_paid, notes, terms, footer, template_id, recurring_id, public_token, sent_at, paid_at, custom_fields, worked_days)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			inv.Number, inv.ClientID, inv.Status, inv.IssueDate, inv.DueDate, inv.Currency, inv.ExchangeRate, inv.BillingMode, inv.PeriodStart, inv.PeriodEnd, inv.PONumber, inv.DiscountType, inv.DiscountValue, inv.Subtotal, inv.DiscountTotal, inv.TaxTotal, inv.Total, inv.AmountPaid, inv.Notes, inv.Terms, inv.Footer, inv.TemplateID, inv.RecurringID, inv.PublicToken, inv.SentAt, inv.PaidAt, marshalCF(inv.CustomFields), marshalDays(inv.WorkedDays))
+		res, err := tx.ExecContext(ctx, `INSERT INTO invoices (user_id, number, client_id, status, issue_date, due_date, currency, exchange_rate, billing_mode, period_start, period_end, po_number, discount_type, discount_value, subtotal, discount_total, tax_total, total, amount_paid, notes, terms, footer, template_id, recurring_id, public_token, sent_at, paid_at, custom_fields, worked_days)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			NullInt(uid), inv.Number, inv.ClientID, inv.Status, inv.IssueDate, inv.DueDate, inv.Currency, inv.ExchangeRate, inv.BillingMode, inv.PeriodStart, inv.PeriodEnd, inv.PONumber, inv.DiscountType, inv.DiscountValue, inv.Subtotal, inv.DiscountTotal, inv.TaxTotal, inv.Total, inv.AmountPaid, inv.Notes, inv.Terms, inv.Footer, inv.TemplateID, inv.RecurringID, inv.PublicToken, inv.SentAt, inv.PaidAt, marshalCF(inv.CustomFields), marshalDays(inv.WorkedDays))
 		if err != nil {
 			return err
 		}
@@ -191,11 +192,11 @@ func insertItems(ctx context.Context, tx *sql.Tx, inv *Invoice) error {
 }
 
 // UpdateInvoice replaces an invoice and its items.
-func (s *Store) UpdateInvoice(ctx context.Context, inv *Invoice) error {
+func (s *Store) UpdateInvoice(ctx context.Context, uid int64, inv *Invoice) error {
 	return s.Tx(ctx, func(tx *sql.Tx) error {
-		_, err := tx.ExecContext(ctx, `UPDATE invoices SET number=?, client_id=?, status=?, issue_date=?, due_date=?, currency=?, exchange_rate=?, billing_mode=?, period_start=?, period_end=?, po_number=?, discount_type=?, discount_value=?, subtotal=?, discount_total=?, tax_total=?, total=?, amount_paid=?, notes=?, terms=?, footer=?, template_id=?, sent_at=?, viewed_at=?, paid_at=?, custom_fields=?, worked_days=?, updated_at=? WHERE id=?`,
-			inv.Number, inv.ClientID, inv.Status, inv.IssueDate, inv.DueDate, inv.Currency, inv.ExchangeRate, inv.BillingMode, inv.PeriodStart, inv.PeriodEnd, inv.PONumber, inv.DiscountType, inv.DiscountValue, inv.Subtotal, inv.DiscountTotal, inv.TaxTotal, inv.Total, inv.AmountPaid, inv.Notes, inv.Terms, inv.Footer, inv.TemplateID, inv.SentAt, inv.ViewedAt, inv.PaidAt, marshalCF(inv.CustomFields), marshalDays(inv.WorkedDays), Now(), inv.ID)
-		if err != nil {
+		res, err := tx.ExecContext(ctx, `UPDATE invoices SET number=?, client_id=?, status=?, issue_date=?, due_date=?, currency=?, exchange_rate=?, billing_mode=?, period_start=?, period_end=?, po_number=?, discount_type=?, discount_value=?, subtotal=?, discount_total=?, tax_total=?, total=?, amount_paid=?, notes=?, terms=?, footer=?, template_id=?, sent_at=?, viewed_at=?, paid_at=?, custom_fields=?, worked_days=?, updated_at=? WHERE id=? AND user_id=?`,
+			inv.Number, inv.ClientID, inv.Status, inv.IssueDate, inv.DueDate, inv.Currency, inv.ExchangeRate, inv.BillingMode, inv.PeriodStart, inv.PeriodEnd, inv.PONumber, inv.DiscountType, inv.DiscountValue, inv.Subtotal, inv.DiscountTotal, inv.TaxTotal, inv.Total, inv.AmountPaid, inv.Notes, inv.Terms, inv.Footer, inv.TemplateID, inv.SentAt, inv.ViewedAt, inv.PaidAt, marshalCF(inv.CustomFields), marshalDays(inv.WorkedDays), Now(), inv.ID, uid)
+		if err := notFoundIfNone(res, err); err != nil {
 			return err
 		}
 		if _, err := tx.ExecContext(ctx, `DELETE FROM invoice_items WHERE invoice_id = ?`, inv.ID); err != nil {
@@ -206,33 +207,40 @@ func (s *Store) UpdateInvoice(ctx context.Context, inv *Invoice) error {
 }
 
 // UpdateInvoiceStatus sets status and timestamps.
-func (s *Store) UpdateInvoiceStatus(ctx context.Context, id int64, status string, sentAt, viewedAt, paidAt *string) error {
-	_, err := s.DB.ExecContext(ctx, `UPDATE invoices SET status=?, sent_at=COALESCE(?, sent_at), viewed_at=COALESCE(?, viewed_at), paid_at=COALESCE(?, paid_at), updated_at=? WHERE id=?`, status, sentAt, viewedAt, paidAt, Now(), id)
-	return err
+func (s *Store) UpdateInvoiceStatus(ctx context.Context, uid, id int64, status string, sentAt, viewedAt, paidAt *string) error {
+	res, err := s.DB.ExecContext(ctx, `UPDATE invoices SET status=?, sent_at=COALESCE(?, sent_at), viewed_at=COALESCE(?, viewed_at), paid_at=COALESCE(?, paid_at), updated_at=? WHERE id=? AND user_id=?`, status, sentAt, viewedAt, paidAt, Now(), id, uid)
+	return notFoundIfNone(res, err)
 }
 
 // DeleteInvoice removes an invoice (and unlinks time entries).
-func (s *Store) DeleteInvoice(ctx context.Context, id int64) error {
+func (s *Store) DeleteInvoice(ctx context.Context, uid, id int64) error {
 	return s.Tx(ctx, func(tx *sql.Tx) error {
+		var n int
+		if err := tx.QueryRowContext(ctx, `SELECT COUNT(1) FROM invoices WHERE id = ? AND user_id = ?`, id, uid).Scan(&n); err != nil {
+			return err
+		}
+		if n == 0 {
+			return ErrNotFound
+		}
 		if _, err := tx.ExecContext(ctx, `UPDATE time_entries SET invoice_id = NULL WHERE invoice_id = ?`, id); err != nil {
 			return err
 		}
 		if _, err := tx.ExecContext(ctx, `UPDATE expenses SET invoice_id = NULL WHERE invoice_id = ?`, id); err != nil {
 			return err
 		}
-		_, err := tx.ExecContext(ctx, `DELETE FROM invoices WHERE id = ?`, id)
+		_, err := tx.ExecContext(ctx, `DELETE FROM invoices WHERE id = ? AND user_id = ?`, id, uid)
 		return err
 	})
 }
 
 // RecalcAmountPaid recomputes amount_paid from payments and updates status.
-func (s *Store) RecalcAmountPaid(ctx context.Context, id int64) (*Invoice, error) {
-	var paid float64
-	if err := s.DB.QueryRowContext(ctx, `SELECT COALESCE(SUM(applied_amount), 0) FROM payments WHERE invoice_id = ?`, id).Scan(&paid); err != nil {
+func (s *Store) RecalcAmountPaid(ctx context.Context, uid, id int64) (*Invoice, error) {
+	inv, err := s.GetInvoice(ctx, uid, id)
+	if err != nil {
 		return nil, err
 	}
-	inv, err := s.GetInvoice(ctx, id)
-	if err != nil {
+	var paid float64
+	if err := s.DB.QueryRowContext(ctx, `SELECT COALESCE(SUM(applied_amount), 0) FROM payments WHERE invoice_id = ?`, id).Scan(&paid); err != nil {
 		return nil, err
 	}
 	inv.AmountPaid = paid
@@ -258,15 +266,15 @@ func (s *Store) RecalcAmountPaid(ctx context.Context, id int64) (*Invoice, error
 			status = StatusOverdue
 		}
 	}
-	if _, err := s.DB.ExecContext(ctx, `UPDATE invoices SET amount_paid = ?, status = ?, paid_at = ?, updated_at = ? WHERE id = ?`, paid, status, paidAt, Now(), id); err != nil {
+	if _, err := s.DB.ExecContext(ctx, `UPDATE invoices SET amount_paid = ?, status = ?, paid_at = ?, updated_at = ? WHERE id = ? AND user_id = ?`, paid, status, paidAt, Now(), id, uid); err != nil {
 		return nil, err
 	}
-	return s.GetInvoice(ctx, id)
+	return s.GetInvoice(ctx, uid, id)
 }
 
 // MarkOverdue flips open invoices past their due date to overdue. Returns ids changed.
-func (s *Store) MarkOverdue(ctx context.Context) ([]int64, error) {
-	rows, err := s.DB.QueryContext(ctx, `SELECT id FROM invoices WHERE status IN ('sent','viewed','partial') AND due_date < ?`, Today())
+func (s *Store) MarkOverdue(ctx context.Context, uid int64) ([]int64, error) {
+	rows, err := s.DB.QueryContext(ctx, `SELECT id FROM invoices WHERE user_id = ? AND status IN ('sent','viewed','partial') AND due_date < ?`, uid, Today())
 	if err != nil {
 		return nil, err
 	}
@@ -281,23 +289,24 @@ func (s *Store) MarkOverdue(ctx context.Context) ([]int64, error) {
 	}
 	rows.Close()
 	for _, id := range ids {
-		if _, err := s.DB.ExecContext(ctx, `UPDATE invoices SET status = 'overdue', updated_at = ? WHERE id = ?`, Now(), id); err != nil {
+		if _, err := s.DB.ExecContext(ctx, `UPDATE invoices SET status = 'overdue', updated_at = ? WHERE id = ? AND user_id = ?`, Now(), id, uid); err != nil {
 			return ids, err
 		}
 	}
 	return ids, nil
 }
 
-// NumberExists checks whether an invoice number is taken by any client (used by auto-numbering).
-func (s *Store) NumberExists(ctx context.Context, number string, excludeID int64) (bool, error) {
+// NumberExists checks whether one of the user's invoices (any client) already uses a number
+// (used by auto-numbering; each user has their own sequence).
+func (s *Store) NumberExists(ctx context.Context, uid int64, number string, excludeID int64) (bool, error) {
 	var n int
-	err := s.DB.QueryRowContext(ctx, `SELECT COUNT(1) FROM invoices WHERE number = ? AND id != ?`, number, excludeID).Scan(&n)
+	err := s.DB.QueryRowContext(ctx, `SELECT COUNT(1) FROM invoices WHERE user_id = ? AND number = ? AND id != ?`, uid, number, excludeID).Scan(&n)
 	return n > 0, err
 }
 
 // NumberUsage reports who uses a number: the same client (a hard conflict) or other clients (a warning).
-func (s *Store) NumberUsage(ctx context.Context, number string, clientID, excludeID int64) (sameClient bool, others []string, err error) {
-	rows, err := s.DB.QueryContext(ctx, `SELECT i.client_id, c.name FROM invoices i JOIN clients c ON c.id = i.client_id WHERE i.number = ? AND i.id != ?`, number, excludeID)
+func (s *Store) NumberUsage(ctx context.Context, uid int64, number string, clientID, excludeID int64) (sameClient bool, others []string, err error) {
+	rows, err := s.DB.QueryContext(ctx, `SELECT i.client_id, c.name FROM invoices i JOIN clients c ON c.id = i.client_id WHERE i.user_id = ? AND i.number = ? AND i.id != ?`, uid, number, excludeID)
 	if err != nil {
 		return false, nil, err
 	}
@@ -317,20 +326,27 @@ func (s *Store) NumberUsage(ctx context.Context, number string, clientID, exclud
 	return sameClient, others, rows.Err()
 }
 
-// LinkTimeEntries attaches time entries to an invoice.
-func (s *Store) LinkTimeEntries(ctx context.Context, invoiceID int64, entryIDs []int64) error {
+// LinkTimeEntries attaches the user's time entries to one of the user's invoices; ids of
+// other people's entries are ignored.
+func (s *Store) LinkTimeEntries(ctx context.Context, uid, invoiceID int64, entryIDs []int64) error {
+	if !s.ownsInvoice(ctx, uid, invoiceID) {
+		return ErrNotFound
+	}
 	for _, id := range entryIDs {
-		if _, err := s.DB.ExecContext(ctx, `UPDATE time_entries SET invoice_id = ? WHERE id = ?`, invoiceID, id); err != nil {
+		if _, err := s.DB.ExecContext(ctx, `UPDATE time_entries SET invoice_id = ? WHERE id = ? AND user_id = ?`, invoiceID, id, uid); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-// LinkExpenses attaches expenses to an invoice.
-func (s *Store) LinkExpenses(ctx context.Context, invoiceID int64, ids []int64) error {
+// LinkExpenses attaches the user's expenses to one of the user's invoices.
+func (s *Store) LinkExpenses(ctx context.Context, uid, invoiceID int64, ids []int64) error {
+	if !s.ownsInvoice(ctx, uid, invoiceID) {
+		return ErrNotFound
+	}
 	for _, id := range ids {
-		if _, err := s.DB.ExecContext(ctx, `UPDATE expenses SET invoice_id = ? WHERE id = ?`, invoiceID, id); err != nil {
+		if _, err := s.DB.ExecContext(ctx, `UPDATE expenses SET invoice_id = ? WHERE id = ? AND user_id = ?`, invoiceID, id, uid); err != nil {
 			return err
 		}
 	}
@@ -338,12 +354,12 @@ func (s *Store) LinkExpenses(ctx context.Context, invoiceID int64, ids []int64) 
 }
 
 // InvoicesDueForReminder returns overdue invoices whose days-overdue matches one of `days`.
-func (s *Store) InvoicesDueForReminder(ctx context.Context, days []int) ([]Invoice, error) {
+func (s *Store) InvoicesDueForReminder(ctx context.Context, uid int64, days []int) ([]Invoice, error) {
 	if len(days) == 0 {
 		return nil, nil
 	}
-	q := `SELECT ` + invoiceCols + ` FROM invoices i JOIN clients c ON c.id = i.client_id WHERE i.status IN ('sent','viewed','partial','overdue') AND (`
-	args := []any{}
+	q := `SELECT ` + invoiceCols + ` FROM invoices i JOIN clients c ON c.id = i.client_id WHERE i.user_id = ? AND i.status IN ('sent','viewed','partial','overdue') AND (`
+	args := []any{uid}
 	for idx, d := range days {
 		if idx > 0 {
 			q += ` OR `
@@ -370,11 +386,11 @@ func (s *Store) InvoicesDueForReminder(ctx context.Context, days []int) ([]Invoi
 
 // InvoicesForPeriod returns a client's invoices whose service period starts inside
 // [from, to], or (when no period is recorded) whose issue date falls inside it.
-func (s *Store) InvoicesForPeriod(ctx context.Context, clientID int64, from, to string) ([]Invoice, error) {
+func (s *Store) InvoicesForPeriod(ctx context.Context, uid, clientID int64, from, to string) ([]Invoice, error) {
 	rows, err := s.DB.QueryContext(ctx, `SELECT `+invoiceCols+` FROM invoices i JOIN clients c ON c.id = i.client_id
-		WHERE i.client_id = ? AND ((i.period_start IS NOT NULL AND i.period_start >= ? AND i.period_start <= ?)
+		WHERE i.user_id = ? AND i.client_id = ? AND ((i.period_start IS NOT NULL AND i.period_start >= ? AND i.period_start <= ?)
 		   OR (i.period_start IS NULL AND i.issue_date >= ? AND i.issue_date <= ?))
-		ORDER BY i.issue_date DESC, i.id DESC`, clientID, from, to, from, to)
+		ORDER BY i.issue_date DESC, i.id DESC`, uid, clientID, from, to, from, to)
 	if err != nil {
 		return nil, err
 	}
@@ -392,12 +408,12 @@ func (s *Store) InvoicesForPeriod(ctx context.Context, clientID int64, from, to 
 
 // LatestCustomFields returns, per custom field key, the most recent non-empty
 // value used on one of the client's invoices (newest issue date first).
-func (s *Store) LatestCustomFields(ctx context.Context, clientID int64, excludeDrafts bool) (map[string]string, error) {
-	q := `SELECT custom_fields FROM invoices WHERE client_id = ? AND custom_fields <> '{}'`
+func (s *Store) LatestCustomFields(ctx context.Context, uid, clientID int64, excludeDrafts bool) (map[string]string, error) {
+	q := `SELECT custom_fields FROM invoices WHERE user_id = ? AND client_id = ? AND custom_fields <> '{}'`
 	if excludeDrafts {
 		q += ` AND status NOT IN ('draft','cancelled')`
 	}
-	rows, err := s.DB.QueryContext(ctx, q+` ORDER BY issue_date DESC, id DESC LIMIT 50`, clientID)
+	rows, err := s.DB.QueryContext(ctx, q+` ORDER BY issue_date DESC, id DESC LIMIT 50`, uid, clientID)
 	if err != nil {
 		return nil, err
 	}
@@ -417,4 +433,16 @@ func (s *Store) LatestCustomFields(ctx context.Context, clientID int64, excludeD
 		}
 	}
 	return out, rows.Err()
+}
+
+// ownsInvoice reports whether the invoice exists and belongs to uid.
+func (s *Store) ownsInvoice(ctx context.Context, uid, id int64) bool {
+	var n int
+	_ = s.DB.QueryRowContext(ctx, `SELECT COUNT(1) FROM invoices WHERE id = ? AND user_id = ?`, id, uid).Scan(&n)
+	return n > 0
+}
+
+// OwnsInvoice is the exported form, for handlers validating references in request bodies.
+func (s *Store) OwnsInvoice(ctx context.Context, uid, id int64) bool {
+	return s.ownsInvoice(ctx, uid, id)
 }

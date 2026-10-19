@@ -22,7 +22,7 @@ import (
 )
 
 func (s *Server) handleGetSettings(w http.ResponseWriter, r *http.Request) {
-	st, err := s.store.GetSettings(r.Context())
+	st, err := s.store.GetSettings(r.Context(), uidOf(r))
 	if err != nil {
 		s.fail(w, err, "settings")
 		return
@@ -43,19 +43,27 @@ func maskSettings(st store.Settings) map[string]any {
 	return m
 }
 
+// handlePutSettings saves the signed-in person's own settings. The box-wide part (base
+// currency, exchange-rate provider) is only taken from admins; members' values are ignored.
 func (s *Server) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	st, err := s.store.GetSettings(ctx)
+	uid := uidOf(r)
+	isAdmin := userFrom(ctx).Role == roleAdmin
+	st, err := s.store.GetSettings(ctx, uid)
 	if err != nil {
 		s.fail(w, err, "settings")
 		return
 	}
 	prevPwd := st.SMTPPassword
 	prevToken := st.PaperlessToken
-	prevBase := st.BaseCurrency
+	prevBase, prevProvider, prevSetup := st.BaseCurrency, st.ExchangeRateProvider, st.SetupComplete
 	if err := decode(r, &st); err != nil {
 		writeErr(w, http.StatusBadRequest, "invalid json")
 		return
+	}
+	st.SetupComplete = prevSetup
+	if !isAdmin {
+		st.BaseCurrency, st.ExchangeRateProvider = prevBase, prevProvider
 	}
 	if st.SMTPPassword == "" {
 		st.SMTPPassword = prevPwd // password is never echoed back as cleared
@@ -109,12 +117,18 @@ func (s *Server) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 		cleaned = append(cleaned, f)
 	}
 	st.CustomFields = cleaned
-	_ = s.store.SetCurrencyEnabled(ctx, st.BaseCurrency, true)
-	if err := s.store.SaveSettings(ctx, st); err != nil {
+	if err := s.store.SaveSettings(ctx, uid, st); err != nil {
 		s.fail(w, err, "save settings")
 		return
 	}
-	if prevBase != "" && prevBase != st.BaseCurrency {
+	if isAdmin {
+		_ = s.store.SetCurrencyEnabled(ctx, st.BaseCurrency, true)
+		if err := s.store.SaveGlobalSettings(ctx, st); err != nil {
+			s.fail(w, err, "save settings")
+			return
+		}
+	}
+	if isAdmin && prevBase != "" && prevBase != st.BaseCurrency {
 		// Stored rates are quoted against the base; rows for the old base would linger
 		// invisibly and poison cross rates. Drop them and fetch fresh ones for the new base.
 		n, err := s.store.PruneRates(ctx, st.BaseCurrency)
@@ -173,7 +187,8 @@ func (s *Server) handleUploadLogo(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err, "mkdir uploads")
 		return
 	}
-	name := "logo" + ext
+	uid := uidOf(r)
+	name := fmt.Sprintf("logo-%d-%s%s", uid, store.RandomToken(6), ext) // each person has their own logo
 	out, err := os.Create(filepath.Join(dir, name))
 	if err != nil {
 		s.fail(w, err, "save logo")
@@ -184,12 +199,12 @@ func (s *Server) handleUploadLogo(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err, "save logo")
 		return
 	}
-	st, _ := s.store.GetSettings(ctx)
+	st, _ := s.store.GetSettings(ctx, uid)
 	if st.LogoPath != "" && st.LogoPath != name {
 		_ = os.Remove(filepath.Join(dir, filepath.Base(st.LogoPath)))
 	}
 	st.LogoPath = name
-	if err := s.store.SaveSettings(ctx, st); err != nil {
+	if err := s.store.SaveSettings(ctx, uid, st); err != nil {
 		s.fail(w, err, "save settings")
 		return
 	}
@@ -197,12 +212,12 @@ func (s *Server) handleUploadLogo(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleDeleteLogo(w http.ResponseWriter, r *http.Request) {
-	st, _ := s.store.GetSettings(r.Context())
+	st, _ := s.store.GetSettings(r.Context(), uidOf(r))
 	if st.LogoPath != "" {
 		_ = os.Remove(filepath.Join(s.cfg.DataDir, "uploads", filepath.Base(st.LogoPath)))
 	}
 	st.LogoPath = ""
-	if err := s.store.SaveSettings(r.Context(), st); err != nil {
+	if err := s.store.SaveSettings(r.Context(), uidOf(r), st); err != nil {
 		s.fail(w, err, "save settings")
 		return
 	}
@@ -210,7 +225,7 @@ func (s *Server) handleDeleteLogo(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleTestEmail(w http.ResponseWriter, r *http.Request) {
-	st, _ := s.store.GetSettings(r.Context())
+	st, _ := s.store.GetSettings(r.Context(), uidOf(r))
 	var in struct {
 		To string `json:"to"`
 	}
@@ -287,7 +302,7 @@ func (s *Server) handleUpdateCurrency(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleListRates(w http.ResponseWriter, r *http.Request) {
-	st, _ := s.store.GetSettings(r.Context())
+	st, _ := s.store.GetGlobalSettings(r.Context())
 	base := firstNonEmpty(r.URL.Query().Get("base"), st.BaseCurrency)
 	list, err := s.store.ListRates(r.Context(), base)
 	if err != nil {
@@ -298,7 +313,7 @@ func (s *Server) handleListRates(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handlePutRate(w http.ResponseWriter, r *http.Request) {
-	st, _ := s.store.GetSettings(r.Context())
+	st, _ := s.store.GetGlobalSettings(r.Context())
 	var in store.ExchangeRate
 	if err := decode(r, &in); err != nil {
 		writeErr(w, http.StatusBadRequest, "invalid json")
@@ -319,7 +334,7 @@ func (s *Server) handlePutRate(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleDeleteRate(w http.ResponseWriter, r *http.Request) {
-	st, _ := s.store.GetSettings(r.Context())
+	st, _ := s.store.GetGlobalSettings(r.Context())
 	quote := strings.ToUpper(r.URL.Path[strings.LastIndex(r.URL.Path, "/")+1:])
 	base := strings.ToUpper(firstNonEmpty(r.URL.Query().Get("base"), st.BaseCurrency))
 	if err := s.store.DeleteRate(r.Context(), base, quote); err != nil {
@@ -359,7 +374,7 @@ func (s *Server) handleConvert(w http.ResponseWriter, r *http.Request) {
 // ---- tax rates ----
 
 func (s *Server) handleListTaxRates(w http.ResponseWriter, r *http.Request) {
-	list, err := s.store.ListTaxRates(r.Context())
+	list, err := s.store.ListTaxRates(r.Context(), uidOf(r))
 	if err != nil {
 		s.fail(w, err, "list tax rates")
 		return
@@ -377,7 +392,7 @@ func (s *Server) handleSaveTaxRate(w http.ResponseWriter, r *http.Request) {
 	if t.Name == "" {
 		t.Name = fmt.Sprintf("%g%%", t.Rate)
 	}
-	if err := s.store.SaveTaxRate(r.Context(), &t); err != nil {
+	if err := s.store.SaveTaxRate(r.Context(), uidOf(r), &t); err != nil {
 		s.fail(w, err, "save tax rate")
 		return
 	}
@@ -385,7 +400,7 @@ func (s *Server) handleSaveTaxRate(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleDeleteTaxRate(w http.ResponseWriter, r *http.Request) {
-	if err := s.store.DeleteTaxRate(r.Context(), idParam(r, "id")); err != nil {
+	if err := s.store.DeleteTaxRate(r.Context(), uidOf(r), idParam(r, "id")); err != nil {
 		s.fail(w, err, "delete tax rate")
 		return
 	}
@@ -395,7 +410,7 @@ func (s *Server) handleDeleteTaxRate(w http.ResponseWriter, r *http.Request) {
 // ---- products ----
 
 func (s *Server) handleListProducts(w http.ResponseWriter, r *http.Request) {
-	list, err := s.store.ListProducts(r.Context(), r.URL.Query().Get("archived") == "1")
+	list, err := s.store.ListProducts(r.Context(), uidOf(r), r.URL.Query().Get("archived") == "1")
 	if err != nil {
 		s.fail(w, err, "list products")
 		return
@@ -419,9 +434,9 @@ func (s *Server) handleSaveProduct(w http.ResponseWriter, r *http.Request) {
 	}
 	var err error
 	if p.ID == 0 {
-		err = s.store.CreateProduct(r.Context(), &p)
+		err = s.store.CreateProduct(r.Context(), uidOf(r), &p)
 	} else {
-		err = s.store.UpdateProduct(r.Context(), &p)
+		err = s.store.UpdateProduct(r.Context(), uidOf(r), &p)
 	}
 	if err != nil {
 		s.fail(w, err, "save product")
@@ -431,7 +446,7 @@ func (s *Server) handleSaveProduct(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleDeleteProduct(w http.ResponseWriter, r *http.Request) {
-	if err := s.store.DeleteProduct(r.Context(), idParam(r, "id")); err != nil {
+	if err := s.store.DeleteProduct(r.Context(), uidOf(r), idParam(r, "id")); err != nil {
 		s.fail(w, err, "delete product")
 		return
 	}
@@ -441,7 +456,11 @@ func (s *Server) handleDeleteProduct(w http.ResponseWriter, r *http.Request) {
 // ---- templates ----
 
 func (s *Server) handleListTemplates(w http.ResponseWriter, r *http.Request) {
-	list, err := s.store.ListTemplates(r.Context())
+	if err := s.store.EnsureDefaultTemplates(r.Context(), uidOf(r)); err != nil {
+		s.fail(w, err, "default templates")
+		return
+	}
+	list, err := s.store.ListTemplates(r.Context(), uidOf(r))
 	if err != nil {
 		s.fail(w, err, "list templates")
 		return
@@ -498,9 +517,10 @@ func (s *Server) handleUploadDocxTemplate(w http.ResponseWriter, r *http.Request
 		writeErr(w, http.StatusBadRequest, "template cannot be filled: "+err.Error())
 		return
 	}
+	uid := uidOf(r)
 	var t *store.InvoiceTemplate
 	if id := idParam(r, "id"); id > 0 {
-		t, err = s.store.GetTemplate(ctx, id)
+		t, err = s.store.GetTemplate(ctx, uid, id)
 		if err != nil {
 			s.fail(w, err, "get template")
 			return
@@ -529,11 +549,11 @@ func (s *Server) handleUploadDocxTemplate(w http.ResponseWriter, r *http.Request
 	}
 	t.Kind = "docx"
 	t.DocxPath = stored
-	if err := s.store.SaveTemplate(ctx, t); err != nil {
+	if err := s.store.SaveTemplate(ctx, uid, t); err != nil {
 		s.fail(w, err, "save template")
 		return
 	}
-	saved, _ := s.store.GetTemplate(ctx, t.ID)
+	saved, _ := s.store.GetTemplate(ctx, uid, t.ID)
 	writeJSON(w, http.StatusCreated, map[string]any{"template": decorateTemplate(saved), "placeholders": placeholders})
 }
 
@@ -549,7 +569,7 @@ func decorateTemplate(t *store.InvoiceTemplate) *store.InvoiceTemplate {
 }
 
 func (s *Server) handleDownloadDocxTemplate(w http.ResponseWriter, r *http.Request) {
-	t, err := s.store.GetTemplate(r.Context(), idParam(r, "id"))
+	t, err := s.store.GetTemplate(r.Context(), uidOf(r), idParam(r, "id"))
 	if err != nil {
 		s.fail(w, err, "get template")
 		return
@@ -572,9 +592,14 @@ func (s *Server) handleSaveTemplate(w http.ResponseWriter, r *http.Request) {
 	}
 	t.ID = idParam(r, "id")
 	if t.ID > 0 {
-		if existing, err := s.store.GetTemplate(r.Context(), t.ID); err == nil {
-			t.Kind, t.DocxPath = existing.Kind, existing.DocxPath // file is managed by the upload endpoint
+		existing, err := s.store.GetTemplate(r.Context(), uidOf(r), t.ID)
+		if err != nil {
+			s.fail(w, err, "get template")
+			return
 		}
+		t.Kind, t.DocxPath = existing.Kind, existing.DocxPath // file is managed by the upload endpoint
+	} else {
+		t.Kind, t.DocxPath = "design", "" // Word files only come in through the upload endpoint
 	}
 	if strings.TrimSpace(t.Name) == "" {
 		writeErr(w, http.StatusBadRequest, "name is required")
@@ -596,7 +621,7 @@ func (s *Server) handleSaveTemplate(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if err := s.store.SaveTemplate(r.Context(), &t); err != nil {
+	if err := s.store.SaveTemplate(r.Context(), uidOf(r), &t); err != nil {
 		s.fail(w, err, "save template")
 		return
 	}
@@ -604,10 +629,15 @@ func (s *Server) handleSaveTemplate(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleDeleteTemplate(w http.ResponseWriter, r *http.Request) {
-	if t, err := s.store.GetTemplate(r.Context(), idParam(r, "id")); err == nil && t.DocxPath != "" && !t.IsDefault {
+	t, err := s.store.GetTemplate(r.Context(), uidOf(r), idParam(r, "id"))
+	if err != nil {
+		s.fail(w, err, "get template")
+		return
+	}
+	if t.DocxPath != "" && !t.IsDefault {
 		_ = os.Remove(s.docxTemplatePath(t))
 	}
-	if err := s.store.DeleteTemplate(r.Context(), idParam(r, "id")); err != nil {
+	if err := s.store.DeleteTemplate(r.Context(), uidOf(r), t.ID); err != nil {
 		s.fail(w, err, "delete template")
 		return
 	}
@@ -636,11 +666,12 @@ func sampleBuildInput() pdf.BuildInput {
 
 func (s *Server) previewDoc(r *http.Request) (*pdf.Document, *store.InvoiceTemplate, []byte, string, error) {
 	ctx := r.Context()
-	st, err := s.store.GetSettings(ctx)
+	uid := uidOf(r)
+	st, err := s.store.GetSettings(ctx, uid)
 	if err != nil {
 		return nil, nil, nil, "", err
 	}
-	tpl, err := s.store.GetTemplate(ctx, idParam(r, "id"))
+	tpl, err := s.store.GetTemplate(ctx, uid, idParam(r, "id"))
 	if err != nil {
 		return nil, nil, nil, "", err
 	}
@@ -654,9 +685,9 @@ func (s *Server) previewDoc(r *http.Request) (*pdf.Document, *store.InvoiceTempl
 	}
 	in := sampleBuildInput()
 	if id := qInt64(r, "invoice_id"); id > 0 {
-		if inv, err := s.store.GetInvoice(ctx, id); err == nil {
+		if inv, err := s.store.GetInvoice(ctx, uid, id); err == nil {
 			in.Invoice = inv
-			in.Client, _ = s.store.GetClient(ctx, inv.ClientID)
+			in.Client, _ = s.store.GetClient(ctx, uid, inv.ClientID)
 			in.Currency = s.store.GetCurrency(ctx, inv.Currency)
 		}
 	}

@@ -8,6 +8,8 @@ Authorization: Bearer pi_xxxxxxxx
 X-API-Key: pi_xxxxxxxx
 ```
 
+Everything is per person: a token or session only ever sees and changes the records of the account it belongs to (clients, invoices, payments, expenses, time, products, tax rates, templates, documents, webhooks, settings). Another person's id answers `404`, exactly like an id that does not exist. Admins manage the server (users, currencies and exchange rates, system info, database backup, the scheduler; `403` for members) but get no extra access to anyone's records.
+
 Errors: `{"error": "message"}` with a 4xx/5xx status. Dates are `YYYY-MM-DD`; timestamps RFC 3339 (UTC). Amounts are JSON numbers in the document's currency.
 
 For a ready-made client, [Pocket Homelab](https://pockethomelab.com/) (iPhone, iPad, Mac, Android) uses this API with a token: the dashboard, invoices, payments, the timer and recurring profiles. See the README's [Companion app](../README.md#companion-app-pocket-homelab) section.
@@ -21,7 +23,7 @@ For a ready-made client, [Pocket Homelab](https://pockethomelab.com/) (iPhone, i
 | POST | `/auth/logout` | |
 | GET/PUT | `/auth/me` | Profile; PUT `{name, email, current_password, new_password}` |
 | GET/POST/DELETE | `/tokens`, `/tokens/{id}` | API tokens (plaintext returned once on create) |
-| GET/POST/PUT/DELETE | `/users`, `/users/{id}` | User management |
+| GET/POST/PUT/DELETE | `/users`, `/users/{id}` | User management (admins). Roles `admin` / `member`; new and auto-provisioned accounts are members. Deleting someone who still owns records answers `409`. |
 
 ## Clients
 | Method | Path |

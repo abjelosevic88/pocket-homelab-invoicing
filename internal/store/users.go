@@ -4,7 +4,10 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
+	"encoding/json"
+	"fmt"
 	"time"
 )
 
@@ -22,7 +25,7 @@ func (s *Store) CreateUser(ctx context.Context, u *User) error {
 		return err
 	}
 	u.ID, _ = res.LastInsertId()
-	return nil
+	return s.AdoptOrphans(ctx)
 }
 
 // UpdateUser updates name/email/password/role.
@@ -31,10 +34,17 @@ func (s *Store) UpdateUser(ctx context.Context, u *User) error {
 	return err
 }
 
-// DeleteUser removes a user.
+// DeleteUser removes a user together with their logs, settings, sessions and tokens.
+// Callers refuse first when the user still owns business records (OwnedRecords).
 func (s *Store) DeleteUser(ctx context.Context, id int64) error {
-	_, err := s.DB.ExecContext(ctx, `DELETE FROM users WHERE id = ?`, id)
-	return err
+	return s.Tx(ctx, func(tx *sql.Tx) error {
+		for _, q := range []string{`DELETE FROM activity_log WHERE user_id = ?`, `DELETE FROM email_log WHERE user_id = ?`, `DELETE FROM user_settings WHERE user_id = ?`, `DELETE FROM users WHERE id = ?`} {
+			if _, err := tx.ExecContext(ctx, q, id); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
 
 func scanUser(row interface{ Scan(...any) error }) (*User, error) {
@@ -159,4 +169,72 @@ func (s *Store) ListAPITokens(ctx context.Context, userID int64) ([]APIToken, er
 func (s *Store) DeleteAPIToken(ctx context.Context, userID, id int64) error {
 	_, err := s.DB.ExecContext(ctx, `DELETE FROM api_tokens WHERE id = ? AND user_id = ?`, id, userID)
 	return err
+}
+
+// ContentTables lists every table whose rows belong to one user (user_id column).
+// invoice_items is not listed: its rows inherit the owner of their invoice.
+var ContentTables = []string{"clients", "products", "tax_rates", "invoice_templates", "invoices", "payments", "recurring_invoices", "time_entries", "expenses", "webhooks", "activity_log", "email_log", "attachments", "documents", "paperless_links"}
+
+// OwnerID returns the box owner: the first admin account, else the first account, else 0.
+func (s *Store) OwnerID(ctx context.Context) int64 {
+	var id sql.NullInt64
+	_ = s.DB.QueryRowContext(ctx, `SELECT COALESCE((SELECT id FROM users WHERE role = 'admin' ORDER BY id LIMIT 1), (SELECT MIN(id) FROM users))`).Scan(&id)
+	return id.Int64
+}
+
+// AdoptOrphans gives rows without an owner (created before any account existed, e.g. demo
+// data on a fresh install) and a not-yet-split settings blob to the owner account. Idempotent;
+// a no-op when there is no account yet or nothing is ownerless.
+func (s *Store) AdoptOrphans(ctx context.Context) error {
+	owner := s.OwnerID(ctx)
+	if owner == 0 {
+		return nil
+	}
+	for _, t := range ContentTables {
+		if _, err := s.DB.ExecContext(ctx, `UPDATE `+t+` SET user_id = ? WHERE user_id IS NULL`, owner); err != nil {
+			return fmt.Errorf("adopt %s: %w", t, err)
+		}
+	}
+	// A global settings row that still carries personal keys (written before the first
+	// account existed) moves to the owner, unless the owner already has settings.
+	var raw string
+	if err := s.DB.QueryRowContext(ctx, `SELECT value FROM settings WHERE key = 'app'`).Scan(&raw); err != nil {
+		return nil
+	}
+	var m map[string]any
+	if json.Unmarshal([]byte(raw), &m) != nil {
+		return nil
+	}
+	if _, personal := m["company_name"]; !personal {
+		return nil
+	}
+	var n int
+	_ = s.DB.QueryRowContext(ctx, `SELECT COUNT(1) FROM user_settings WHERE user_id = ?`, owner).Scan(&n)
+	if n == 0 {
+		if _, err := s.DB.ExecContext(ctx, `INSERT INTO user_settings (user_id, value) VALUES (?, ?)`, owner, raw); err != nil {
+			return err
+		}
+	}
+	box, err := s.getBox(ctx)
+	if err != nil {
+		return err
+	}
+	b, _ := json.Marshal(box)
+	return s.SetKV(ctx, "app", string(b))
+}
+
+// OwnedRecords counts the content rows a user owns (used to refuse deleting such a user).
+func (s *Store) OwnedRecords(ctx context.Context, uid int64) (int, error) {
+	total := 0
+	for _, t := range ContentTables {
+		if t == "activity_log" || t == "email_log" {
+			continue
+		}
+		var n int
+		if err := s.DB.QueryRowContext(ctx, `SELECT COUNT(1) FROM `+t+` WHERE user_id = ?`, uid).Scan(&n); err != nil {
+			return 0, err
+		}
+		total += n
+	}
+	return total, nil
 }

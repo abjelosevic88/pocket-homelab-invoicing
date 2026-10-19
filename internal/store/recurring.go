@@ -19,8 +19,8 @@ func scanRecurring(row interface{ Scan(...any) error }) (*RecurringInvoice, erro
 }
 
 // ListRecurring lists recurring profiles.
-func (s *Store) ListRecurring(ctx context.Context) ([]RecurringInvoice, error) {
-	rows, err := s.DB.QueryContext(ctx, `SELECT `+recurringCols+` FROM recurring_invoices r JOIN clients c ON c.id = r.client_id ORDER BY r.status, r.next_run`)
+func (s *Store) ListRecurring(ctx context.Context, uid int64) ([]RecurringInvoice, error) {
+	rows, err := s.DB.QueryContext(ctx, `SELECT `+recurringCols+` FROM recurring_invoices r JOIN clients c ON c.id = r.client_id WHERE r.user_id = ? ORDER BY r.status, r.next_run`, uid)
 	if err != nil {
 		return nil, err
 	}
@@ -37,8 +37,8 @@ func (s *Store) ListRecurring(ctx context.Context) ([]RecurringInvoice, error) {
 }
 
 // DueRecurring returns active profiles whose next_run <= today.
-func (s *Store) DueRecurring(ctx context.Context) ([]RecurringInvoice, error) {
-	rows, err := s.DB.QueryContext(ctx, `SELECT `+recurringCols+` FROM recurring_invoices r JOIN clients c ON c.id = r.client_id WHERE r.status = 'active' AND r.next_run <= ? ORDER BY r.next_run`, Today())
+func (s *Store) DueRecurring(ctx context.Context, uid int64) ([]RecurringInvoice, error) {
+	rows, err := s.DB.QueryContext(ctx, `SELECT `+recurringCols+` FROM recurring_invoices r JOIN clients c ON c.id = r.client_id WHERE r.user_id = ? AND r.status = 'active' AND r.next_run <= ? ORDER BY r.next_run`, uid, Today())
 	if err != nil {
 		return nil, err
 	}
@@ -55,33 +55,36 @@ func (s *Store) DueRecurring(ctx context.Context) ([]RecurringInvoice, error) {
 }
 
 // GetRecurring returns one profile.
-func (s *Store) GetRecurring(ctx context.Context, id int64) (*RecurringInvoice, error) {
-	return scanRecurring(s.DB.QueryRowContext(ctx, `SELECT `+recurringCols+` FROM recurring_invoices r JOIN clients c ON c.id = r.client_id WHERE r.id = ?`, id))
+func (s *Store) GetRecurring(ctx context.Context, uid, id int64) (*RecurringInvoice, error) {
+	return scanRecurring(s.DB.QueryRowContext(ctx, `SELECT `+recurringCols+` FROM recurring_invoices r JOIN clients c ON c.id = r.client_id WHERE r.id = ? AND r.user_id = ?`, id, uid))
 }
 
 // SaveRecurring creates or updates a profile.
-func (s *Store) SaveRecurring(ctx context.Context, r *RecurringInvoice) error {
+func (s *Store) SaveRecurring(ctx context.Context, uid int64, r *RecurringInvoice) error {
 	items, _ := json.Marshal(r.Items)
 	if r.ID == 0 {
-		res, err := s.DB.ExecContext(ctx, `INSERT INTO recurring_invoices (name, client_id, status, frequency, interval, start_date, end_date, next_run, last_run, occurrences, max_occurrences, due_days, currency, billing_mode, items, discount_type, discount_value, notes, terms, auto_send, template_id, quantity_mode, period_mode)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-			r.Name, r.ClientID, r.Status, r.Frequency, r.Interval, r.StartDate, r.EndDate, r.NextRun, r.LastRun, r.Occurrences, r.MaxOccurrences, r.DueDays, r.Currency, r.BillingMode, string(items), r.DiscountType, r.DiscountValue, r.Notes, r.Terms, r.AutoSend, r.TemplateID, r.QuantityMode, r.PeriodMode)
+		res, err := s.DB.ExecContext(ctx, `INSERT INTO recurring_invoices (user_id, name, client_id, status, frequency, interval, start_date, end_date, next_run, last_run, occurrences, max_occurrences, due_days, currency, billing_mode, items, discount_type, discount_value, notes, terms, auto_send, template_id, quantity_mode, period_mode)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			NullInt(uid), r.Name, r.ClientID, r.Status, r.Frequency, r.Interval, r.StartDate, r.EndDate, r.NextRun, r.LastRun, r.Occurrences, r.MaxOccurrences, r.DueDays, r.Currency, r.BillingMode, string(items), r.DiscountType, r.DiscountValue, r.Notes, r.Terms, r.AutoSend, r.TemplateID, r.QuantityMode, r.PeriodMode)
 		if err != nil {
 			return err
 		}
 		r.ID, _ = res.LastInsertId()
 		return nil
 	}
-	_, err := s.DB.ExecContext(ctx, `UPDATE recurring_invoices SET name=?, client_id=?, status=?, frequency=?, interval=?, start_date=?, end_date=?, next_run=?, last_run=?, occurrences=?, max_occurrences=?, due_days=?, currency=?, billing_mode=?, items=?, discount_type=?, discount_value=?, notes=?, terms=?, auto_send=?, template_id=?, quantity_mode=?, period_mode=?, updated_at=? WHERE id=?`,
-		r.Name, r.ClientID, r.Status, r.Frequency, r.Interval, r.StartDate, r.EndDate, r.NextRun, r.LastRun, r.Occurrences, r.MaxOccurrences, r.DueDays, r.Currency, r.BillingMode, string(items), r.DiscountType, r.DiscountValue, r.Notes, r.Terms, r.AutoSend, r.TemplateID, r.QuantityMode, r.PeriodMode, Now(), r.ID)
-	return err
+	res, err := s.DB.ExecContext(ctx, `UPDATE recurring_invoices SET name=?, client_id=?, status=?, frequency=?, interval=?, start_date=?, end_date=?, next_run=?, last_run=?, occurrences=?, max_occurrences=?, due_days=?, currency=?, billing_mode=?, items=?, discount_type=?, discount_value=?, notes=?, terms=?, auto_send=?, template_id=?, quantity_mode=?, period_mode=?, updated_at=? WHERE id=? AND user_id=?`,
+		r.Name, r.ClientID, r.Status, r.Frequency, r.Interval, r.StartDate, r.EndDate, r.NextRun, r.LastRun, r.Occurrences, r.MaxOccurrences, r.DueDays, r.Currency, r.BillingMode, string(items), r.DiscountType, r.DiscountValue, r.Notes, r.Terms, r.AutoSend, r.TemplateID, r.QuantityMode, r.PeriodMode, Now(), r.ID, uid)
+	return notFoundIfNone(res, err)
 }
 
 // DeleteRecurring removes a profile (generated invoices are kept).
-func (s *Store) DeleteRecurring(ctx context.Context, id int64) error {
-	if _, err := s.DB.ExecContext(ctx, `UPDATE invoices SET recurring_id = NULL WHERE recurring_id = ?`, id); err != nil {
+func (s *Store) DeleteRecurring(ctx context.Context, uid, id int64) error {
+	if _, err := s.GetRecurring(ctx, uid, id); err != nil {
 		return err
 	}
-	_, err := s.DB.ExecContext(ctx, `DELETE FROM recurring_invoices WHERE id = ?`, id)
+	if _, err := s.DB.ExecContext(ctx, `UPDATE invoices SET recurring_id = NULL WHERE recurring_id = ? AND user_id = ?`, id, uid); err != nil {
+		return err
+	}
+	_, err := s.DB.ExecContext(ctx, `DELETE FROM recurring_invoices WHERE id = ? AND user_id = ?`, id, uid)
 	return err
 }

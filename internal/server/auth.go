@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -21,6 +22,33 @@ const sessionCookie = "pi_session"
 func userFrom(ctx context.Context) *store.User {
 	u, _ := ctx.Value(userKey).(*store.User)
 	return u
+}
+
+// uidOf is the authenticated principal's user id; every content query is scoped by it.
+func uidOf(r *http.Request) int64 {
+	if u := userFrom(r.Context()); u != nil {
+		return u.ID
+	}
+	return 0
+}
+
+const (
+	roleAdmin  = "admin"
+	roleMember = "member"
+)
+
+func validRole(r string) bool { return r == roleAdmin || r == roleMember }
+
+// requireAdmin guards box-wide settings (users, currencies and exchange rates, system
+// info, database backup, the scheduler). Admins get no extra access to anyone's content.
+func (s *Server) requireAdmin(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if u := userFrom(r.Context()); u == nil || u.Role != roleAdmin {
+			writeErr(w, http.StatusForbidden, "admin only")
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 // requireAuth resolves the current user from a session cookie, bearer token,
@@ -90,12 +118,18 @@ func (s *Server) coreUser(ctx context.Context, tok string) (*store.User, error) 
 	return s.firstOrSystemUser(ctx, strings.ToLower(in.User.Email), in.User.Name)
 }
 
-// firstOrSystemUser returns the user with the given email, creating it if needed.
+// firstOrSystemUser returns the user with the given email, creating it if needed. The very
+// first account becomes the admin (the box owner); everyone after that is a member with
+// their own, empty business.
 func (s *Server) firstOrSystemUser(ctx context.Context, email, name string) (*store.User, error) {
 	if u, err := s.store.GetUserByEmail(ctx, email); err == nil {
 		return u, nil
 	}
-	u := &store.User{Email: email, Name: name, Role: "admin"}
+	role := roleMember
+	if n, err := s.store.CountUsers(ctx); err == nil && n == 0 {
+		role = roleAdmin
+	}
+	u := &store.User{Email: email, Name: name, Role: role}
 	if err := s.store.CreateUser(ctx, u); err != nil {
 		return nil, err
 	}
@@ -121,8 +155,14 @@ func (s *Server) handleAuthStatus(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err, "count users")
 		return
 	}
-	st, _ := s.store.GetSettings(r.Context())
 	u, _ := s.resolveUser(r)
+	// Signed in: your own company name. Signed out: the box owner's (the login page brand,
+	// already public on every invoice link).
+	owner := s.store.OwnerID(r.Context())
+	if u != nil {
+		owner = u.ID
+	}
+	st, _ := s.store.GetSettings(r.Context(), owner)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"needs_setup":    n == 0 && s.cfg.AuthMode == "local",
 		"setup_complete": st.SetupComplete,
@@ -164,12 +204,12 @@ func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	hash, _ := bcrypt.GenerateFromPassword([]byte(in.Password), bcrypt.DefaultCost)
-	u := &store.User{Email: in.Email, Name: in.Name, PasswordHash: string(hash), Role: "admin"}
+	u := &store.User{Email: in.Email, Name: in.Name, PasswordHash: string(hash), Role: roleAdmin}
 	if err := s.store.CreateUser(ctx, u); err != nil {
 		s.fail(w, err, "create user")
 		return
 	}
-	st, _ := s.store.GetSettings(ctx)
+	st, _ := s.store.GetSettings(ctx, u.ID)
 	if in.CompanyName != "" {
 		st.CompanyName = in.CompanyName
 	}
@@ -178,7 +218,11 @@ func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
 		_ = s.store.SetCurrencyEnabled(ctx, st.BaseCurrency, true)
 	}
 	st.SetupComplete = true
-	if err := s.store.SaveSettings(ctx, st); err != nil {
+	if err := s.store.SaveSettings(ctx, u.ID, st); err != nil {
+		s.fail(w, err, "save settings")
+		return
+	}
+	if err := s.store.SaveGlobalSettings(ctx, st); err != nil {
 		s.fail(w, err, "save settings")
 		return
 	}
@@ -292,7 +336,11 @@ func (s *Server) handleCreateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if in.Role == "" {
-		in.Role = "admin"
+		in.Role = roleMember
+	}
+	if !validRole(in.Role) {
+		writeErr(w, http.StatusBadRequest, "role must be admin or member")
+		return
 	}
 	h, _ := bcrypt.GenerateFromPassword([]byte(in.Password), bcrypt.DefaultCost)
 	u := &store.User{Email: strings.ToLower(strings.TrimSpace(in.Email)), Name: in.Name, PasswordHash: string(h), Role: in.Role}
@@ -326,6 +374,10 @@ func (s *Server) handleUpdateUser(w http.ResponseWriter, r *http.Request) {
 		u.Name = in.Name
 	}
 	if in.Role != "" {
+		if !validRole(in.Role) {
+			writeErr(w, http.StatusBadRequest, "role must be admin or member")
+			return
+		}
 		u.Role = in.Role
 	}
 	if in.Password != "" {
@@ -344,6 +396,19 @@ func (s *Server) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
 	id := idParam(r, "id")
 	if me.ID == id {
 		writeErr(w, http.StatusBadRequest, "you cannot delete yourself")
+		return
+	}
+	if _, err := s.store.GetUser(r.Context(), id); err != nil {
+		s.fail(w, err, "get user")
+		return
+	}
+	// Each person's business records are theirs alone; refuse instead of deleting or
+	// re-assigning them.
+	if n, err := s.store.OwnedRecords(r.Context(), id); err != nil {
+		s.fail(w, err, "count records")
+		return
+	} else if n > 0 {
+		writeErr(w, http.StatusConflict, fmt.Sprintf("this user still owns %d records (clients, invoices, …); they must delete them first", n))
 		return
 	}
 	if err := s.store.DeleteUser(r.Context(), id); err != nil {

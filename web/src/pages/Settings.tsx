@@ -15,11 +15,16 @@ const TABS: { id: Tab; label: string }[] = [
 export default function Settings() {
   const { '*': sub } = useParams()
   const navigate = useNavigate()
-  const tab = (TABS.find(t => t.id === sub)?.id || 'company') as Tab
+  const { user } = useApp()
+  const isAdmin = user?.role === 'admin'
+  // Everything here is the signed-in person's own, except System (admins only) and the
+  // user list; members see just their profile under that tab.
+  const tabs = TABS.filter(t => isAdmin || t.id !== 'system').map(t => (!isAdmin && t.id === 'users' ? { ...t, label: 'Profile' } : t))
+  const tab = (tabs.find(t => t.id === sub)?.id || 'company') as Tab
   return (
     <>
       <div className="page-header"><div><h1>Settings</h1></div></div>
-      <Tabs tabs={TABS} value={tab} onChange={t => navigate(`/settings/${t}`)} />
+      <Tabs tabs={tabs} value={tab} onChange={t => navigate(`/settings/${t}`)} />
       {tab === 'company' && <Company />}
       {tab === 'invoicing' && <Invoicing />}
       {tab === 'currencies' && <Currencies />}
@@ -32,7 +37,7 @@ export default function Settings() {
       {tab === 'webhooks' && <Webhooks />}
       {tab === 'users' && <Users />}
       {tab === 'backup' && <Backup />}
-      {tab === 'system' && <System />}
+      {tab === 'system' && isAdmin && <System />}
     </>
   )
 }
@@ -227,7 +232,8 @@ function WorkingDaysCard({ s, setS, save, busy }: { s: S; setS: React.Dispatch<R
 
 // ---------- Currencies ----------
 function Currencies() {
-  const { settings, refresh } = useApp()
+  const { settings, refresh, user } = useApp()
+  const isAdmin = user?.role === 'admin'
   const toast = useToast()
   const { s, set, save, busy } = useSettingsForm()
   const { data: list, reload } = useAsync(() => api.get<Currency[]>(`${V1}/currencies`))
@@ -244,26 +250,27 @@ function Currencies() {
     <div className="grid cols-2">
       <div className="grid">
         <Card title="Base currency">
-          <Field label="Base currency" help="Reports and the dashboard are shown in this currency. Changing it does not alter existing invoices."><select value={s.base_currency} onChange={set('base_currency')}>{list.map(c => <option key={c.code} value={c.code}>{c.code} – {c.name}</option>)}</select></Field>
+          {!isAdmin && <div className="callout mb">Currencies and exchange rates are shared by everyone on this server; only an admin can change them.</div>}
+          <Field label="Base currency" help="Reports and the dashboard are shown in this currency. Changing it does not alter existing invoices."><select value={s.base_currency} onChange={set('base_currency')} disabled={!isAdmin}>{list.map(c => <option key={c.code} value={c.code}>{c.code} – {c.name}</option>)}</select></Field>
           <Field label="Rate source" help={s.exchange_rate_provider === 'cbbh' ? 'Official daily list of the Central Bank of BiH (middle rate). New invoices lock the rate valid on their issue date, so backdated invoices get that day\'s rate.' : 'Where automatic rates come from. Invoices lock the stored rate at creation; you can override it per invoice.'}>
-            <select value={s.exchange_rate_provider || ''} onChange={set('exchange_rate_provider')}>
+            <select value={s.exchange_rate_provider || ''} onChange={set('exchange_rate_provider')} disabled={!isAdmin}>
               <option value="">Server default ({rates?.default_provider || '…'})</option>
               {rates?.providers.map(p => <option key={p.ID} value={p.ID}>{p.Label}</option>)}
             </select>
           </Field>
-          <SaveBar onSave={async () => { await save(); reloadRates() }} busy={busy} />
+          {isAdmin && <SaveBar onSave={async () => { await save(); reloadRates() }} busy={busy} />}
         </Card>
-        <Card title={`Exchange rates (1 ${base} = …)`} actions={<button className="btn sm" disabled={refreshing || rates?.provider === 'none'} onClick={refreshRates}>{refreshing ? 'Refreshing…' : `Refresh from ${rates?.provider || 'provider'}`}</button>} flush>
+        <Card title={`Exchange rates (1 ${base} = …)`} actions={isAdmin && <button className="btn sm" disabled={refreshing || rates?.provider === 'none'} onClick={refreshRates}>{refreshing ? 'Refreshing…' : `Refresh from ${rates?.provider || 'provider'}`}</button>} flush>
           {rates?.provider === 'none' && <div className="callout warn" style={{ margin: 12 }}>Automatic rates are disabled. Pick a rate source above or enter rates manually below.</div>}
           {rates?.provider === 'cbbh' && base !== 'BAM' && <div className="callout warn" style={{ margin: 12 }}>The Central Bank of BiH quotes everything against BAM. With {base} as base currency, rates are derived through BAM.</div>}
           <table className="table"><thead><tr><th>Quote</th><th className="num">Rate</th><th>Source</th><th>Updated</th><th></th></tr></thead>
-            <tbody>{rates?.rates.map(r => <tr key={r.quote}><td className="bold">{r.quote}</td><td className="num">{r.rate.toFixed(6)}</td><td className="muted">{r.source}</td><td className="muted small">{fmtDateTime(r.fetched_at)}</td><td className="actions"><button className="btn ghost sm" onClick={async () => { await api.del(`${V1}/rates/${r.quote}`); reloadRates() }}>✕</button></td></tr>)}
-              <tr><td><input value={manual.quote} onChange={e => setManual({ ...manual, quote: e.target.value })} placeholder="USD" style={{ width: 80 }} /></td><td><input value={manual.rate} onChange={e => setManual({ ...manual, rate: e.target.value })} placeholder="1.08" style={{ width: 110 }} /></td><td colSpan={2} className="muted small">Manual rates are never overwritten by refresh.</td><td className="actions"><button className="btn sm" onClick={addManual} disabled={!manual.quote || !manual.rate}>Add</button></td></tr>
+            <tbody>{rates?.rates.map(r => <tr key={r.quote}><td className="bold">{r.quote}</td><td className="num">{r.rate.toFixed(6)}</td><td className="muted">{r.source}</td><td className="muted small">{fmtDateTime(r.fetched_at)}</td><td className="actions">{isAdmin && <button className="btn ghost sm" onClick={async () => { await api.del(`${V1}/rates/${r.quote}`); reloadRates() }}>✕</button>}</td></tr>)}
+              {isAdmin && <tr><td><input value={manual.quote} onChange={e => setManual({ ...manual, quote: e.target.value })} placeholder="USD" style={{ width: 80 }} /></td><td><input value={manual.rate} onChange={e => setManual({ ...manual, rate: e.target.value })} placeholder="1.08" style={{ width: 110 }} /></td><td colSpan={2} className="muted small">Manual rates are never overwritten by refresh.</td><td className="actions"><button className="btn sm" onClick={addManual} disabled={!manual.quote || !manual.rate}>Add</button></td></tr>}
             </tbody></table>
         </Card>
       </div>
       <Card title="Enabled currencies" actions={<input placeholder="Filter…" value={filter} onChange={e => setFilter(e.target.value)} style={{ width: 140 }} />} flush>
-        <div style={{ maxHeight: 600, overflow: 'auto' }}><table className="table"><tbody>{list.filter(c => !filter || c.code.includes(filter.toUpperCase()) || c.name.toLowerCase().includes(filter.toLowerCase())).map(c => <tr key={c.code}><td><label className="check"><input type="checkbox" checked={c.enabled} disabled={c.code === base} onChange={() => toggle(c)} /> <strong>{c.code}</strong> <span className="muted">{c.name}</span></label></td><td className="num muted">{money(1234.5, c.code)}</td></tr>)}</tbody></table></div>
+        <div style={{ maxHeight: 600, overflow: 'auto' }}><table className="table"><tbody>{list.filter(c => !filter || c.code.includes(filter.toUpperCase()) || c.name.toLowerCase().includes(filter.toLowerCase())).map(c => <tr key={c.code}><td><label className="check"><input type="checkbox" checked={c.enabled} disabled={!isAdmin || c.code === base} onChange={() => toggle(c)} /> <strong>{c.code}</strong> <span className="muted">{c.name}</span></label></td><td className="num muted">{money(1234.5, c.code)}</td></tr>)}</tbody></table></div>
       </Card>
     </div>
   )
@@ -512,7 +519,8 @@ function Webhooks() {
 function Users() {
   const toast = useToast()
   const { user, status, refresh } = useApp()
-  const { data, reload } = useAsync(() => api.get<User[]>(`${V1}/users`))
+  const isAdmin = user?.role === 'admin'
+  const { data, reload } = useAsync(() => (isAdmin ? api.get<User[]>(`${V1}/users`) : Promise.resolve([] as User[])), [isAdmin])
   const [form, setForm] = useState({ email: '', name: '', password: '' })
   const [me, setMe] = useState({ name: user?.name || '', email: user?.email || '', current_password: '', new_password: '' })
   const add = async () => { try { await api.post(`${V1}/users`, form); setForm({ email: '', name: '', password: '' }); reload(); toast('User created', 'success') } catch (e) { toast((e as Error).message, 'error') } }
@@ -529,22 +537,34 @@ function Users() {
         </div>
         <SaveBar onSave={saveMe} busy={false} />
       </Card>
-      <Card title="All users" flush>
+      {isAdmin && <Card title="All users" flush>
         <table className="table"><thead><tr><th>Name</th><th>Email</th><th>Role</th><th></th></tr></thead>
           <tbody>{data?.map(u => <tr key={u.id}><td>{u.name}</td><td>{u.email}</td><td className="muted">{u.role}</td><td className="actions">{u.id !== user?.id && <button className="btn ghost sm" onClick={async () => { if (confirm('Delete user?')) { await api.del(`${V1}/users/${u.id}`); reload() } }}>✕</button>}</td></tr>)}
             <tr><td><input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="Name" /></td><td><input value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} placeholder="email" /></td><td><input type="password" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} placeholder="password" /></td><td className="actions"><button className="btn sm primary" onClick={add} disabled={!form.email || form.password.length < 8}>Add</button></td></tr></tbody></table>
-      </Card>
+        <p className="muted small" style={{ margin: 12 }}>New people start as members with their own, empty business: their own clients, invoices, numbering, company profile and email settings. Admins only manage the server (users, currencies, backups); they cannot see anyone else's invoices.</p>
+      </Card>}
     </div>
   )
 }
 
 // ---------- Backup ----------
 function Backup() {
+  const { user } = useApp()
+  if (user?.role !== 'admin') {
+    return (
+      <div className="grid cols-2">
+        <Card title="Export your data">
+          <p>Download everything that belongs to you (clients, invoices, payments, expenses, templates and settings, without passwords or tokens) as JSON:</p>
+          <div className="row mb"><a className="btn primary" href={`${V1}/export.json`}>Export JSON</a></div>
+        </Card>
+      </div>
+    )
+  }
   return (
     <div className="grid cols-2">
       <Card title="Download backup">
         <p>Everything lives in one SQLite file plus the <code>uploads/</code> folder (logo). Download a consistent snapshot any time:</p>
-        <div className="row mb"><a className="btn primary" href={`${V1}/backup`}>Download database (.db)</a><a className="btn" href={`${V1}/export.json`}>Export JSON</a></div>
+        <div className="row mb"><a className="btn primary" href={`${V1}/backup`}>Download database (.db)</a><a className="btn" href={`${V1}/export.json`}>Export JSON (your data)</a></div>
         <p className="muted small">The JSON export is human-readable and handy for migrations or your own scripts. The .db file is a byte-exact copy made with <code>VACUUM INTO</code>.</p>
       </Card>
       <Card title="Restore / automate">

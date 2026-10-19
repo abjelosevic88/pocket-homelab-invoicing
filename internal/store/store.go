@@ -46,13 +46,19 @@ func Open(path string, log *slog.Logger) (*Store, error) {
 	if err := s.migrate(); err != nil {
 		return nil, err
 	}
+	if err := s.AdoptOrphans(context.Background()); err != nil {
+		return nil, err
+	}
 	return s, nil
 }
 
 // Close closes the database.
 func (s *Store) Close() error { return s.DB.Close() }
 
-func (s *Store) migrate() error {
+func (s *Store) migrate() error { return s.migrateBefore("") }
+
+// migrateBefore applies pending migrations whose name sorts before stop ("" = all).
+func (s *Store) migrateBefore(stop string) error {
 	if _, err := s.DB.Exec(`CREATE TABLE IF NOT EXISTS schema_migrations (name TEXT PRIMARY KEY, applied_at TEXT NOT NULL)`); err != nil {
 		return err
 	}
@@ -68,6 +74,9 @@ func (s *Store) migrate() error {
 	}
 	sort.Strings(names)
 	for _, name := range names {
+		if stop != "" && name >= stop {
+			break
+		}
 		var exists int
 		if err := s.DB.QueryRow(`SELECT COUNT(1) FROM schema_migrations WHERE name = ?`, name).Scan(&exists); err != nil {
 			return err
@@ -169,6 +178,18 @@ func NullStr(s string) any {
 		return nil
 	}
 	return s
+}
+
+// notFoundIfNone turns an UPDATE/DELETE that touched no row into ErrNotFound, so a record
+// owned by someone else behaves exactly like one that does not exist.
+func notFoundIfNone(res sql.Result, err error) error {
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 // NullInt converts 0 to NULL.

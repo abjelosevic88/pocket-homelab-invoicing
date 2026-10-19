@@ -20,7 +20,7 @@ func (s *Server) attachmentPath(a *store.Attachment) string {
 }
 
 // saveAttachment stores an uploaded file for an invoice.
-func (s *Server) saveAttachment(ctx context.Context, invoiceID int64, filename string, r io.Reader) (*store.Attachment, error) {
+func (s *Server) saveAttachment(ctx context.Context, uid, invoiceID int64, filename string, r io.Reader) (*store.Attachment, error) {
 	filename = filepath.Base(strings.TrimSpace(filename))
 	if filename == "" || filename == "." {
 		filename = "attachment"
@@ -50,7 +50,7 @@ func (s *Server) saveAttachment(ctx context.Context, invoiceID int64, filename s
 		return nil, fmt.Errorf("file exceeds 25 MB")
 	}
 	a := &store.Attachment{InvoiceID: invoiceID, Filename: filename, StoredName: stored, ContentType: ct, Size: n}
-	if err := s.store.CreateAttachment(ctx, a); err != nil {
+	if err := s.store.CreateAttachment(ctx, uid, a); err != nil {
 		os.Remove(filepath.Join(dir, stored))
 		return nil, err
 	}
@@ -59,7 +59,8 @@ func (s *Server) saveAttachment(ctx context.Context, invoiceID int64, filename s
 
 func (s *Server) handleUploadAttachment(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	inv, err := s.store.GetInvoice(ctx, idParam(r, "id"))
+	uid := uidOf(r)
+	inv, err := s.store.GetInvoice(ctx, uid, idParam(r, "id"))
 	if err != nil {
 		s.fail(w, err, "get invoice")
 		return
@@ -83,7 +84,7 @@ func (s *Server) handleUploadAttachment(w http.ResponseWriter, r *http.Request) 
 			s.fail(w, err, "open upload")
 			return
 		}
-		a, err := s.saveAttachment(ctx, inv.ID, fh.Filename, f)
+		a, err := s.saveAttachment(ctx, uid, inv.ID, fh.Filename, f)
 		f.Close()
 		if err != nil {
 			writeErr(w, http.StatusBadRequest, err.Error())
@@ -91,12 +92,17 @@ func (s *Server) handleUploadAttachment(w http.ResponseWriter, r *http.Request) 
 		}
 		saved = append(saved, *a)
 	}
-	s.store.LogActivity(ctx, "invoice", inv.ID, "attachment", fmt.Sprintf("%d file(s) attached", len(saved)))
+	s.store.LogActivity(ctx, uid, "invoice", inv.ID, "attachment", fmt.Sprintf("%d file(s) attached", len(saved)))
 	writeJSON(w, http.StatusCreated, saved)
 }
 
 func (s *Server) handleListAttachments(w http.ResponseWriter, r *http.Request) {
-	list, err := s.store.ListAttachments(r.Context(), idParam(r, "id"))
+	inv, err := s.store.GetInvoice(r.Context(), uidOf(r), idParam(r, "id"))
+	if err != nil {
+		s.fail(w, err, "get invoice")
+		return
+	}
+	list, err := s.store.ListAttachments(r.Context(), uidOf(r), inv.ID)
 	if err != nil {
 		s.fail(w, err, "list attachments")
 		return
@@ -121,7 +127,7 @@ func (s *Server) serveAttachment(w http.ResponseWriter, r *http.Request, a *stor
 }
 
 func (s *Server) handleDownloadAttachment(w http.ResponseWriter, r *http.Request) {
-	a, err := s.store.GetAttachment(r.Context(), idParam(r, "aid"))
+	a, err := s.store.GetAttachment(r.Context(), uidOf(r), idParam(r, "aid"))
 	if err != nil {
 		s.fail(w, err, "get attachment")
 		return
@@ -130,18 +136,19 @@ func (s *Server) handleDownloadAttachment(w http.ResponseWriter, r *http.Request
 }
 
 func (s *Server) handleDeleteAttachment(w http.ResponseWriter, r *http.Request) {
-	a, err := s.store.GetAttachment(r.Context(), idParam(r, "aid"))
+	uid := uidOf(r)
+	a, err := s.store.GetAttachment(r.Context(), uid, idParam(r, "aid"))
 	if err != nil {
 		s.fail(w, err, "get attachment")
 		return
 	}
 	_ = os.Remove(s.attachmentPath(a))
-	_ = s.store.DeletePaperlessLink(r.Context(), "attachment", a.ID)
-	if err := s.store.DeleteAttachment(r.Context(), a.ID); err != nil {
+	_ = s.store.DeletePaperlessLink(r.Context(), uid, "attachment", a.ID)
+	if err := s.store.DeleteAttachment(r.Context(), uid, a.ID); err != nil {
 		s.fail(w, err, "delete attachment")
 		return
 	}
-	s.store.LogActivity(r.Context(), "invoice", a.InvoiceID, "attachment", "Removed "+a.Filename)
+	s.store.LogActivity(r.Context(), uid, "invoice", a.InvoiceID, "attachment", "Removed "+a.Filename)
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
@@ -151,7 +158,7 @@ func (s *Server) handlePublicAttachment(w http.ResponseWriter, r *http.Request) 
 	if inv == nil {
 		return
 	}
-	a, err := s.store.GetAttachment(r.Context(), idParam(r, "aid"))
+	a, err := s.store.GetAttachment(r.Context(), inv.UserID, idParam(r, "aid"))
 	if err != nil || a.InvoiceID != inv.ID {
 		http.NotFound(w, r)
 		return

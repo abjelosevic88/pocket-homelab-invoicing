@@ -3,8 +3,8 @@ package store
 import "context"
 
 // ListAttachments returns files attached to an invoice.
-func (s *Store) ListAttachments(ctx context.Context, invoiceID int64) ([]Attachment, error) {
-	rows, err := s.DB.QueryContext(ctx, `SELECT id, invoice_id, filename, stored_name, content_type, size, created_at FROM attachments WHERE invoice_id = ? ORDER BY id`, invoiceID)
+func (s *Store) ListAttachments(ctx context.Context, uid, invoiceID int64) ([]Attachment, error) {
+	rows, err := s.DB.QueryContext(ctx, `SELECT id, invoice_id, filename, stored_name, content_type, size, created_at FROM attachments WHERE invoice_id = ? AND user_id = ? ORDER BY id`, invoiceID, uid)
 	if err != nil {
 		return nil, err
 	}
@@ -21,9 +21,9 @@ func (s *Store) ListAttachments(ctx context.Context, invoiceID int64) ([]Attachm
 }
 
 // GetAttachment returns one attachment.
-func (s *Store) GetAttachment(ctx context.Context, id int64) (*Attachment, error) {
+func (s *Store) GetAttachment(ctx context.Context, uid, id int64) (*Attachment, error) {
 	var a Attachment
-	err := s.DB.QueryRowContext(ctx, `SELECT id, invoice_id, filename, stored_name, content_type, size, created_at FROM attachments WHERE id = ?`, id).Scan(&a.ID, &a.InvoiceID, &a.Filename, &a.StoredName, &a.ContentType, &a.Size, &a.CreatedAt)
+	err := s.DB.QueryRowContext(ctx, `SELECT id, invoice_id, filename, stored_name, content_type, size, created_at FROM attachments WHERE id = ? AND user_id = ?`, id, uid).Scan(&a.ID, &a.InvoiceID, &a.Filename, &a.StoredName, &a.ContentType, &a.Size, &a.CreatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -31,8 +31,11 @@ func (s *Store) GetAttachment(ctx context.Context, id int64) (*Attachment, error
 }
 
 // CreateAttachment records an uploaded file.
-func (s *Store) CreateAttachment(ctx context.Context, a *Attachment) error {
-	res, err := s.DB.ExecContext(ctx, `INSERT INTO attachments (invoice_id, filename, stored_name, content_type, size) VALUES (?, ?, ?, ?, ?)`, a.InvoiceID, a.Filename, a.StoredName, a.ContentType, a.Size)
+func (s *Store) CreateAttachment(ctx context.Context, uid int64, a *Attachment) error {
+	if !s.ownsInvoice(ctx, uid, a.InvoiceID) {
+		return ErrNotFound
+	}
+	res, err := s.DB.ExecContext(ctx, `INSERT INTO attachments (user_id, invoice_id, filename, stored_name, content_type, size) VALUES (?, ?, ?, ?, ?, ?)`, NullInt(uid), a.InvoiceID, a.Filename, a.StoredName, a.ContentType, a.Size)
 	if err != nil {
 		return err
 	}
@@ -41,7 +44,7 @@ func (s *Store) CreateAttachment(ctx context.Context, a *Attachment) error {
 }
 
 // DeleteAttachment removes the record (the caller removes the file).
-func (s *Store) DeleteAttachment(ctx context.Context, id int64) error {
-	_, err := s.DB.ExecContext(ctx, `DELETE FROM attachments WHERE id = ?`, id)
-	return err
+func (s *Store) DeleteAttachment(ctx context.Context, uid, id int64) error {
+	res, err := s.DB.ExecContext(ctx, `DELETE FROM attachments WHERE id = ? AND user_id = ?`, id, uid)
+	return notFoundIfNone(res, err)
 }
