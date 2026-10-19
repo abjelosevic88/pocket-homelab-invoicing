@@ -5,6 +5,7 @@ import { fileSize, fmtDate, today } from '../lib/format'
 import type { Client, Document, PaperlessDoc, PaperlessLink } from '../lib/types'
 import { Card, Confirm, DropZone, Empty, Field, Loading, Modal, PageHeader, Tabs, useAsync, useDebounce, useToast } from '../components/ui'
 import { PaperlessBadge, PaperlessOffNote, usePaperless } from '../components/paperless'
+import { Select } from '../components/Select'
 
 type Meta = { categories: Record<string, number>; expiring: Document[] }
 
@@ -50,7 +51,7 @@ export function DocForm({ initial, categories, clients, onSaved, onClose, paperl
       <div className="form-grid">
         <Field label="Title" className="full"><input value={f.title} onChange={set('title')} placeholder={files.length > 1 ? 'From file names' : 'e.g. Rješenje o registraciji'} disabled={files.length > 1} /></Field>
         <Field label="Category"><input list="doc-categories" value={f.category} onChange={set('category')} placeholder="Contracts, Tax, Bank…" /><datalist id="doc-categories">{categories.map(c => <option key={c} value={c} />)}</datalist></Field>
-        <Field label="Client (optional)"><select value={f.client_id} onChange={set('client_id')}><option value={0}>— none —</option>{clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></Field>
+        <Field label="Client (optional)"><Select value={String(f.client_id)} onChange={v => setF(x => ({ ...x, client_id: Number(v) }))} placeholder="— none —" options={[{ value: '0', label: '— none —' }, ...clients.map(c => ({ value: String(c.id), label: c.name }))]} /></Field>
         <Field label="Document date"><input type="date" value={f.doc_date} onChange={set('doc_date')} /></Field>
         <Field label="Expires (optional)" help="Shown with a warning 30 days before"><input type="date" value={f.expires_at} onChange={set('expires_at')} /></Field>
         <Field label="Notes" className="full"><textarea rows={3} value={f.notes} onChange={set('notes')} /></Field>
@@ -85,8 +86,8 @@ function LocalDocuments({ paperlessOn }: { paperlessOn: boolean }) {
       {expiring.length > 0 && <div className="callout warn mb"><b>Expiring soon:</b> {expiring.map((d, i) => <span key={d.id}>{i > 0 && ', '}<button className="link-btn" onClick={() => setModal(d)}>{d.title}</button> ({fmtDate(d.expires_at)})</span>)}</div>}
       <div className="filters">
         <input className="search" placeholder="Search title, file, notes…" value={q} onChange={e => setQ(e.target.value)} />
-        <select value={cat} onChange={e => setCat(e.target.value)}><option value="">All categories</option>{Object.entries(meta.data?.categories || {}).filter(([, n]) => n > 0).sort().map(([c, n]) => <option key={c} value={c}>{c} ({n})</option>)}</select>
-        <select value={clientId} onChange={e => setClientId(Number(e.target.value))}><option value={0}>All clients</option>{clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
+        <Select value={cat} onChange={setCat} ariaLabel="Category" placeholder="All categories" options={[{ value: '', label: 'All categories' }, ...Object.entries(meta.data?.categories || {}).filter(([, n]) => n > 0).sort().map(([c, n]) => ({ value: c, label: c, hint: String(n) }))]} />
+        <Select value={String(clientId)} onChange={v => setClientId(Number(v))} ariaLabel="Client" placeholder="All clients" options={[{ value: '0', label: 'All clients' }, ...clients.map(c => ({ value: String(c.id), label: c.name }))]} />
         <span className="spacer" />
         <button className="btn primary" onClick={() => setModal('new')}>+ Upload</button>
       </div>

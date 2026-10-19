@@ -2,10 +2,11 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { api, V1 } from '../lib/api'
 import { useApp } from '../lib/app-context'
-import { addDays, BILLING_MODES, money, today, UNITS, unitForBilling } from '../lib/format'
+import { addDays, BILLING_MODES, money, taxRateOptions, today, UNITS, unitForBilling } from '../lib/format'
 import type { Client, Invoice, InvoiceItem, InvoiceTemplate, Product, TaxRate, WorkingDays } from '../lib/types'
 import { Card, Field, Loading, PageHeader, useAsync, useDebounce, useToast } from '../components/ui'
 import { DayPicker, defaultDays } from '../components/DayPicker'
+import { Select } from '../components/Select'
 
 type Item = InvoiceItem & { key: number }
 let keySeq = 1
@@ -140,10 +141,8 @@ export default function InvoiceEditor() {
         <Card title="Client & dates">
           <div className="form-grid">
             <Field label="Client" className="full">
-              <select value={inv.client_id || ''} onChange={e => onClientChange(Number(e.target.value))} autoFocus={!id}>
-                <option value="">Select a client…</option>
-                {clients?.map(c => <option key={c.id} value={c.id}>{c.name} ({c.currency})</option>)}
-              </select>
+              <Select value={String(inv.client_id || '')} onChange={v => onClientChange(Number(v))} autoFocus={!id} placeholder="Select a client…"
+                options={[{ value: '', label: 'Select a client…' }, ...(clients || []).map(c => ({ value: String(c.id), label: c.name, hint: c.currency }))]} />
             </Field>
             <Field label="Invoice number" help={numberHint ? <span style={{ color: numberHint.kind === 'error' ? 'var(--danger)' : 'var(--warning)' }}>{numberHint.text}</span> : id ? undefined : 'Leave blank to auto-number'}><input value={inv.number || ''} onChange={e => set('number', e.target.value)} placeholder="auto" /></Field>
             <Field label="PO / reference"><input value={inv.po_number || ''} onChange={e => set('po_number', e.target.value)} /></Field>
@@ -156,13 +155,13 @@ export default function InvoiceEditor() {
         </Card>
         <Card title="Billing & currency">
           <div className="form-grid">
-            <Field label="Billing mode"><select value={mode} onChange={e => { set('billing_mode', e.target.value); setItems(its => its.map(it => it.description ? it : { ...it, unit: unitForBilling(e.target.value) })) }}>{BILLING_MODES.map(b => <option key={b.value} value={b.value}>{b.label}</option>)}</select></Field>
-            <Field label="Currency"><select value={inv.currency} onChange={e => set('currency', e.target.value)}>{enabled.map(c => <option key={c.code} value={c.code}>{c.code} – {c.name}</option>)}</select></Field>
+            <Field label="Billing mode"><Select value={mode} onChange={v => { set('billing_mode', v); setItems(its => its.map(it => it.description ? it : { ...it, unit: unitForBilling(v) })) }} options={BILLING_MODES.map(b => ({ value: b.value, label: b.label }))} /></Field>
+            <Field label="Currency"><Select value={inv.currency || ''} onChange={v => set('currency', v)} options={enabled.map(c => ({ value: c.code, label: c.code, hint: c.name }))} /></Field>
             {inv.currency !== settings.base_currency && <Field label={`Exchange rate → ${settings.base_currency}`} help={rateHint} className="full"><input type="number" step="0.000001" value={inv.exchange_rate || ''} onChange={e => set('exchange_rate', parseFloat(e.target.value) || 0)} placeholder="0 = use stored rate" /></Field>}
-            <Field label="Template"><select value={inv.template_id || ''} onChange={e => set('template_id', Number(e.target.value) || null)}><option value="">Default</option>{templates?.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select></Field>
+            <Field label="Template"><Select value={String(inv.template_id || '')} onChange={v => set('template_id', Number(v) || null)} placeholder="Default" options={[{ value: '', label: 'Default' }, ...(templates || []).map(t => ({ value: String(t.id), label: t.name, hint: t.kind === 'docx' ? 'Word' : undefined }))]} /></Field>
             <Field label="Document discount">
               <div className="input-group">
-                <select value={inv.discount_type} onChange={e => set('discount_type', e.target.value)} style={{ width: 110 }}><option value="none">None</option><option value="percent">Percent</option><option value="fixed">Fixed</option></select>
+                <Select className="discount-type" ariaLabel="Discount type" value={inv.discount_type || 'none'} onChange={v => set('discount_type', v)} options={[{ value: 'none', label: 'None' }, { value: 'percent', label: 'Percent' }, { value: 'fixed', label: 'Fixed' }]} />
                 <input type="number" step="0.01" disabled={inv.discount_type === 'none'} value={inv.discount_value || ''} onChange={e => set('discount_value', parseFloat(e.target.value) || 0)} />
               </div>
             </Field>
@@ -170,20 +169,16 @@ export default function InvoiceEditor() {
         </Card>
       </div>
 
-      <Card title="Line items" actions={products?.length ? <select value="" onChange={e => { const p = products.find(x => x.id === Number(e.target.value)); if (p) addProduct(p) }} style={{ width: 'auto' }}><option value="">+ Add from catalog…</option>{products.map(p => <option key={p.id} value={p.id}>{p.name} — {money(p.unit_price, p.currency || inv.currency!)}/{p.unit}</option>)}</select> : undefined} flush>
+      <Card title="Line items" actions={products?.length ? <Select className="catalog-pick" value="" ariaLabel="Add from catalog" placeholder="+ Add from catalog…" onChange={v => { const p = products.find(x => x.id === Number(v)); if (p) addProduct(p) }} options={products.map(p => ({ value: String(p.id), label: p.name, hint: `${money(p.unit_price, p.currency || inv.currency!)}/${p.unit}` }))} /> : undefined} flush>
         <div className="table-wrap"><table className="table items-table">
           <thead><tr><th style={{ width: '40%' }}>Description</th><th style={{ width: 90 }}>Unit</th><th style={{ width: 90 }} className="num">Qty</th><th style={{ width: 120 }} className="num">Rate</th><th style={{ width: 80 }} className="num">Disc %</th><th style={{ width: 110 }} className="num">Tax</th><th className="num">Amount</th><th style={{ width: 90 }}></th></tr></thead>
           <tbody>{items.map((it, idx) => <tr key={it.key}>
             <td><textarea rows={1} value={it.description} onChange={e => setItem(it.key, { description: e.target.value })} placeholder={mode === 'monthly' ? 'e.g. Managed hosting retainer – {month}' : 'What did you do?'} /></td>
-            <td><select value={it.unit} onChange={e => setItem(it.key, { unit: e.target.value })}>{UNITS.map(u => <option key={u.value} value={u.value}>{u.label}</option>)}</select></td>
+            <td><Select floating className="cell" ariaLabel="Unit" value={it.unit} onChange={v => setItem(it.key, { unit: v })} options={UNITS.map(u => ({ value: u.value, label: u.label }))} /></td>
             <td><input type="number" step="1" className="right" value={it.quantity} onChange={e => setItem(it.key, { quantity: parseFloat(e.target.value) || 0 })} /></td>
             <td><input type="number" step="0.01" className="right" value={it.unit_price} onChange={e => setItem(it.key, { unit_price: parseFloat(e.target.value) || 0 })} /></td>
             <td><input type="number" step="0.01" className="right" value={it.discount || ''} onChange={e => setItem(it.key, { discount: parseFloat(e.target.value) || 0 })} placeholder="0" /></td>
-            <td><select value={it.tax_rate} onChange={e => setItem(it.key, { tax_rate: parseFloat(e.target.value) })}>
-              {!taxRates?.some(t => t.rate === it.tax_rate) && <option value={it.tax_rate}>{it.tax_rate}%</option>}
-              {taxRates?.map(t => <option key={t.id} value={t.rate}>{t.name}</option>)}
-              {!taxRates?.some(t => t.rate === 0) && <option value={0}>No tax</option>}
-            </select></td>
+            <td><Select floating className="cell" ariaLabel="Tax" value={String(it.tax_rate)} onChange={v => setItem(it.key, { tax_rate: parseFloat(v) })} options={taxRateOptions(taxRates, it.tax_rate)} /></td>
             <td className="num bold">{money(totals.lines[idx], inv.currency!)}</td>
             <td className="actions"><button className="btn ghost sm" onClick={() => move(idx, -1)} title="Move up">↑</button><button className="btn ghost sm" onClick={() => move(idx, 1)} title="Move down">↓</button><button className="btn ghost sm" onClick={() => setItems(its => its.filter(x => x.key !== it.key))} title="Remove">✕</button></td>
           </tr>)}</tbody>

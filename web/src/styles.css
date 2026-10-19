@@ -85,7 +85,7 @@ hr { border: 0; border-top: 1px solid var(--border); margin: 16px 0; }
   .card .card-body { padding: 14px; }
   .card-body.flush { overflow-x: auto; }
   table.table th, table.table td { padding: 9px 10px; }
-  .filters input, .filters select { min-width: 0; flex: 1 1 45%; }
+  .filters input, .filters .sel { min-width: 0; flex: 1 1 45%; }
   .filters .search { flex-basis: 100%; }
   .totals-box { width: 100%; }
   .modal-backdrop { padding: 12px 8px; }
@@ -116,7 +116,7 @@ hr { border: 0; border-top: 1px solid var(--border); margin: 16px 0; }
 .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); }
 .card .card-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; border-bottom: 1px solid var(--border); gap: 12px; }
 .card .card-head > * { min-width: 0; max-width: 100%; }
-.card .card-head select { max-width: min(100%, 320px); text-overflow: ellipsis; }
+.card .card-head .sel { width: auto; min-width: 200px; max-width: min(100%, 320px); }
 .card .card-body { padding: 18px; }
 .card .card-body.flush { padding: 0; }
 .card .card-body.flush > table.table, .card .card-body.flush > .table-wrap > table.table { min-width: 100%; }
@@ -236,7 +236,7 @@ table.table tfoot td { font-weight: 600; background: var(--surface-2); }
 .tabs button { background: none; border: 0; padding: 10px 14px; font: inherit; font-weight: 500; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; white-space: nowrap; }
 .tabs button.active { color: var(--accent); border-bottom-color: var(--accent); }
 .filters { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; align-items: center; }
-.filters input, .filters select { width: auto; min-width: 140px; }
+.filters input, .filters .sel { width: auto; min-width: 140px; }
 .filters .search { min-width: 220px; }
 .spinner { display: inline-block; width: 18px; height: 18px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .7s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
@@ -267,7 +267,7 @@ table.table tfoot td { font-weight: 600; background: var(--surface-2); }
 .login-or::before, .login-or::after { content: ''; flex: 1; height: 1px; background: var(--border); }
 .items-table { min-width: 640px; }
 .items-table td { padding: 6px 6px !important; vertical-align: top; }
-.items-table input, .items-table select, .items-table textarea { padding: 6px 8px; font-size: 13.5px; }
+.items-table input, .items-table textarea { padding: 6px 8px; font-size: 13.5px; }
 .items-table textarea { min-height: 36px; }
 .totals-box { margin-left: auto; width: 320px; max-width: 100%; }
 .totals-box .line { display: flex; justify-content: space-between; padding: 5px 0; }
@@ -323,3 +323,43 @@ table.table tfoot td { font-weight: 600; background: var(--surface-2); }
 .logo { background: transparent !important; overflow: visible; }
 .logo > img { width: 100%; height: 100%; display: block; filter: drop-shadow(0 1px 2px rgba(0,0,0,.2)); }
 .sidebar .brand .logo { width: 32px; height: 32px; }
+
+/* ---- searchable select (same component as Pocket Inventory) ---- */
+.sel { position: relative; width: 100%; min-width: 0; }
+.sel-btn { width: 100%; display: flex; align-items: center; gap: 8px; font-family: inherit; font-size: 14px; line-height: normal; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 7px 30px 7px 10px; text-align: left; cursor: pointer; position: relative; min-height: 34px; transition: border-color .12s, box-shadow .12s; }
+.sel-btn.empty .sel-val { color: var(--muted); }
+.sel-btn:hover { border-color: var(--muted); }
+.sel.open .sel-btn, .sel-btn:focus-visible { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); outline: none; }
+.sel-btn:disabled { opacity: .5; cursor: default; }
+.sel-btn:disabled:hover { border-color: var(--border); }
+.sel-val { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sel-chevron { position: absolute; right: 9px; top: 50%; transform: translateY(-50%); color: var(--muted); pointer-events: none; transition: transform .15s; }
+.sel.open .sel-chevron { transform: translateY(-50%) rotate(180deg); }
+.sel-pop { position: absolute; left: 0; top: calc(100% + 4px); min-width: 100%; max-width: min(360px, 90vw); background: var(--surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 12px 32px rgba(0,0,0,.18); z-index: 60; overflow: hidden; font-size: 14px; font-weight: 400; text-align: left; }
+.sel-pop.up { top: auto; bottom: calc(100% + 4px); }
+.sel-search { position: relative; border-bottom: 1px solid var(--border); }
+.sel-search .ico { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--muted); pointer-events: none; }
+.sel-search input { border: 0; border-radius: 0; padding: 9px 10px 9px 30px; background: transparent; }
+.sel-search input:focus { box-shadow: none; }
+.sel-list { max-height: 260px; overflow-y: auto; padding: 4px; }
+.sel-group { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); padding: 8px 8px 2px; }
+.sel-opt { display: flex; align-items: center; gap: 8px; padding: 7px 8px; border-radius: 6px; cursor: pointer; white-space: nowrap; color: var(--text); }
+.sel-opt.hl { background: var(--surface-2); }
+.sel-opt.cur { font-weight: 600; }
+.sel-opt.action { color: var(--accent-hover); font-weight: 600; }
+.sel-lbl { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+.sel-hint { font-size: 12px; }
+.sel-check { color: var(--accent-hover); }
+.sel-empty { padding: 10px; font-size: 13px; }
+/* toolbars / filter rows keep compact widths */
+.filters .sel, .toolbar .sel { width: auto; min-width: 160px; flex: 0 1 auto; }
+@media (max-width: 900px) { .filters .sel, .toolbar .sel { min-width: 0; flex: 1 1 45%; } }
+/* inline controls */
+.sel.timer-client { width: 200px; flex: 0 0 auto; }
+.sel.holiday-preset { min-width: 220px; }
+.sel.discount-type { width: 110px; flex: 0 0 auto; }
+.input-group > .sel:first-child .sel-btn { border-radius: 8px 0 0 8px; }
+.input-group > .sel:last-child .sel-btn { border-radius: 0 8px 8px 0; }
+.items-table .sel.cell { min-width: 76px; }
+.items-table .sel-btn { padding: 6px 24px 6px 8px; font-size: 13.5px; min-height: 0; }
+.items-table .sel-chevron { right: 6px; }

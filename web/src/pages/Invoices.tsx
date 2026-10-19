@@ -5,6 +5,7 @@ import { useApp } from '../lib/app-context'
 import { fmtDate, money } from '../lib/format'
 import type { Client, Invoice } from '../lib/types'
 import { Badge, Card, Empty, Loading, PageHeader, useAsync, useDebounce } from '../components/ui'
+import { Select } from '../components/Select'
 
 const STATUSES = ['all', 'draft', 'open', 'sent', 'viewed', 'partial', 'overdue', 'paid', 'cancelled']
 
@@ -31,8 +32,8 @@ export default function Invoices() {
       </>} />
       <div className="filters">
         <input className="search" placeholder="Search number, client, PO…" value={q} onChange={e => setQ(e.target.value)} />
-        <select value={status} onChange={e => setParam('status', e.target.value === 'all' ? '' : e.target.value)}>{STATUSES.map(s => <option key={s} value={s}>{s === 'all' ? 'All statuses' : s === 'open' ? 'Open (unpaid)' : s.charAt(0).toUpperCase() + s.slice(1)}</option>)}</select>
-        <select value={clientId} onChange={e => setParam('client_id', e.target.value)}><option value="">All clients</option>{clients?.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
+        <Select value={status} onChange={v => setParam('status', v === 'all' ? '' : v)} ariaLabel="Status" placeholder="All statuses" options={STATUSES.map(s => ({ value: s, label: s === 'all' ? 'All statuses' : s === 'open' ? 'Open' : s.charAt(0).toUpperCase() + s.slice(1), hint: s === 'open' ? 'unpaid' : undefined }))} />
+        <Select value={clientId} onChange={v => setParam('client_id', v)} ariaLabel="Client" placeholder="All clients" options={[{ value: '', label: 'All clients' }, ...(clients || []).map(c => ({ value: String(c.id), label: c.name }))]} />
       </div>
       <Card flush>
         {loading && !data ? <Loading /> : !data?.items.length ? <Empty title="No invoices found">{status === 'all' && !q ? <Link to="/invoices/new">Create your first invoice</Link> : 'Try a different filter.'}</Empty> : (

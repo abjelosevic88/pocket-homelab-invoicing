@@ -2,10 +2,11 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { api, V1 } from '../lib/api'
 import { useApp } from '../lib/app-context'
-import { BILLING_MODES, fmtDate, money, today, UNITS, unitForBilling } from '../lib/format'
+import { BILLING_MODES, fmtDate, money, taxRateOptions, today, UNITS, unitForBilling } from '../lib/format'
 import type { Client, InvoiceTemplate, Recurring, RecurringItem, TaxRate } from '../lib/types'
 import { Badge, Card, Confirm, Empty, Field, Loading, Modal, PageHeader, useAsync, useToast } from '../components/ui'
 import { computeTotals } from './InvoiceEditor'
+import { Select } from '../components/Select'
 
 const FREQ = [['weekly', 'Weekly'], ['biweekly', 'Every 2 weeks'], ['monthly', 'Monthly'], ['quarterly', 'Quarterly'], ['yearly', 'Yearly'], ['daily', 'Daily']]
 
@@ -32,21 +33,21 @@ function RecurringForm({ initial, clients, onSaved, onClose }: { initial?: Recur
   return (
     <form onSubmit={submit} noValidate>
       <div className="form-grid cols-3">
-        <Field label="Client"><select value={r.client_id} onChange={e => onClient(Number(e.target.value))}>{clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></Field>
+        <Field label="Client"><Select value={String(r.client_id)} onChange={v => onClient(Number(v))} placeholder="Choose a client…" options={clients.map(c => ({ value: String(c.id), label: c.name }))} /></Field>
         <Field label="Profile name" className="full" help="Internal only"><input value={r.name} onChange={e => set('name', e.target.value)} placeholder="e.g. Acme hosting retainer" /></Field>
-        <Field label="Frequency"><select value={r.frequency} onChange={e => set('frequency', e.target.value)}>{FREQ.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></Field>
+        <Field label="Frequency"><Select value={r.frequency || ''} onChange={v => set('frequency', v)} options={FREQ.map(([v, l]) => ({ value: v, label: l }))} /></Field>
         <Field label="Every N periods"><input type="number" min={1} value={r.interval} onChange={e => set('interval', Number(e.target.value) || 1)} /></Field>
-        <Field label="Status"><select value={r.status} onChange={e => set('status', e.target.value)}><option value="active">Active</option><option value="paused">Paused</option><option value="completed">Completed</option></select></Field>
+        <Field label="Status"><Select value={r.status || ''} onChange={v => set('status', v)} options={[{ value: 'active', label: 'Active' }, { value: 'paused', label: 'Paused' }, { value: 'completed', label: 'Completed' }]} /></Field>
         <Field label="Start date"><input type="date" value={r.start_date} onChange={e => { set('start_date', e.target.value); if (!initial) set('next_run', e.target.value) }} /></Field>
         <Field label="Next run" help="Invoice is generated on this date"><input type="date" value={r.next_run} onChange={e => set('next_run', e.target.value)} /></Field>
         <Field label="End date (optional)"><input type="date" value={r.end_date || ''} onChange={e => set('end_date', e.target.value || null)} /></Field>
         <Field label="Max occurrences" help="0 = unlimited"><input type="number" min={0} value={r.max_occurrences} onChange={e => set('max_occurrences', Number(e.target.value) || 0)} /></Field>
         <Field label="Due after (days)"><input type="number" min={0} value={r.due_days} onChange={e => set('due_days', Number(e.target.value) || 0)} /></Field>
-        <Field label="Currency"><select value={r.currency} onChange={e => set('currency', e.target.value)}>{currencies.filter(c => c.enabled).map(c => <option key={c.code} value={c.code}>{c.code}</option>)}</select></Field>
-        <Field label="Billing mode"><select value={r.billing_mode} onChange={e => set('billing_mode', e.target.value)}>{BILLING_MODES.map(b => <option key={b.value} value={b.value}>{b.label}</option>)}</select></Field>
-        <Field label="Template"><select value={r.template_id || ''} onChange={e => set('template_id', Number(e.target.value) || null)}><option value="">Default</option>{templates?.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select></Field>
-        <Field label="Service period" help={r.period_mode === 'arrears' ? 'Run on Nov 1 bills October (previous period)' : 'Run on Nov 1 bills November (period starts on the run date)'}><select value={r.period_mode || 'forward'} onChange={e => set('period_mode', e.target.value)}><option value="forward">Period starts on run date</option><option value="arrears">Previous period (in arrears)</option></select></Field>
-        <Field label="Quantity" help={r.quantity_mode === 'working_days' ? <>Day lines get the working days of the period, hour lines working days × {settings?.hours_per_day || 8} h (<Link to="/settings/invoicing">calendar</Link>)</> : 'Quantities are taken as entered below'}><select value={r.quantity_mode || 'fixed'} onChange={e => set('quantity_mode', e.target.value)}><option value="fixed">Fixed (as entered)</option><option value="working_days">Working days of the period</option></select></Field>
+        <Field label="Currency"><Select value={r.currency || ''} onChange={v => set('currency', v)} options={currencies.filter(c => c.enabled).map(c => ({ value: c.code, label: c.code, hint: c.name }))} /></Field>
+        <Field label="Billing mode"><Select value={r.billing_mode || ''} onChange={v => set('billing_mode', v)} options={BILLING_MODES.map(b => ({ value: b.value, label: b.label }))} /></Field>
+        <Field label="Template"><Select value={String(r.template_id || '')} onChange={v => set('template_id', Number(v) || null)} placeholder="Default" options={[{ value: '', label: 'Default' }, ...(templates || []).map(t => ({ value: String(t.id), label: t.name, hint: t.kind === 'docx' ? 'Word' : undefined }))]} /></Field>
+        <Field label="Service period" help={r.period_mode === 'arrears' ? 'Run on Nov 1 bills October (previous period)' : 'Run on Nov 1 bills November (period starts on the run date)'}><Select value={r.period_mode || 'forward'} onChange={v => set('period_mode', v)} options={[{ value: 'forward', label: 'Period starts on run date' }, { value: 'arrears', label: 'Previous period', hint: 'in arrears' }]} /></Field>
+        <Field label="Quantity" help={r.quantity_mode === 'working_days' ? <>Day lines get the working days of the period, hour lines working days × {settings?.hours_per_day || 8} h (<Link to="/settings/invoicing">calendar</Link>)</> : 'Quantities are taken as entered below'}><Select value={r.quantity_mode || 'fixed'} onChange={v => set('quantity_mode', v)} options={[{ value: 'fixed', label: 'Fixed', hint: 'as entered' }, { value: 'working_days', label: 'Working days of the period' }]} /></Field>
         <Field label="Auto-send" help="Email the invoice automatically when generated"><label className="check" style={{ marginTop: 8 }}><input type="checkbox" checked={!!r.auto_send} onChange={e => set('auto_send', e.target.checked)} /> Send by email on generation</label></Field>
       </div>
       <h3 className="mt mb">Line items <span className="muted small" style={{ fontWeight: 400 }}>— placeholders: {'{month} {year} {period}'}</span></h3>
@@ -54,10 +55,10 @@ function RecurringForm({ initial, clients, onSaved, onClose }: { initial?: Recur
         <thead><tr><th>Description</th><th style={{ width: 90 }}>Unit</th><th style={{ width: 80 }}>Qty</th><th style={{ width: 110 }}>Rate</th><th style={{ width: 110 }}>Tax</th><th className="num">Amount</th><th></th></tr></thead>
         <tbody>{items.map((it, i) => <tr key={i}>
           <td><input value={it.description} onChange={e => setItem(i, { description: e.target.value })} /></td>
-          <td><select value={it.unit} onChange={e => setItem(i, { unit: e.target.value })}>{UNITS.map(u => <option key={u.value} value={u.value}>{u.label}</option>)}</select></td>
+          <td><Select floating className="cell" ariaLabel="Unit" value={it.unit} onChange={v => setItem(i, { unit: v })} options={UNITS.map(u => ({ value: u.value, label: u.label }))} /></td>
           <td><input type="number" step="1" value={it.quantity} onChange={e => setItem(i, { quantity: parseFloat(e.target.value) || 0 })} /></td>
           <td><input type="number" step="0.01" value={it.unit_price} onChange={e => setItem(i, { unit_price: parseFloat(e.target.value) || 0 })} /></td>
-          <td><select value={it.tax_rate} onChange={e => setItem(i, { tax_rate: parseFloat(e.target.value) })}>{!taxRates?.some(t => t.rate === it.tax_rate) && <option value={it.tax_rate}>{it.tax_rate}%</option>}{taxRates?.map(t => <option key={t.id} value={t.rate}>{t.name}</option>)}{!taxRates?.some(t => t.rate === 0) && <option value={0}>No tax</option>}</select></td>
+          <td><Select floating className="cell" ariaLabel="Tax" value={String(it.tax_rate)} onChange={v => setItem(i, { tax_rate: parseFloat(v) })} options={taxRateOptions(taxRates, it.tax_rate)} /></td>
           <td className="num">{money(totals.lines[i], r.currency!)}</td>
           <td><button type="button" className="btn ghost sm" onClick={() => set('items', items.filter((_, j) => j !== i))}>✕</button></td>
         </tr>)}</tbody>

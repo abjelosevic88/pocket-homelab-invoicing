@@ -4,6 +4,11 @@ All notable changes to this project are documented here. Format follows [Keep a 
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-10-19
+
+### Changed
+- Every dropdown in the web UI (52 of them: client, currency, billing mode, template, tax, unit, filters, settings…) is now the searchable combobox used by Pocket Inventory: type to filter, arrow keys + Enter, hints shown in grey beside the label instead of crammed into parentheses. Line-item unit/tax pickers float above the scrolling items table so they are never clipped. Values, defaults and side effects are unchanged.
+
 ## [0.2.0] - 2026-10-19
 
 ### Changed

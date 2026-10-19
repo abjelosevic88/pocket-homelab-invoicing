@@ -5,6 +5,7 @@ import { useApp } from '../lib/app-context'
 import { fmtDate, money, today } from '../lib/format'
 import type { Client, Expense } from '../lib/types'
 import { Card, Empty, Field, Loading, Modal, PageHeader, useAsync, useToast } from '../components/ui'
+import { Select } from '../components/Select'
 
 const CATEGORIES = ['Software', 'Hardware', 'Hosting', 'Travel', 'Office', 'Subcontractor', 'Other']
 
@@ -22,10 +23,10 @@ function ExpenseForm({ initial, clients, onDone }: { initial?: Expense; clients:
       <div className="form-grid">
         <Field label="Description" className="full"><input value={e.description} onChange={ev => setE({ ...e, description: ev.target.value })} autoFocus required /></Field>
         <Field label="Amount"><input type="number" step="0.01" value={e.amount} onChange={ev => setE({ ...e, amount: parseFloat(ev.target.value) || 0 })} required /></Field>
-        <Field label="Currency"><select value={e.currency} onChange={ev => setE({ ...e, currency: ev.target.value })}>{currencies.filter(c => c.enabled).map(c => <option key={c.code} value={c.code}>{c.code}</option>)}</select></Field>
+        <Field label="Currency"><Select value={e.currency} onChange={v => setE({ ...e, currency: v })} options={currencies.filter(c => c.enabled).map(c => ({ value: c.code, label: c.code, hint: c.name }))} /></Field>
         <Field label="Date"><input type="date" value={e.date} onChange={ev => setE({ ...e, date: ev.target.value })} /></Field>
-        <Field label="Category"><select value={e.category} onChange={ev => setE({ ...e, category: ev.target.value })}>{CATEGORIES.map(c => <option key={c}>{c}</option>)}</select></Field>
-        <Field label="Client (optional)"><select value={e.client_id ?? 0} onChange={ev => setE({ ...e, client_id: Number(ev.target.value) })}><option value={0}>— none —</option>{clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></Field>
+        <Field label="Category"><Select value={e.category} onChange={v => setE({ ...e, category: v })} options={CATEGORIES.map(c => ({ value: c, label: c }))} /></Field>
+        <Field label="Client (optional)"><Select value={String(e.client_id ?? 0)} onChange={v => setE({ ...e, client_id: Number(v) })} placeholder="— none —" options={[{ value: '0', label: '— none —' }, ...clients.map(c => ({ value: String(c.id), label: c.name }))]} /></Field>
         <Field label=" "><label className="check" style={{ marginTop: 8 }}><input type="checkbox" checked={e.billable} onChange={ev => setE({ ...e, billable: ev.target.checked })} /> Re-bill to client</label></Field>
       </div>
       <div className="form-actions"><button className="btn primary" disabled={busy}>Save</button></div>

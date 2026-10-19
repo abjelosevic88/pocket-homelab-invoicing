@@ -5,6 +5,7 @@ import { useApp } from '../lib/app-context'
 import { fmtDateTime, hours, hoursDecimal, money, today } from '../lib/format'
 import type { Client, TimeEntry } from '../lib/types'
 import { Card, Empty, Field, Loading, Modal, PageHeader, useAsync, useToast } from '../components/ui'
+import { Select } from '../components/Select'
 
 function toLocalInput(iso: string) { const d = new Date(iso); const p = (n: number) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}` }
 
@@ -23,7 +24,7 @@ function EntryForm({ initial, clients, onDone }: { initial?: TimeEntry; clients:
   return (
     <form onSubmit={submit}>
       <div className="form-grid">
-        <Field label="Client"><select value={e.client_id} onChange={ev => setE({ ...e, client_id: Number(ev.target.value) })}>{clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select></Field>
+        <Field label="Client"><Select value={String(e.client_id)} onChange={v => setE({ ...e, client_id: Number(v) })} placeholder="Choose a client…" options={clients.map(c => ({ value: String(c.id), label: c.name }))} /></Field>
         <Field label="Project"><input value={e.project} onChange={ev => setE({ ...e, project: ev.target.value })} placeholder="optional" /></Field>
         <Field label="Description" className="full"><input value={e.description} onChange={ev => setE({ ...e, description: ev.target.value })} autoFocus /></Field>
         <Field label="Start"><input type="datetime-local" value={e.started_at} onChange={ev => setE({ ...e, started_at: ev.target.value })} /></Field>
@@ -51,8 +52,8 @@ function InvoiceFromTime({ clientId, clients, entries, onDone }: { clientId: num
   return (
     <div>
       <div className="form-grid cols-3 mb">
-        <Field label="Group lines by"><select value={opts.group_by} onChange={e => setOpts({ ...opts, group_by: e.target.value })}><option value="entry">One line per entry</option><option value="day">Per day</option><option value="project">Per project</option><option value="total">Single line</option></select></Field>
-        <Field label="Bill as"><select value={opts.billing_mode} onChange={e => setOpts({ ...opts, billing_mode: e.target.value })}><option value="hourly">Hours</option><option value="daily">Days ({settings?.hours_per_day || 8}h = 1 day)</option></select></Field>
+        <Field label="Group lines by"><Select value={opts.group_by} onChange={v => setOpts({ ...opts, group_by: v })} options={[{ value: 'entry', label: 'One line per entry' }, { value: 'day', label: 'Per day' }, { value: 'project', label: 'Per project' }, { value: 'total', label: 'Single line' }]} /></Field>
+        <Field label="Bill as"><Select value={opts.billing_mode} onChange={v => setOpts({ ...opts, billing_mode: v })} options={[{ value: 'hourly', label: 'Hours' }, { value: 'daily', label: 'Days', hint: `${settings?.hours_per_day || 8}h = 1 day` }]} /></Field>
         <Field label={`Rate per ${opts.billing_mode === 'daily' ? 'day' : 'hour'}`}><input type="number" step="0.01" value={opts.rate} onChange={e => setOpts({ ...opts, rate: parseFloat(e.target.value) || 0 })} /></Field>
         <Field label=" " className="full"><label className="check"><input type="checkbox" checked={opts.include_expenses} onChange={e => setOpts({ ...opts, include_expenses: e.target.checked })} /> Include unbilled billable expenses for this client</label></Field>
       </div>
@@ -108,7 +109,7 @@ export default function TimeTracking() {
           </div>
         ) : (
           <div className="row" style={{ gap: 10 }}>
-            <select value={timer.client_id} onChange={e => setTimer({ ...timer, client_id: Number(e.target.value) })} style={{ width: 200 }}>{clients?.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
+            <Select className="timer-client" ariaLabel="Client" placeholder="Choose a client…" value={String(timer.client_id)} onChange={v => setTimer({ ...timer, client_id: Number(v) })} options={(clients || []).map(c => ({ value: String(c.id), label: c.name }))} />
             <input value={timer.project} onChange={e => setTimer({ ...timer, project: e.target.value })} placeholder="Project (optional)" style={{ width: 180 }} />
             <input value={timer.description} onChange={e => setTimer({ ...timer, description: e.target.value })} placeholder="What are you working on?" style={{ flex: 1, minWidth: 200 }} onKeyDown={e => e.key === 'Enter' && start()} />
             <button className="btn primary" onClick={start} disabled={!timer.client_id}>▶ Start timer</button>
@@ -116,7 +117,7 @@ export default function TimeTracking() {
         )}
       </Card>
       <div className="filters">
-        <select value={clientId} onChange={e => setParam('client_id', e.target.value === '0' ? '' : e.target.value)}><option value={0}>All clients</option>{clients?.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</select>
+        <Select value={String(clientId)} onChange={v => setParam('client_id', v === '0' ? '' : v)} ariaLabel="Client" placeholder="All clients" options={[{ value: '0', label: 'All clients' }, ...(clients || []).map(c => ({ value: String(c.id), label: c.name }))]} />
         <label className="check"><input type="checkbox" checked={unbilled} onChange={e => setParam('unbilled', e.target.checked ? '1' : '')} /> Unbilled only</label>
         <span className="muted small">{entries?.length || 0} entries · {hours(totalMinutes)} · unbilled {hours(unbilledEntries.reduce((a, e) => a + e.duration_minutes, 0))}</span>
       </div>

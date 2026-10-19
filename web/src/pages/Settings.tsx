@@ -5,6 +5,7 @@ import { useApp } from '../lib/app-context'
 import { BILLING_MODES, UNITS, fmtDate, fmtDateTime, money, today } from '../lib/format'
 import type { APIToken, Currency, CustomFieldDef, ExchangeRate, Holiday, InvoiceTemplate, Product, Settings as S, TaxRate, User, Webhook, WorkingDays } from '../lib/types'
 import { Card, Confirm, Empty, Field, Loading, Modal, Tabs, useAsync, useToast } from '../components/ui'
+import { Select } from '../components/Select'
 
 type Tab = 'company' | 'invoicing' | 'currencies' | 'taxes' | 'catalog' | 'templates' | 'email' | 'paperless' | 'api' | 'webhooks' | 'users' | 'backup' | 'system'
 const TABS: { id: Tab; label: string }[] = [
@@ -53,8 +54,9 @@ function useSettingsForm() {
     const t = e.target as HTMLInputElement
     setS(x => x ? { ...x, [k]: t.type === 'checkbox' ? t.checked : t.type === 'number' ? parseFloat(t.value) || 0 : t.value } : x)
   }
+  const put = (k: keyof S) => (v: S[keyof S]) => setS(x => x ? { ...x, [k]: v } : x)
   const save = async () => { if (!s) return; setBusy(true); try { await api.put(`${V1}/settings`, s); await refresh(); toast('Settings saved', 'success') } catch (e) { toast((e as Error).message, 'error') } finally { setBusy(false) } }
-  return { s, setS, set, save, busy }
+  return { s, setS, set, put, save, busy }
 }
 
 function SaveBar({ onSave, busy }: { onSave: () => void; busy: boolean }) { return <div className="form-actions"><button className="btn primary" disabled={busy} onClick={onSave}>Save changes</button></div> }
@@ -122,7 +124,7 @@ function CustomFieldsEditor({ value, onChange }: { value: CustomFieldDef[]; onCh
 }
 
 function Invoicing() {
-  const { s, set, save, busy, setS } = useSettingsForm()
+  const { s, set, put, save, busy, setS } = useSettingsForm()
   const { data: next } = useAsync(() => api.get<{ number: string }>(`${V1}/invoices/next-number`))
   if (!s) return <Loading />
   return (
@@ -137,15 +139,15 @@ function Invoicing() {
       <Card title="Defaults for new invoices">
         <div className="form-grid">
           <Field label="Payment terms (days)"><input type="number" value={s.default_due_days} onChange={set('default_due_days')} /></Field>
-          <Field label="Default billing mode"><select value={s.default_billing_mode} onChange={set('default_billing_mode')}>{BILLING_MODES.map(b => <option key={b.value} value={b.value}>{b.label}</option>)}</select></Field>
+          <Field label="Default billing mode"><Select value={s.default_billing_mode} onChange={put('default_billing_mode')} options={BILLING_MODES.map(b => ({ value: b.value, label: b.label }))} /></Field>
           <Field label="Default hourly rate"><input type="number" step="0.01" value={s.default_hourly_rate} onChange={set('default_hourly_rate')} /></Field>
           <Field label="Default daily rate"><input type="number" step="0.01" value={s.default_daily_rate} onChange={set('default_daily_rate')} /></Field>
           <Field label="Default monthly rate"><input type="number" step="0.01" value={s.default_monthly_rate} onChange={set('default_monthly_rate')} /></Field>
           <Field label="Default tax rate (%)"><input type="number" step="0.01" value={s.default_tax_rate} onChange={set('default_tax_rate')} /></Field>
           <Field label="Hours per day" help="Used when billing tracked hours as days"><input type="number" step="0.5" value={s.hours_per_day} onChange={set('hours_per_day')} /></Field>
           <Field label="Round timer to (minutes)" help="1 = no rounding"><input type="number" value={s.time_rounding_minutes} onChange={set('time_rounding_minutes')} /></Field>
-          <Field label="Number format"><select value={s.number_format} onChange={set('number_format')}>{['1,234.56', '1.234,56', '1 234,56', "1'234.56", '1234.56'].map(f => <option key={f} value={f}>{f}</option>)}</select></Field>
-          <Field label="Email attachment" help="What to attach when emailing an invoice"><select value={s.email_attachment_mode} onChange={set('email_attachment_mode')}><option value="generated">Generated PDF</option><option value="uploaded">Uploaded files only (falls back to generated if none)</option><option value="both">Generated PDF + uploaded files</option></select></Field>
+          <Field label="Number format"><Select value={s.number_format} onChange={put('number_format')} options={['1,234.56', '1.234,56', '1 234,56', "1'234.56", '1234.56'].map(f => ({ value: f, label: f }))} /></Field>
+          <Field label="Email attachment" help="What to attach when emailing an invoice"><Select value={s.email_attachment_mode} onChange={put('email_attachment_mode')} options={[{ value: 'generated', label: 'Generated PDF' }, { value: 'uploaded', label: 'Uploaded files only', hint: 'falls back to generated if none' }, { value: 'both', label: 'Generated PDF + uploaded files' }]} /></Field>
           <label className="check full"><input type="checkbox" checked={s.show_tax_column} onChange={set('show_tax_column')} /> Show tax column on invoices</label>
         </div>
       </Card>
@@ -198,7 +200,7 @@ function WorkingDaysCard({ s, setS, save, busy }: { s: S; setS: React.Dispatch<R
         <div>
           <Field label="Work week"><div className="row wrap" style={{ gap: 10 }}>{WEEKDAYS.map(([d, l]) => <label key={d} className="check"><input type="checkbox" checked={week.has(d)} onChange={() => toggleDay(d)} /> {l}</label>)}</div></Field>
           <div className="row wrap mt" style={{ gap: 8, alignItems: 'flex-end' }}>
-            <Field label="Add public holidays"><select value={preset} onChange={e => setPreset(e.target.value)}>{presets?.filter(p => p.id !== 'weekend').map(p => <option key={p.id} value={p.id}>{p.label}</option>)}</select></Field>
+            <Field label="Add public holidays"><Select className="holiday-preset" value={preset} onChange={setPreset} options={(presets || []).filter(p => p.id !== 'weekend').map(p => ({ value: p.id, label: p.label }))} /></Field>
             <Field label="Year" help="Only matters for movable feasts"><input type="number" value={year} onChange={e => setYear(Number(e.target.value) || year)} style={{ width: 90 }} /></Field>
             <button className="btn" onClick={addPreset} style={{ marginBottom: 6 }}>Add</button>
           </div>
@@ -235,7 +237,7 @@ function Currencies() {
   const { settings, refresh, user } = useApp()
   const isAdmin = user?.role === 'admin'
   const toast = useToast()
-  const { s, set, save, busy } = useSettingsForm()
+  const { s, set, put, save, busy } = useSettingsForm()
   const { data: list, reload } = useAsync(() => api.get<Currency[]>(`${V1}/currencies`))
   const { data: rates, reload: reloadRates } = useAsync(() => api.get<{ base: string; rates: ExchangeRate[]; provider: string; default_provider: string; providers: { ID: string; Label: string }[] }>(`${V1}/rates`))
   const [manual, setManual] = useState({ quote: '', rate: '' })
@@ -251,12 +253,10 @@ function Currencies() {
       <div className="grid">
         <Card title="Base currency">
           {!isAdmin && <div className="callout mb">Currencies and exchange rates are shared by everyone on this server; only an admin can change them.</div>}
-          <Field label="Base currency" help="Reports and the dashboard are shown in this currency. Changing it does not alter existing invoices."><select value={s.base_currency} onChange={set('base_currency')} disabled={!isAdmin}>{list.map(c => <option key={c.code} value={c.code}>{c.code} – {c.name}</option>)}</select></Field>
+          <Field label="Base currency" help="Reports and the dashboard are shown in this currency. Changing it does not alter existing invoices."><Select value={s.base_currency} onChange={put('base_currency')} disabled={!isAdmin} options={list.map(c => ({ value: c.code, label: c.code, hint: c.name }))} /></Field>
           <Field label="Rate source" help={s.exchange_rate_provider === 'cbbh' ? 'Official daily list of the Central Bank of BiH (middle rate). New invoices lock the rate valid on their issue date, so backdated invoices get that day\'s rate.' : 'Where automatic rates come from. Invoices lock the stored rate at creation; you can override it per invoice.'}>
-            <select value={s.exchange_rate_provider || ''} onChange={set('exchange_rate_provider')} disabled={!isAdmin}>
-              <option value="">Server default ({rates?.default_provider || '…'})</option>
-              {rates?.providers.map(p => <option key={p.ID} value={p.ID}>{p.Label}</option>)}
-            </select>
+            <Select value={s.exchange_rate_provider || ''} onChange={put('exchange_rate_provider')} disabled={!isAdmin} placeholder="Server default"
+              options={[{ value: '', label: 'Server default', hint: rates?.default_provider || '…' }, ...(rates?.providers || []).map(p => ({ value: p.ID, label: p.Label }))]} />
           </Field>
           {isAdmin && <SaveBar onSave={async () => { await save(); reloadRates() }} busy={busy} />}
         </Card>
@@ -278,7 +278,7 @@ function Currencies() {
 
 // ---------- Taxes ----------
 function IncomeTaxSettings() {
-  const { s, set, save, busy } = useSettingsForm()
+  const { s, set, put, save, busy } = useSettingsForm()
   if (!s) return <Loading />
   return (
     <Card title="Income tax estimate (your own tax, not shown on invoices)">
@@ -286,8 +286,8 @@ function IncomeTaxSettings() {
       <div className="form-grid">
         <Field label="Label"><input value={s.income_tax_label} onChange={set('income_tax_label')} placeholder="Porez na dohodak" /></Field>
         <Field label="Rate (%)"><input type="number" step="0.01" value={s.income_tax_rate} onChange={set('income_tax_rate')} /></Field>
-        <Field label="Tax base"><select value={s.income_tax_basis} onChange={set('income_tax_basis')}><option value="revenue">Gross income (received)</option><option value="profit">Income minus expenses</option></select></Field>
-        <Field label="Count income by"><select value={s.income_tax_by_payment_date ? 'payment' : 'invoice'} onChange={e => set('income_tax_by_payment_date')({ target: { type: 'checkbox', checked: e.target.value === 'payment' } } as unknown as React.ChangeEvent<HTMLInputElement>)}><option value="payment">Payment date (cash basis)</option><option value="invoice">Invoice date</option></select></Field>
+        <Field label="Tax base"><Select value={s.income_tax_basis} onChange={put('income_tax_basis')} options={[{ value: 'revenue', label: 'Gross income', hint: 'received' }, { value: 'profit', label: 'Income minus expenses' }]} /></Field>
+        <Field label="Count income by"><Select value={s.income_tax_by_payment_date ? 'payment' : 'invoice'} onChange={v => put('income_tax_by_payment_date')(v === 'payment')} options={[{ value: 'payment', label: 'Payment date', hint: 'cash basis' }, { value: 'invoice', label: 'Invoice date' }]} /></Field>
         <Field label="Fixed monthly contributions" help="Doprinosi, in base currency; shown as a separate line"><input type="number" step="0.01" value={s.contributions_monthly} onChange={set('contributions_monthly')} /></Field>
         <Field label="Minimum yearly tax" help="0 = none"><input type="number" step="0.01" value={s.income_tax_min_yearly} onChange={set('income_tax_min_yearly')} /></Field>
         <Field label="Yearly deduction / allowance" help="Subtracted from the yearly base before applying the rate"><input type="number" step="0.01" value={s.income_tax_deduction} onChange={set('income_tax_deduction')} /></Field>
@@ -333,9 +333,9 @@ function Catalog() {
         <div className="form-grid">
           <Field label="Name" className="full"><input value={editing.name} onChange={e => setEditing({ ...editing, name: e.target.value })} autoFocus /></Field>
           <Field label="Description" className="full"><input value={editing.description} onChange={e => setEditing({ ...editing, description: e.target.value })} /></Field>
-          <Field label="Unit"><select value={editing.unit} onChange={e => setEditing({ ...editing, unit: e.target.value })}>{UNITS.map(u => <option key={u.value} value={u.value}>{u.label}</option>)}</select></Field>
+          <Field label="Unit"><Select value={editing.unit || ''} onChange={v => setEditing({ ...editing, unit: v })} options={UNITS.map(u => ({ value: u.value, label: u.label }))} /></Field>
           <Field label="Unit price"><input type="number" step="0.01" value={editing.unit_price} onChange={e => setEditing({ ...editing, unit_price: parseFloat(e.target.value) || 0 })} /></Field>
-          <Field label="Currency" help="Blank = any"><select value={editing.currency} onChange={e => setEditing({ ...editing, currency: e.target.value })}><option value="">Any</option>{currencies.filter(c => c.enabled).map(c => <option key={c.code} value={c.code}>{c.code}</option>)}</select></Field>
+          <Field label="Currency" help="Blank = any"><Select value={editing.currency || ''} onChange={v => setEditing({ ...editing, currency: v })} placeholder="Any" options={[{ value: '', label: 'Any' }, ...currencies.filter(c => c.enabled).map(c => ({ value: c.code, label: c.code, hint: c.name }))]} /></Field>
           <Field label="Tax rate (%)"><input type="number" step="0.01" value={editing.tax_rate} onChange={e => setEditing({ ...editing, tax_rate: parseFloat(e.target.value) || 0 })} /></Field>
         </div>
         <div className="form-actions"><button className="btn primary" onClick={save} disabled={!editing.name}>Save</button></div>
@@ -393,7 +393,7 @@ function Templates() {
         </div>}
         {tab === 'design' && <div className="grid" style={{ gap: 12 }}>
           <Field label="Name"><input value={sel.name} onChange={e => setSel({ ...sel, name: e.target.value })} /></Field>
-          <Field label="Layout"><select value={sel.layout} onChange={e => setSel({ ...sel, layout: e.target.value })}><option value="classic">Classic — header left, accent table</option><option value="modern">Modern — full-width coloured header</option><option value="minimal">Minimal — black & white, thin rules</option></select></Field>
+          <Field label="Layout"><Select value={sel.layout} onChange={v => setSel({ ...sel, layout: v })} options={[{ value: 'classic', label: 'Classic', hint: 'header left, accent table' }, { value: 'modern', label: 'Modern', hint: 'full-width coloured header' }, { value: 'minimal', label: 'Minimal', hint: 'black & white, thin rules' }]} /></Field>
           <Field label="Accent colour"><div className="row"><input type="color" value={sel.accent_color} onChange={e => setSel({ ...sel, accent_color: e.target.value })} /><input value={sel.accent_color} onChange={e => setSel({ ...sel, accent_color: e.target.value })} style={{ width: 120 }} /></div></Field>
           <label className="check"><input type="checkbox" checked={sel.is_default} onChange={e => setSel({ ...sel, is_default: e.target.checked })} /> Use as default template</label>
           <hr />
@@ -423,7 +423,7 @@ function Templates() {
 
 // ---------- Email ----------
 function Email() {
-  const { s, set, save, busy } = useSettingsForm()
+  const { s, set, put, save, busy } = useSettingsForm()
   const toast = useToast()
   const [to, setTo] = useState('')
   if (!s) return <Loading />
@@ -434,7 +434,7 @@ function Email() {
         <div className="form-grid">
           <Field label="Host" className="full"><input value={s.smtp_host} onChange={set('smtp_host')} placeholder="smtp.example.com" /></Field>
           <Field label="Port"><input type="number" value={s.smtp_port} onChange={set('smtp_port')} /></Field>
-          <Field label="Encryption"><select value={s.smtp_tls} onChange={set('smtp_tls')}><option value="starttls">STARTTLS (587)</option><option value="tls">TLS/SSL (465)</option><option value="none">None (25)</option></select></Field>
+          <Field label="Encryption"><Select value={s.smtp_tls} onChange={put('smtp_tls')} options={[{ value: 'starttls', label: 'STARTTLS', hint: '587' }, { value: 'tls', label: 'TLS/SSL', hint: '465' }, { value: 'none', label: 'None', hint: '25' }]} /></Field>
           <Field label="Username"><input value={s.smtp_user} onChange={set('smtp_user')} /></Field>
           <Field label="Password" help={s.smtp_password_set ? 'A password is stored. Leave blank to keep it.' : 'Leave blank to keep the current one'}><input type="password" value={s.smtp_password} onChange={set('smtp_password')} autoComplete="new-password" placeholder={s.smtp_password_set ? '••••••••' : ''} /></Field>
           <Field label="From address"><input value={s.smtp_from} onChange={set('smtp_from')} placeholder="billing@example.com" /></Field>
@@ -605,7 +605,7 @@ function System() {
 
 // ---------- Paperless-ngx ----------
 function Paperless() {
-  const { s, set, save, busy, setS } = useSettingsForm()
+  const { s, set, put, save, busy, setS } = useSettingsForm()
   const toast = useToast()
   const [testing, setTesting] = useState(false)
   const [result, setResult] = useState<{ ok: boolean; version?: string; document_count?: number } | null>(null)
@@ -635,7 +635,7 @@ function Paperless() {
       <Card title="What gets archived">
         <div className="form-grid">
           <Field label="Archive invoices automatically" help="Uses the same files as email attachments (Settings → Invoicing → Email attachment): generated PDF, your uploaded files, or both">
-            <select value={s.paperless_archive_invoices} onChange={set('paperless_archive_invoices')}><option value="off">Never (manual button only)</option><option value="sent">When marked as sent (or paid)</option><option value="paid">When paid</option></select>
+            <Select value={s.paperless_archive_invoices} onChange={put('paperless_archive_invoices')} options={[{ value: 'off', label: 'Never', hint: 'manual button only' }, { value: 'sent', label: 'When marked as sent', hint: 'or paid' }, { value: 'paid', label: 'When paid' }]} />
           </Field>
           <Field label="Document type for invoices" help="Created in Paperless if missing"><input value={s.paperless_invoice_type} onChange={set('paperless_invoice_type')} placeholder="Invoice" /></Field>
           <Field label="Tags" help="Comma separated; added to everything sent from here"><input value={s.paperless_tags} onChange={set('paperless_tags')} placeholder="pocket-invoicing, invoices" /></Field>

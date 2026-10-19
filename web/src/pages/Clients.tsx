@@ -6,6 +6,7 @@ import { BILLING_MODES, money } from '../lib/format'
 import type { Client, InvoiceTemplate, PaperlessEntry } from '../lib/types'
 import { usePaperless } from '../components/paperless'
 import { Card, Empty, Field, Loading, Modal, PageHeader, useAsync, useDebounce, useToast } from '../components/ui'
+import { Select } from '../components/Select'
 
 const blank = (currency: string, terms: number): Partial<Client> => ({ name: '', contact_name: '', email: '', phone: '', address1: '', address2: '', city: '', state: '', postal_code: '', country: '', tax_id: '', website: '', currency, billing_mode: 'hourly', default_rate: 0, payment_terms_days: terms, notes: '', email_subject: '', email_body: '', email_cc: '' })
 
@@ -46,18 +47,19 @@ export function ClientForm({ initial, onSaved, onClose }: { initial?: Client; on
         <Field label="State / region"><input value={c.state} onChange={set('state')} /></Field>
         <Field label="Country"><input value={c.country} onChange={set('country')} /></Field>
         <Field label="Tax / VAT ID"><input value={c.tax_id} onChange={set('tax_id')} /></Field>
-        <Field label="Currency"><select value={c.currency} onChange={set('currency')}>{enabled.map(x => <option key={x.code} value={x.code}>{x.code} – {x.name}</option>)}</select></Field>
-        <Field label="Default billing mode"><select value={c.billing_mode} onChange={set('billing_mode')}>{BILLING_MODES.map(b => <option key={b.value} value={b.value}>{b.label}</option>)}</select></Field>
+        <Field label="Currency"><Select value={c.currency || ''} onChange={v => setC(x => ({ ...x, currency: v }))} options={enabled.map(x => ({ value: x.code, label: x.code, hint: x.name }))} /></Field>
+        <Field label="Default billing mode"><Select value={c.billing_mode || ''} onChange={v => setC(x => ({ ...x, billing_mode: v as Client['billing_mode'] }))} options={BILLING_MODES.map(b => ({ value: b.value, label: b.label }))} /></Field>
         <Field label="Default rate" help="Per hour / day / month depending on billing mode"><input type="number" step="0.01" value={c.default_rate} onChange={set('default_rate')} /></Field>
         <Field label="Payment terms (days)" help="0 = due on receipt"><input type="number" value={c.payment_terms_days} onChange={set('payment_terms_days')} /></Field>
         {paperless?.configured && <Field label="Paperless correspondent" help="Documents of this correspondent show on the client page; everything archived for this client is filed under it">
-          <select value={createCorr ? '__create__' : (c.paperless_correspondent_id || '')} onChange={e => { if (e.target.value === '__create__') { setCreateCorr(true) } else { setCreateCorr(false); setC(x => ({ ...x, paperless_correspondent_id: Number(e.target.value) || 0, paperless_correspondent: correspondents?.find(k => k.id === Number(e.target.value))?.name || '' })) } }}>
-            <option value="">— not linked —</option>
-            {correspondents?.map(k => <option key={k.id} value={k.id}>{k.name}</option>)}
-            {c.name && !correspondents?.some(k => k.name.toLowerCase() === c.name!.toLowerCase()) && <option value="__create__">Create "{c.name}" in Paperless</option>}
-          </select>
+          <Select value={createCorr ? '__create__' : String(c.paperless_correspondent_id || '')} placeholder="— not linked —" onChange={v => { if (v === '__create__') { setCreateCorr(true) } else { setCreateCorr(false); setC(x => ({ ...x, paperless_correspondent_id: Number(v) || 0, paperless_correspondent: correspondents?.find(k => k.id === Number(v))?.name || '' })) } }}
+            options={[
+              { value: '', label: '— not linked —' },
+              ...(correspondents || []).map(k => ({ value: String(k.id), label: k.name })),
+              ...(c.name && !correspondents?.some(k => k.name.toLowerCase() === c.name!.toLowerCase()) ? [{ value: '__create__', label: `Create "${c.name}" in Paperless` }] : []),
+            ]} />
         </Field>}
-        <Field label="Invoice template" help="Used for this client's invoices unless an invoice picks another"><select value={c.template_id || ''} onChange={e => setC(x => ({ ...x, template_id: Number(e.target.value) || null }))}><option value="">Global default</option>{templates?.map(t => <option key={t.id} value={t.id}>{t.name}{t.kind === 'docx' ? ' (Word)' : ''}</option>)}</select></Field>
+        <Field label="Invoice template" help="Used for this client's invoices unless an invoice picks another"><Select value={String(c.template_id || '')} onChange={v => setC(x => ({ ...x, template_id: Number(v) || null }))} placeholder="Global default" options={[{ value: '', label: 'Global default' }, ...(templates || []).map(t => ({ value: String(t.id), label: t.name, hint: t.kind === 'docx' ? 'Word' : undefined }))]} /></Field>
         <Field label="Internal notes" className="full"><textarea value={c.notes} onChange={set('notes')} /></Field>
         <details className="full"><summary className="small bold" style={{ cursor: 'pointer' }}>Email template for this client (optional, overrides Settings → Email)</summary>
           <div className="grid mt" style={{ gap: 12 }}>

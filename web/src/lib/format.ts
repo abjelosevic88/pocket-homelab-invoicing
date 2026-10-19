@@ -1,4 +1,4 @@
-import type { Currency } from './types'
+import type { Currency, TaxRate } from './types'
 
 const currencyCache = new Map<string, Currency>()
 export function registerCurrencies(list: Currency[]) {
@@ -107,4 +107,14 @@ export function unitForBilling(mode: string): string {
     case 'monthly': return 'month'
     default: return 'unit'
   }
+}
+
+/** Options for a line-item tax picker: the line's own rate first when it matches no configured rate, then the rates, then "No tax" when 0% isn't configured. */
+export function taxRateOptions(taxRates: TaxRate[] | null | undefined, current: number) {
+  const opts = [
+    ...(!taxRates?.some(t => t.rate === current) ? [{ value: String(current), label: `${current}%` }] : []),
+    ...(taxRates || []).map(t => ({ value: String(t.rate), label: t.name })),
+    ...(!taxRates?.some(t => t.rate === 0) ? [{ value: '0', label: 'No tax' }] : []),
+  ]
+  return opts.filter((o, i) => opts.findIndex(x => x.value === o.value) === i)
 }

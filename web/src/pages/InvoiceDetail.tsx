@@ -6,6 +6,7 @@ import { fileSize, fmtDate, fmtDateTime, money, PAYMENT_METHODS, today } from '.
 import type { Activity, Client, Invoice, Payment } from '../lib/types'
 import { Badge, Card, Confirm, Field, Loading, Modal, PageHeader, useAsync, useToast } from '../components/ui'
 import { PaperlessBadge, usePaperless } from '../components/paperless'
+import { Select } from '../components/Select'
 
 function PaymentForm({ inv, onDone }: { inv: Invoice; onDone: () => void }) {
   const toast = useToast()
@@ -20,10 +21,10 @@ function PaymentForm({ inv, onDone }: { inv: Invoice; onDone: () => void }) {
     <form onSubmit={submit}>
       <div className="form-grid">
         <Field label="Amount received"><input type="number" step="0.01" value={p.amount} onChange={e => setP({ ...p, amount: parseFloat(e.target.value) || 0 })} autoFocus /></Field>
-        <Field label="Currency" help={p.currency !== inv.currency ? `Converted to ${inv.currency} using the rate below` : undefined}><select value={p.currency} onChange={e => setP({ ...p, currency: e.target.value })}>{currencies.filter(c => c.enabled || c.code === inv.currency).map(c => <option key={c.code} value={c.code}>{c.code}</option>)}</select></Field>
+        <Field label="Currency" help={p.currency !== inv.currency ? `Converted to ${inv.currency} using the rate below` : undefined}><Select value={p.currency} onChange={v => setP({ ...p, currency: v })} options={currencies.filter(c => c.enabled || c.code === inv.currency).map(c => ({ value: c.code, label: c.code, hint: c.name }))} /></Field>
         {p.currency !== inv.currency && <Field label={`Rate: 1 ${p.currency} = ? ${inv.currency}`} help="Leave 0 to use the stored rate" className="full"><input type="number" step="0.000001" value={p.exchange_rate || ''} onChange={e => setP({ ...p, exchange_rate: parseFloat(e.target.value) || 0 })} /></Field>}
         <Field label="Date"><input type="date" value={p.date} onChange={e => setP({ ...p, date: e.target.value })} /></Field>
-        <Field label="Method"><select value={p.method} onChange={e => setP({ ...p, method: e.target.value })}>{PAYMENT_METHODS.map(m => <option key={m} value={m}>{m.replace('_', ' ')}</option>)}</select></Field>
+        <Field label="Method"><Select value={p.method} onChange={v => setP({ ...p, method: v })} options={PAYMENT_METHODS.map(m => ({ value: m, label: m.replace('_', ' ') }))} /></Field>
         <Field label="Reference"><input value={p.reference} onChange={e => setP({ ...p, reference: e.target.value })} placeholder="Transaction id, cheque #…" /></Field>
         <Field label="Notes"><input value={p.notes} onChange={e => setP({ ...p, notes: e.target.value })} /></Field>
       </div>
