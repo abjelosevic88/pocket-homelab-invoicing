@@ -17,6 +17,9 @@ All configuration is via environment variables. Nothing is required; `docker com
 | `METRICS_ENABLED` | `true` | Expose Prometheus metrics at `/metrics` (unauthenticated) |
 | `SECURE_COOKIES` | `false` | Mark the session cookie `Secure`. Enable when served over HTTPS. |
 | `SESSION_TTL` | `720h` | Session lifetime (Go duration) |
+| `OIDC_ISSUER` / `OIDC_CLIENT_ID` / `OIDC_CLIENT_SECRET` | – | Sign in with an OpenID Connect provider (PocketID, Authelia, Authentik, Keycloak…). Needs `BASE_URL`; the callback is `BASE_URL/api/v1/auth/oidc/callback`. On a box with Pocket Core none of these are needed — the app receives its client when it registers. |
+| `OIDC_NAME` | `single sign-on` | Button label: “Sign in with …” (“Pocket Core” when the client came from Core) |
+| `OIDC_AUTO_CREATE` | `true` | Give an unknown (verified) email an account instead of refusing it. Always on for the Core-issued client |
 
 ## Authentication
 

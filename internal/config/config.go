@@ -38,6 +38,14 @@ type Config struct {
 	AdminName            string
 	SecureCookies        bool
 
+	// Sign in with an OpenID Connect provider. On a box with Pocket Core none
+	// of these are needed: the app uses the client Core issues on registration.
+	OIDCIssuer       string
+	OIDCClientID     string
+	OIDCClientSecret string
+	OIDCName         string // button label
+	OIDCAutoCreate   bool   // unknown emails get an account
+
 	// PDF
 	PDFEngine       string // native | chromium | gotenberg
 	ChromiumPath    string
@@ -127,6 +135,11 @@ func Load() (*Config, error) {
 		AdminPassword:        env("ADMIN_PASSWORD", ""),
 		AdminName:            env("ADMIN_NAME", "Admin"),
 		SecureCookies:        envBool("SECURE_COOKIES", false),
+		OIDCIssuer:           strings.TrimRight(env("OIDC_ISSUER", ""), "/"),
+		OIDCClientID:         env("OIDC_CLIENT_ID", ""),
+		OIDCClientSecret:     env("OIDC_CLIENT_SECRET", ""),
+		OIDCName:             env("OIDC_NAME", "single sign-on"),
+		OIDCAutoCreate:       envBool("OIDC_AUTO_CREATE", true),
 
 		PDFEngine:       strings.ToLower(env("PDF_ENGINE", "native")),
 		ChromiumPath:    env("CHROMIUM_PATH", "chromium"),
@@ -163,6 +176,9 @@ func Load() (*Config, error) {
 	case "native", "chromium", "gotenberg":
 	default:
 		return nil, fmt.Errorf("PDF_ENGINE must be one of native, chromium, gotenberg (got %q)", c.PDFEngine)
+	}
+	if c.OIDCIssuer != "" && (c.OIDCClientID == "" || c.BaseURL == "") {
+		return nil, fmt.Errorf("OIDC_ISSUER needs OIDC_CLIENT_ID and BASE_URL (the callback is BASE_URL/api/v1/auth/oidc/callback)")
 	}
 	if c.BaseURL == "" {
 		c.BaseURL = fmt.Sprintf("http://localhost:%d", c.Port)

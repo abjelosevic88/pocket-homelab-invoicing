@@ -3,7 +3,7 @@ import { api, V1 } from './api'
 import { registerCurrencies, registerNumberFormat } from './format'
 import type { Currency, Settings, User } from './types'
 
-interface AuthStatus { needs_setup: boolean; setup_complete: boolean; auth_mode: string; authenticated: boolean; user: User | null; version: string; company_name: string }
+interface AuthStatus { needs_setup: boolean; setup_complete: boolean; auth_mode: string; authenticated: boolean; user: User | null; version: string; company_name: string; oidc?: boolean; oidc_name?: string }
 
 interface AppState {
   status: AuthStatus | null
