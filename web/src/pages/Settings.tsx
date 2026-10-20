@@ -125,61 +125,67 @@ function CustomFieldsEditor({ value, onChange }: { value: CustomFieldDef[]; onCh
 }
 
 function Invoicing() {
+  const { settings } = useApp()
   const { s, set, put, save, busy, setS } = useSettingsForm()
   const { data: next } = useAsync(() => api.get<{ number: string }>(`${V1}/invoices/next-number`))
   if (!s) return <Loading />
+  const dirty = JSON.stringify(s) !== JSON.stringify(settings)
   return (
-    <div className="grid cols-2">
-      <Card title="Numbering">
-        <div className="grid" style={{ gap: 12 }}>
-          <Field label="Invoice number format" help={<>Placeholders: {'{YYYY} {YY} {MM} {DD} {SEQ} {SEQ:4} {CLIENT}'} · next: <code>{next?.number}</code></>}><input value={s.invoice_number_format} onChange={set('invoice_number_format')} /></Field>
-          <Field label="Next sequence number"><input type="number" value={s.invoice_next_seq} onChange={set('invoice_next_seq')} /></Field>
-          <label className="check"><input type="checkbox" checked={s.invoice_seq_reset_yearly} onChange={set('invoice_seq_reset_yearly')} /> Reset sequence every year</label>
+    <>
+      <div className="grid cols-2">
+        <div className="grid" style={{ alignContent: 'start' }}>
+          <Card title="Numbering">
+            <div className="grid" style={{ gap: 12 }}>
+              <Field label="Invoice number format" help={<>Placeholders: {'{YYYY} {YY} {MM} {DD} {SEQ} {SEQ:4} {CLIENT}'} · next: <code>{next?.number}</code></>}><input value={s.invoice_number_format} onChange={set('invoice_number_format')} /></Field>
+              <div className="form-grid">
+                <Field label="Next sequence number"><input type="number" value={s.invoice_next_seq} onChange={set('invoice_next_seq')} /></Field>
+                <label className="check" style={{ alignSelf: 'end', paddingBottom: 10 }}><input type="checkbox" checked={s.invoice_seq_reset_yearly} onChange={set('invoice_seq_reset_yearly')} /> Reset every year</label>
+              </div>
+            </div>
+          </Card>
+          <Card title="Custom invoice fields">
+            <p className="muted small" style={{ marginTop: 0 }}>Extra fields per invoice (fiscal receipt number, local invoice number, project code…), shown in the editor and, if enabled, in the PDF header. New invoices continue counters from the client's previous one (14/15ПП → 15/16ПП, …-15 → …-16).</p>
+            <CustomFieldsEditor value={s.custom_fields || []} onChange={v => setS(x => x ? { ...x, custom_fields: v } : x)} />
+          </Card>
         </div>
-      </Card>
-      <Card title="Defaults for new invoices">
-        <div className="form-grid">
-          <Field label="Payment terms (days)"><input type="number" value={s.default_due_days} onChange={set('default_due_days')} /></Field>
-          <Field label="Default billing mode"><Select value={s.default_billing_mode} onChange={put('default_billing_mode')} options={BILLING_MODES.map(b => ({ value: b.value, label: b.label }))} /></Field>
-          <Field label="Default hourly rate"><input type="number" step="0.01" value={s.default_hourly_rate} onChange={set('default_hourly_rate')} /></Field>
-          <Field label="Default daily rate"><input type="number" step="0.01" value={s.default_daily_rate} onChange={set('default_daily_rate')} /></Field>
-          <Field label="Default monthly rate"><input type="number" step="0.01" value={s.default_monthly_rate} onChange={set('default_monthly_rate')} /></Field>
-          <Field label="Default tax rate (%)"><input type="number" step="0.01" value={s.default_tax_rate} onChange={set('default_tax_rate')} /></Field>
-          <Field label="Hours per day" help="Used when billing tracked hours as days"><input type="number" step="0.5" value={s.hours_per_day} onChange={set('hours_per_day')} /></Field>
-          <Field label="Round timer to (minutes)" help="1 = no rounding"><input type="number" value={s.time_rounding_minutes} onChange={set('time_rounding_minutes')} /></Field>
-          <Field label="Number format"><Select value={s.number_format} onChange={put('number_format')} options={['1,234.56', '1.234,56', '1 234,56', "1'234.56", '1234.56'].map(f => ({ value: f, label: f }))} /></Field>
-          <Field label="Email attachment" help="What to attach when emailing an invoice"><Select value={s.email_attachment_mode} onChange={put('email_attachment_mode')} options={[{ value: 'generated', label: 'Generated PDF' }, { value: 'uploaded', label: 'Uploaded files only', hint: 'falls back to generated if none' }, { value: 'both', label: 'Generated PDF + uploaded files' }]} /></Field>
-          <label className="check full"><input type="checkbox" checked={s.show_tax_column} onChange={set('show_tax_column')} /> Show tax column on invoices</label>
-        </div>
-      </Card>
-      <Card title="Base currency total on invoices">
-        <div className="grid" style={{ gap: 12 }}>
-          <label className="check"><input type="checkbox" checked={s.show_base_total} onChange={set('show_base_total')} /> When an invoice is in another currency, also print the total in {s.base_currency}</label>
-          <Field label="Sentence printed under the totals" help="Placeholders: {rate} {currency} {currency_name} {base} {base_name} {total_base} {total}"><textarea rows={3} value={s.base_total_note} onChange={set('base_total_note')} /></Field>
-        </div>
-        <SaveBar onSave={save} busy={busy} />
-      </Card>
-      <WorkingDaysCard s={s} setS={setS} save={save} busy={busy} />
-      <Card title="Custom invoice fields" className="full">
-        <p className="muted small">Extra fields per invoice (e.g. fiscal receipt number, local invoice number, project code). They appear in the invoice editor and, if enabled, in the PDF header block. New invoices continue counters from the client's previous one (14/15ПП → 15/16ПП, …-15 → …-16).</p>
-        <CustomFieldsEditor value={s.custom_fields || []} onChange={v => setS(x => x ? { ...x, custom_fields: v } : x)} />
-        <SaveBar onSave={save} busy={busy} />
-      </Card>
-      <Card title="Default text" className="full" >
-        <div className="form-grid cols-3">
-          <Field label="Notes" help="Also used by recurring profiles without their own notes"><textarea value={s.default_notes} onChange={set('default_notes')} /></Field>
-          <Field label="Terms" help="{due_days} is replaced"><textarea value={s.default_terms} onChange={set('default_terms')} /></Field>
-          <Field label="Footer"><textarea value={s.default_footer} onChange={set('default_footer')} /></Field>
-        </div>
-        <SaveBar onSave={save} busy={busy} />
-      </Card>
-    </div>
+        <Card title="Defaults for new invoices">
+          <div className="form-grid">
+            <Field label="Payment terms (days)"><input type="number" value={s.default_due_days} onChange={set('default_due_days')} /></Field>
+            <Field label="Default billing mode"><Select value={s.default_billing_mode} onChange={put('default_billing_mode')} options={BILLING_MODES.map(b => ({ value: b.value, label: b.label }))} /></Field>
+            <Field label="Default hourly rate"><input type="number" step="0.01" value={s.default_hourly_rate} onChange={set('default_hourly_rate')} /></Field>
+            <Field label="Default daily rate"><input type="number" step="0.01" value={s.default_daily_rate} onChange={set('default_daily_rate')} /></Field>
+            <Field label="Default monthly rate"><input type="number" step="0.01" value={s.default_monthly_rate} onChange={set('default_monthly_rate')} /></Field>
+            <Field label="Default tax rate (%)"><input type="number" step="0.01" value={s.default_tax_rate} onChange={set('default_tax_rate')} /></Field>
+            <Field label="Hours per day" help="Used when billing tracked hours as days"><input type="number" step="0.5" value={s.hours_per_day} onChange={set('hours_per_day')} /></Field>
+            <Field label="Round timer to (minutes)" help="1 = no rounding"><input type="number" value={s.time_rounding_minutes} onChange={set('time_rounding_minutes')} /></Field>
+            <Field label="Number format"><Select value={s.number_format} onChange={put('number_format')} options={['1,234.56', '1.234,56', '1 234,56', "1'234.56", '1234.56'].map(f => ({ value: f, label: f }))} /></Field>
+            <Field label="Email attachment" help="What to attach when emailing an invoice"><Select value={s.email_attachment_mode} onChange={put('email_attachment_mode')} options={[{ value: 'generated', label: 'Generated PDF' }, { value: 'uploaded', label: 'Uploaded files only', hint: 'falls back to generated if none' }, { value: 'both', label: 'Generated PDF + uploaded files' }]} /></Field>
+            <label className="check full"><input type="checkbox" checked={s.show_tax_column} onChange={set('show_tax_column')} /> Show tax column on invoices</label>
+          </div>
+        </Card>
+        <Card title="Text printed on invoices" className="full">
+          <p className="muted small" style={{ marginTop: 0 }}>In the order they appear on the PDF. Notes, terms and footer are copied into each new invoice, where you can still change them.</p>
+          <div className="form-grid">
+            <label className="check full"><input type="checkbox" checked={s.show_base_total} onChange={set('show_base_total')} /> When an invoice is in another currency, also print the total in {s.base_currency}</label>
+            <Field label="Sentence under the totals" className="full" help="Placeholders: {rate} {currency} {currency_name} {base} {base_name} {total_base} {total}"><textarea rows={2} value={s.base_total_note} onChange={set('base_total_note')} disabled={!s.show_base_total} /></Field>
+            <Field label="Notes" help="e.g. a VAT exemption sentence; also used by recurring profiles without their own notes"><textarea rows={4} value={s.default_notes} onChange={set('default_notes')} /></Field>
+            <Field label="Terms" help="{due_days} is replaced"><textarea rows={4} value={s.default_terms} onChange={set('default_terms')} /></Field>
+            <Field label="Footer" className="full" help="Bottom of every page"><textarea rows={2} value={s.default_footer} onChange={set('default_footer')} /></Field>
+          </div>
+        </Card>
+        <WorkingDaysCard s={s} setS={setS} />
+      </div>
+      <div className="save-sticky">
+        {dirty && <span className="muted small">Unsaved changes</span>}
+        <button className="btn primary" disabled={busy || !dirty} onClick={save}>Save changes</button>
+      </div>
+    </>
   )
 }
 
 // ---------- Working days & holidays ----------
 const WEEKDAYS: [number, string][] = [[1, 'Mon'], [2, 'Tue'], [3, 'Wed'], [4, 'Thu'], [5, 'Fri'], [6, 'Sat'], [7, 'Sun']]
-function WorkingDaysCard({ s, setS, save, busy }: { s: S; setS: React.Dispatch<React.SetStateAction<S | null>>; save: () => Promise<void>; busy: boolean }) {
+function WorkingDaysCard({ s, setS }: { s: S; setS: React.Dispatch<React.SetStateAction<S | null>> }) {
   const toast = useToast()
   const { data: presets } = useAsync(() => api.get<{ id: string; label: string }[]>(`${V1}/calendar/presets`))
   const [preset, setPreset] = useState('rs')
@@ -200,10 +206,10 @@ function WorkingDaysCard({ s, setS, save, busy }: { s: S; setS: React.Dispatch<R
       <div className="grid split-2-1">
         <div>
           <Field label="Work week"><div className="row wrap" style={{ gap: 10 }}>{WEEKDAYS.map(([d, l]) => <label key={d} className="check"><input type="checkbox" checked={week.has(d)} onChange={() => toggleDay(d)} /> {l}</label>)}</div></Field>
-          <div className="row wrap mt" style={{ gap: 8, alignItems: 'flex-end' }}>
+          <div className="row wrap mt" style={{ gap: 8, alignItems: 'flex-start' }}>
             <Field label="Add public holidays"><Select className="holiday-preset" value={preset} onChange={setPreset} options={(presets || []).filter(p => p.id !== 'weekend').map(p => ({ value: p.id, label: p.label }))} /></Field>
             <Field label="Year" help="Only matters for movable feasts"><input type="number" value={year} onChange={e => setYear(Number(e.target.value) || year)} style={{ width: 90 }} /></Field>
-            <button className="btn" onClick={addPreset} style={{ marginBottom: 6 }}>Add</button>
+            <div className="field-like"><span>&nbsp;</span><button className="btn" onClick={addPreset}>Add</button></div>
           </div>
           <div className="table-wrap mt"><table className="table">
             <thead><tr><th style={{ width: 170 }}>Date</th><th>Name</th><th style={{ width: 150 }}>Repeats</th><th style={{ width: 90 }}></th></tr></thead>
@@ -228,7 +234,6 @@ function WorkingDaysCard({ s, setS, save, busy }: { s: S; setS: React.Dispatch<R
           </div>}
         </Card>
       </div>
-      <SaveBar onSave={save} busy={busy} />
     </Card>
   )
 }
