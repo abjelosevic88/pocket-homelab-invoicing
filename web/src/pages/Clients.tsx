@@ -8,7 +8,7 @@ import { usePaperless } from '../components/paperless'
 import { Card, Empty, Field, Loading, Modal, PageHeader, useAsync, useDebounce, useToast } from '../components/ui'
 import { Select } from '../components/Select'
 
-const blank = (currency: string, terms: number): Partial<Client> => ({ name: '', contact_name: '', email: '', phone: '', address1: '', address2: '', city: '', state: '', postal_code: '', country: '', tax_id: '', website: '', currency, billing_mode: 'hourly', default_rate: 0, payment_terms_days: terms, notes: '', email_subject: '', email_body: '', email_cc: '' })
+const blank = (currency: string, terms: number): Partial<Client> => ({ name: '', contact_name: '', email: '', phone: '', address1: '', address2: '', city: '', state: '', postal_code: '', country: '', tax_id: '', registration_no: '', website: '', currency, billing_mode: 'hourly', default_rate: 0, payment_terms_days: terms, notes: '', email_subject: '', email_body: '', email_cc: '' })
 
 export function ClientForm({ initial, onSaved, onClose }: { initial?: Client; onSaved: (c: Client) => void; onClose: () => void }) {
   const { settings, currencies } = useApp()
@@ -46,7 +46,8 @@ export function ClientForm({ initial, onSaved, onClose }: { initial?: Client; on
         <Field label="City"><input value={c.city} onChange={set('city')} /></Field>
         <Field label="State / region"><input value={c.state} onChange={set('state')} /></Field>
         <Field label="Country"><input value={c.country} onChange={set('country')} /></Field>
-        <Field label="Tax / VAT ID"><input value={c.tax_id} onChange={set('tax_id')} /></Field>
+        <Field label="VAT ID" help="Tax number for VAT, e.g. LU12345678 (EU: check in VIES), PDV broj in BiH"><input value={c.tax_id} onChange={set('tax_id')} /></Field>
+        <Field label="Company reg. no." help="Company register number, e.g. RCS B274410 (Luxembourg), HRB … (Germany)"><input value={c.registration_no || ''} onChange={set('registration_no')} /></Field>
         <Field label="Currency"><Select value={c.currency || ''} onChange={v => setC(x => ({ ...x, currency: v }))} options={enabled.map(x => ({ value: x.code, label: x.code, hint: x.name }))} /></Field>
         <Field label="Default billing mode"><Select value={c.billing_mode || ''} onChange={v => setC(x => ({ ...x, billing_mode: v as Client['billing_mode'] }))} options={BILLING_MODES.map(b => ({ value: b.value, label: b.label }))} /></Field>
         <Field label="Default rate" help="Per hour / day / month depending on billing mode"><input type="number" step="0.01" value={c.default_rate} onChange={set('default_rate')} /></Field>

@@ -3,7 +3,7 @@ export interface Currency { code: string; name: string; symbol: string; decimals
 export interface ExchangeRate { base: string; quote: string; rate: number; source: string; fetched_at: string }
 export interface TaxRate { id: number; name: string; rate: number; is_default: boolean }
 export interface Client {
-  id: number; name: string; contact_name: string; email: string; phone: string; address1: string; address2: string; city: string; state: string; postal_code: string; country: string; tax_id: string; website: string;
+  id: number; name: string; contact_name: string; email: string; phone: string; address1: string; address2: string; city: string; state: string; postal_code: string; country: string; tax_id: string; registration_no: string; website: string;
   currency: string; billing_mode: string; default_rate: number; payment_terms_days: number; template_id: number | null; email_subject: string; email_body: string; email_cc: string; paperless_correspondent_id: number; paperless_correspondent: string; notes: string; archived: boolean; created_at: string; updated_at: string;
   invoice_count?: number; outstanding: number; total_billed: number;
 }

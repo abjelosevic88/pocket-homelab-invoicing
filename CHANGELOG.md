@@ -10,7 +10,10 @@ All notable changes to this project are documented here. Format follows [Keep a 
 - Settings → Business details: **VAT ID** next to the tax ID (e.g. PDV broj next to the JIB). Printed under the tax ID in the PDF header with the template label `vat_id` (default "VAT ID"), available to Word templates as `company.vat_id` and listed in the accountant package.
 - Custom fields continue from the client's previous invoice: the invoice editor fills empty fields of a new invoice or draft with the next value (`14/15ПП` → `15/16ПП`, `ELJA9MLH-ELJA9MLH-15` → `ELJA9MLH-ELJA9MLH-16`) and shows the previous value under each field; recurring drafts get the same values (not auto-sent ones). `GET /api/v1/invoices/next-custom-fields?client_id=` returns `last` and `next`.
 
+- Clients: **Company reg. no.** (e.g. Luxembourg RCS B274410), printed under Bill to with the template label `registration_no` (default "Reg. no.") and available to Word templates as `client.registration_no`.
+
 ### Changed
+- The client's tax number is now labelled **VAT ID** (template label `client_tax_id`) in the client form and under Bill to, separate from your own `tax_id` label, so a template that prints yours as "JIB" no longer prints the client's as "JIB" too.
 - Counter suggestions now bump the last number of any value, not only `N`, `N/M` or `N/MПП`, so the month-end wizard also suggests the PFR number.
 - Recurring profiles and the month-end wizard fall back to the default notes and terms in Settings when the profile has none of its own.
 

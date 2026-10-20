@@ -84,7 +84,8 @@
         {{if .To.Contact}}{{.To.Contact}}<br>{{end}}
         {{range .To.Lines}}{{.}}<br>{{end}}
         {{if .To.Email}}{{.To.Email}}<br>{{end}}
-        {{if .To.TaxID}}{{.Label "tax_id"}}: {{.To.TaxID}}{{end}}
+        {{if .To.TaxID}}{{.Label "client_tax_id"}}: {{.To.TaxID}}<br>{{end}}
+        {{if .To.RegNo}}{{.Label "registration_no"}}: {{.To.RegNo}}{{end}}
       </div>
     </div>
     <div class="block meta">

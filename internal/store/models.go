@@ -61,6 +61,7 @@ type Client struct {
 	PostalCode               string  `json:"postal_code"`
 	Country                  string  `json:"country"`
 	TaxID                    string  `json:"tax_id"`
+	RegistrationNo           string  `json:"registration_no"` // company register number, e.g. RCS B274410
 	Website                  string  `json:"website"`
 	Currency                 string  `json:"currency"`
 	BillingMode              string  `json:"billing_mode"`

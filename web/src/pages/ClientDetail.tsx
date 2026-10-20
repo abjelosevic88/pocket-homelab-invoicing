@@ -44,7 +44,8 @@ export default function ClientDetail() {
             {c.address1 && <><dt>Address</dt><dd>{c.address1}<br />{c.address2 && <>{c.address2}<br /></>}{[c.postal_code, c.city].filter(Boolean).join(' ')}{c.state ? `, ${c.state}` : ''}<br />{c.country}</dd></>}
             {c.phone && <><dt>Phone</dt><dd>{c.phone}</dd></>}
             {c.website && <><dt>Website</dt><dd><a href={c.website} target="_blank" rel="noreferrer">{c.website}</a></dd></>}
-            {c.tax_id && <><dt>Tax ID</dt><dd>{c.tax_id}</dd></>}
+            {c.tax_id && <><dt>VAT ID</dt><dd>{c.tax_id}</dd></>}
+            {c.registration_no && <><dt>Reg. no.</dt><dd>{c.registration_no}</dd></>}
             {c.notes && <><dt>Notes</dt><dd style={{ whiteSpace: 'pre-wrap' }}>{c.notes}</dd></>}
           </dl>
         </Card>

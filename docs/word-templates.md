@@ -34,7 +34,7 @@ line breaks. Values are inserted as text, never as markup.
 
 **You:** `company.name` `company.address` (one line) `company.address1` `company.address2` `company.city` `company.postal_code` `company.state` `company.country` `company.email` `company.phone` `company.website` `company.tax_id` `company.vat_id`
 
-**Client:** `client.name` `client.contact` `client.address` `client.address1` `client.address2` `client.city` `client.postal_code` `client.state` `client.country` `client.email` `client.phone` `client.website` `client.tax_id`
+**Client:** `client.name` `client.contact` `client.address` `client.address1` `client.address2` `client.city` `client.postal_code` `client.state` `client.country` `client.email` `client.phone` `client.website` `client.tax_id` (VAT ID) `client.registration_no`
 
 **Line items** (inside `{{#items}}`): `n` `description` `unit` `quantity` `quantity_unit` ("21 days") `unit_price` `discount` `tax_rate` `amount`
 

@@ -351,7 +351,7 @@ function Catalog() {
 }
 
 // ---------- Templates ----------
-const LABEL_KEYS = ['invoice', 'invoice_number', 'issue_date', 'due_date', 'period', 'po_number', 'bill_to', 'description', 'unit', 'quantity', 'unit_price', 'discount', 'tax', 'amount', 'subtotal', 'total', 'amount_paid', 'balance_due', 'notes', 'terms', 'payment_details', 'tax_id', 'vat_id', 'page', 'paid_stamp', 'hour', 'hours', 'day', 'days', 'month', 'months']
+const LABEL_KEYS = ['invoice', 'invoice_number', 'issue_date', 'due_date', 'period', 'po_number', 'bill_to', 'description', 'unit', 'quantity', 'unit_price', 'discount', 'tax', 'amount', 'subtotal', 'total', 'amount_paid', 'balance_due', 'notes', 'terms', 'payment_details', 'tax_id', 'vat_id', 'client_tax_id', 'registration_no', 'page', 'paid_stamp', 'hour', 'hours', 'day', 'days', 'month', 'months']
 
 function WordUpload({ templateId, onDone, label = '+ Upload Word template' }: { templateId?: number; onDone: (t: InvoiceTemplate, ph: string[]) => void; label?: string }) {
   const toast = useToast()

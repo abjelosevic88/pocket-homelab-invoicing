@@ -162,7 +162,10 @@ func RenderNative(d *Document, logo []byte, logoType string) ([]byte, error) {
 		p.CellFormat(contentW/2, 4.5, d.To.Email, "", 1, "L", false, 0, "")
 	}
 	if d.To.TaxID != "" {
-		p.CellFormat(contentW/2, 4.5, d.Label("tax_id")+": "+d.To.TaxID, "", 1, "L", false, 0, "")
+		p.CellFormat(contentW/2, 4.5, d.Label("client_tax_id")+": "+d.To.TaxID, "", 1, "L", false, 0, "")
+	}
+	if d.To.RegNo != "" {
+		p.CellFormat(contentW/2, 4.5, d.Label("registration_no")+": "+d.To.RegNo, "", 1, "L", false, 0, "")
 	}
 	leftBottom := p.GetY()
 

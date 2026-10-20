@@ -5,11 +5,11 @@ import (
 	"strings"
 )
 
-const clientCols = `c.id, c.name, c.contact_name, c.email, c.phone, c.address1, c.address2, c.city, c.state, c.postal_code, c.country, c.tax_id, c.website, c.currency, c.billing_mode, c.default_rate, c.payment_terms_days, c.notes, c.archived, c.created_at, c.updated_at, c.template_id, c.email_subject, c.email_body, c.email_cc, c.paperless_correspondent_id, c.paperless_correspondent`
+const clientCols = `c.id, c.name, c.contact_name, c.email, c.phone, c.address1, c.address2, c.city, c.state, c.postal_code, c.country, c.tax_id, c.website, c.currency, c.billing_mode, c.default_rate, c.payment_terms_days, c.notes, c.archived, c.created_at, c.updated_at, c.template_id, c.email_subject, c.email_body, c.email_cc, c.paperless_correspondent_id, c.paperless_correspondent, c.registration_no`
 
 func scanClient(row interface{ Scan(...any) error }, withStats bool) (*Client, error) {
 	var c Client
-	dest := []any{&c.ID, &c.Name, &c.ContactName, &c.Email, &c.Phone, &c.Address1, &c.Address2, &c.City, &c.State, &c.PostalCode, &c.Country, &c.TaxID, &c.Website, &c.Currency, &c.BillingMode, &c.DefaultRate, &c.PaymentTermsDays, &c.Notes, &c.Archived, &c.CreatedAt, &c.UpdatedAt, &c.TemplateID, &c.EmailSubject, &c.EmailBody, &c.EmailCC, &c.PaperlessCorrespondentID, &c.PaperlessCorrespondent}
+	dest := []any{&c.ID, &c.Name, &c.ContactName, &c.Email, &c.Phone, &c.Address1, &c.Address2, &c.City, &c.State, &c.PostalCode, &c.Country, &c.TaxID, &c.Website, &c.Currency, &c.BillingMode, &c.DefaultRate, &c.PaymentTermsDays, &c.Notes, &c.Archived, &c.CreatedAt, &c.UpdatedAt, &c.TemplateID, &c.EmailSubject, &c.EmailBody, &c.EmailCC, &c.PaperlessCorrespondentID, &c.PaperlessCorrespondent, &c.RegistrationNo}
 	if withStats {
 		dest = append(dest, &c.InvoiceCount, &c.Outstanding, &c.TotalBilled)
 	}
@@ -63,9 +63,9 @@ func (s *Store) GetClient(ctx context.Context, uid, id int64) (*Client, error) {
 
 // CreateClient inserts a client.
 func (s *Store) CreateClient(ctx context.Context, uid int64, c *Client) error {
-	res, err := s.DB.ExecContext(ctx, `INSERT INTO clients (user_id, name, contact_name, email, phone, address1, address2, city, state, postal_code, country, tax_id, website, currency, billing_mode, default_rate, payment_terms_days, notes, archived, template_id, email_subject, email_body, email_cc, paperless_correspondent_id, paperless_correspondent)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		NullInt(uid), c.Name, c.ContactName, c.Email, c.Phone, c.Address1, c.Address2, c.City, c.State, c.PostalCode, c.Country, c.TaxID, c.Website, c.Currency, c.BillingMode, c.DefaultRate, c.PaymentTermsDays, c.Notes, c.Archived, c.TemplateID, c.EmailSubject, c.EmailBody, c.EmailCC, c.PaperlessCorrespondentID, c.PaperlessCorrespondent)
+	res, err := s.DB.ExecContext(ctx, `INSERT INTO clients (user_id, name, contact_name, email, phone, address1, address2, city, state, postal_code, country, tax_id, website, currency, billing_mode, default_rate, payment_terms_days, notes, archived, template_id, email_subject, email_body, email_cc, paperless_correspondent_id, paperless_correspondent, registration_no)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		NullInt(uid), c.Name, c.ContactName, c.Email, c.Phone, c.Address1, c.Address2, c.City, c.State, c.PostalCode, c.Country, c.TaxID, c.Website, c.Currency, c.BillingMode, c.DefaultRate, c.PaymentTermsDays, c.Notes, c.Archived, c.TemplateID, c.EmailSubject, c.EmailBody, c.EmailCC, c.PaperlessCorrespondentID, c.PaperlessCorrespondent, c.RegistrationNo)
 	if err != nil {
 		return err
 	}
@@ -75,8 +75,8 @@ func (s *Store) CreateClient(ctx context.Context, uid int64, c *Client) error {
 
 // UpdateClient updates a client.
 func (s *Store) UpdateClient(ctx context.Context, uid int64, c *Client) error {
-	res, err := s.DB.ExecContext(ctx, `UPDATE clients SET name=?, contact_name=?, email=?, phone=?, address1=?, address2=?, city=?, state=?, postal_code=?, country=?, tax_id=?, website=?, currency=?, billing_mode=?, default_rate=?, payment_terms_days=?, notes=?, archived=?, template_id=?, email_subject=?, email_body=?, email_cc=?, paperless_correspondent_id=?, paperless_correspondent=?, updated_at=? WHERE id=? AND user_id=?`,
-		c.Name, c.ContactName, c.Email, c.Phone, c.Address1, c.Address2, c.City, c.State, c.PostalCode, c.Country, c.TaxID, c.Website, c.Currency, c.BillingMode, c.DefaultRate, c.PaymentTermsDays, c.Notes, c.Archived, c.TemplateID, c.EmailSubject, c.EmailBody, c.EmailCC, c.PaperlessCorrespondentID, c.PaperlessCorrespondent, Now(), c.ID, uid)
+	res, err := s.DB.ExecContext(ctx, `UPDATE clients SET name=?, contact_name=?, email=?, phone=?, address1=?, address2=?, city=?, state=?, postal_code=?, country=?, tax_id=?, website=?, currency=?, billing_mode=?, default_rate=?, payment_terms_days=?, notes=?, archived=?, template_id=?, email_subject=?, email_body=?, email_cc=?, paperless_correspondent_id=?, paperless_correspondent=?, registration_no=?, updated_at=? WHERE id=? AND user_id=?`,
+		c.Name, c.ContactName, c.Email, c.Phone, c.Address1, c.Address2, c.City, c.State, c.PostalCode, c.Country, c.TaxID, c.Website, c.Currency, c.BillingMode, c.DefaultRate, c.PaymentTermsDays, c.Notes, c.Archived, c.TemplateID, c.EmailSubject, c.EmailBody, c.EmailCC, c.PaperlessCorrespondentID, c.PaperlessCorrespondent, c.RegistrationNo, Now(), c.ID, uid)
 	return notFoundIfNone(res, err)
 }
 
