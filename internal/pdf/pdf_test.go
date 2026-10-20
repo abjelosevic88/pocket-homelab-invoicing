@@ -108,3 +108,21 @@ func TestBuildOptionsAndCustomFields(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestDraftFallsBackToDefaultText(t *testing.T) {
+	in := sample()
+	in.Settings.DefaultNotes, in.Settings.DefaultTerms, in.Settings.DefaultFooter = "Default note", "Default terms", "Default footer"
+	in.Invoice.Notes, in.Invoice.Terms, in.Invoice.Footer = "", "Own terms", ""
+
+	in.Invoice.Status = "draft"
+	d := Build(in)
+	if d.Notes != "Default note" || d.Terms != "Own terms" || d.Footer != "Default footer" {
+		t.Fatalf("draft: %q %q %q", d.Notes, d.Terms, d.Footer)
+	}
+
+	in.Invoice.Status = "sent"
+	d = Build(in)
+	if d.Notes != "" || d.Terms != "Own terms" || d.Footer != "" {
+		t.Fatalf("sent: %q %q %q", d.Notes, d.Terms, d.Footer)
+	}
+}
