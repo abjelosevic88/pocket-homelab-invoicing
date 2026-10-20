@@ -67,6 +67,11 @@ func RenderNative(d *Document, logo []byte, logoType string) ([]byte, error) {
 	return out, nil
 }
 
+// pageLine is the footer's "number · Page 1 of 2"; it is left out on one-page invoices.
+func pageLine(d *Document, page int, total string) string {
+	return fmt.Sprintf("%s · %s %d / %s", d.Number, d.Label("page"), page, total)
+}
+
 // renderNative draws the document; k scales the vertical gaps and line heights (1 = normal).
 func renderNative(d *Document, logo []byte, logoType string, k float64) ([]byte, int, error) {
 	lh := 4.5 * k // body text line height
@@ -74,6 +79,8 @@ func renderNative(d *Document, logo []byte, logoType string, k float64) ([]byte,
 		lh = 4
 	}
 	p := fpdf.New("P", "mm", "A4", "")
+	p.AliasNbPages("{nb}")
+	multiPage := false // set once a second page starts, so page 1's footer (drawn at that moment) gets its number too
 	p.AddUTF8FontFromBytes("DejaVu", "", fontRegular)
 	p.AddUTF8FontFromBytes("DejaVu", "B", fontBold)
 	p.SetMargins(18, 18, 18)
@@ -92,9 +99,13 @@ func renderNative(d *Document, logo []byte, logoType string, k float64) ([]byte,
 		if d.Footer != "" {
 			p.MultiCell(contentW, 4, d.Footer, "", "C", false)
 		}
-		p.SetY(-12)
-		p.CellFormat(contentW, 4, fmt.Sprintf("%s · %s %d", d.Number, d.Label("page"), p.PageNo()), "", 0, "R", false, 0, "")
+		if multiPage {
+			p.SetY(-12)
+			p.CellFormat(contentW, 4, pageLine(d, p.PageNo(), "{nb}"), "", 0, "R", false, 0, "")
+		}
 	})
+	newPage := func() { multiPage = true; p.AddPage() }
+	p.SetAcceptPageBreakFunc(func() bool { multiPage = true; return true })
 	p.AddPage()
 
 	// ----- Header -----
@@ -314,7 +325,7 @@ func renderNative(d *Document, logo []byte, logoType string, k float64) ([]byte,
 			h = 8
 		}
 		if p.GetY()+h > 297-28 {
-			p.AddPage()
+			newPage()
 			drawHeader()
 			p.SetFont("DejaVu", "", 9)
 			p.SetTextColor(dark.r, dark.g, dark.b)
@@ -345,7 +356,7 @@ func renderNative(d *Document, logo []byte, logoType string, k float64) ([]byte,
 	totalsTop := p.GetY()
 	row := func(label, value string, bold bool, accentRow bool) {
 		if p.GetY()+8 > 297-28 {
-			p.AddPage()
+			newPage()
 		}
 		p.SetX(tx)
 		if bold {
@@ -425,7 +436,7 @@ func renderNative(d *Document, logo []byte, logoType string, k float64) ([]byte,
 	}
 	for i, sec := range sections {
 		if p.GetY()+5+lh*2 > 297-28 { // title + two lines; longer blocks continue on the next page
-			p.AddPage()
+			newPage()
 		}
 		// The signature sits to the right of the last text block instead of on its own row below it.
 		withSig := d.SignatureLabel != "" && i == len(sections)-1
@@ -451,7 +462,7 @@ func renderNative(d *Document, logo []byte, logoType string, k float64) ([]byte,
 	}
 	if d.SignatureLabel != "" && len(sections) == 0 {
 		if p.GetY()+12 > 297-28 { // 6 gap + 1 + 5 label: only break when it really does not fit
-			p.AddPage()
+			newPage()
 		}
 		p.Ln(6 * k)
 		signature(p.GetY())

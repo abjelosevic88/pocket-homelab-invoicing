@@ -16,6 +16,7 @@ All notable changes to this project are documented here. Format follows [Keep a 
 - Settings → Invoicing: **Always print the tax line** — the totals show "Tax 0% 0,00" when an invoice has no tax, for laws that require the VAT rate and amount on every invoice (BiH Zakon o PDV-u čl. 107).
 
 ### Changed
+- Native PDF: the "INV-… · Page n" line is only printed when the invoice has more than one page, then as "Page 1 / 3".
 - The client's tax number is now labelled **VAT ID** (template label `client_tax_id`) in the client form and under Bill to, separate from your own `tax_id` label, so a template that prints yours as "JIB" no longer prints the client's as "JIB" too.
 - Counter suggestions now bump the last number of any value, not only `N`, `N/M` or `N/MПП`, so the month-end wizard also suggests the PFR number.
 - Recurring profiles and the month-end wizard fall back to the default notes and terms in Settings when the profile has none of its own.
