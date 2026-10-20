@@ -255,6 +255,13 @@ func (s *Server) runRecurring(ctx context.Context, uid int64, rec *store.Recurri
 	if err != nil {
 		return nil, err
 	}
+	// A profile without its own due days follows the client's current payment terms.
+	dueDays := rec.DueDays
+	if dueDays <= 0 {
+		if c, err := s.store.GetClient(ctx, uid, rec.ClientID); err == nil {
+			dueDays = firstNonZero(c.PaymentTermsDays, st.DefaultDueDays)
+		}
+	}
 	ps, pe := periodFor(runDate, rec.Frequency, rec.Interval, rec.PeriodMode)
 	in := invoiceInput{
 		ClientID: rec.ClientID, Currency: rec.Currency, BillingMode: rec.BillingMode, IssueDate: runDate,
@@ -262,7 +269,7 @@ func (s *Server) runRecurring(ctx context.Context, uid int64, rec *store.Recurri
 		PeriodStart: &ps, PeriodEnd: &pe,
 		// An empty profile note/terms falls back to the defaults in Settings.
 		Notes: firstNonEmpty(rec.Notes, st.DefaultNotes),
-		Terms: firstNonEmpty(rec.Terms, strings.ReplaceAll(st.DefaultTerms, "{due_days}", fmt.Sprint(rec.DueDays))),
+		Terms: firstNonEmpty(rec.Terms, strings.ReplaceAll(st.DefaultTerms, "{due_days}", fmt.Sprint(dueDays))),
 	}
 	// Fiscal counters continue from the client's previous invoice; only on drafts, since the
 	// guess is checked before sending (an auto-sent invoice would carry it unseen).
@@ -270,7 +277,7 @@ func (s *Server) runRecurring(ctx context.Context, uid int64, rec *store.Recurri
 		_, in.CustomFields = s.suggestCustomFields(ctx, uid, rec.ClientID, st)
 	}
 	t, _ := time.Parse("2006-01-02", runDate)
-	in.DueDate = t.AddDate(0, 0, rec.DueDays).Format("2006-01-02")
+	in.DueDate = t.AddDate(0, 0, dueDays).Format("2006-01-02")
 	in.Items, _ = recurringItems(rec, st, ps, pe)
 	inv := &store.Invoice{Status: store.StatusDraft}
 	if err := s.applyInput(ctx, uid, inv, in, st); err != nil {

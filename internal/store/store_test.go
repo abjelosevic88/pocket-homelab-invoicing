@@ -229,3 +229,25 @@ func TestFollowDefaultText(t *testing.T) {
 		t.Error("unknown column accepted")
 	}
 }
+
+func TestOverdueClearsWhenDueDateMovesOut(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+	uid := testUser(t, s, "owner@example.com")
+	c := &Client{Name: "A", Currency: "EUR"}
+	_ = s.CreateClient(ctx, uid, c)
+	inv := &Invoice{Number: "1", ClientID: c.ID, Status: StatusOverdue, IssueDate: "2026-01-01", DueDate: "2026-01-01", Currency: "EUR", ExchangeRate: 1, Total: 100}
+	if err := s.CreateInvoice(ctx, uid, inv); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := s.RecalcAmountPaid(ctx, uid, inv.ID); got.Status != StatusOverdue {
+		t.Fatalf("past due: %s", got.Status)
+	}
+	inv.DueDate = "2999-01-01"
+	if err := s.UpdateInvoice(ctx, uid, inv); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := s.RecalcAmountPaid(ctx, uid, inv.ID); got.Status != StatusSent {
+		t.Fatalf("future due: %s", got.Status)
+	}
+}

@@ -262,6 +262,12 @@ func (s *Store) RecalcAmountPaid(ctx context.Context, uid, id int64) (*Invoice, 
 		if inv.Status == StatusPaid || inv.Status == StatusPartial {
 			status = StatusSent
 		}
+		if status == StatusOverdue && inv.DueDate >= Today() { // due date moved out again
+			status = StatusSent
+			if inv.ViewedAt != nil {
+				status = StatusViewed
+			}
+		}
 		if inv.DueDate < Today() && status != StatusDraft {
 			status = StatusOverdue
 		}
