@@ -81,7 +81,7 @@ type Settings struct {
 	ReminderDays     string `json:"reminder_days"` // comma separated days after due date, e.g. "3,7,14"
 	RemindersEnabled bool   `json:"reminders_enabled"`
 
-	// Paperless-ngx integration (optional; active only when URL and token are set)
+	// Paperless-ngx integration (optional): through Pocket Core, a URL and token of one's own, or off
 	PaperlessURL                  string `json:"paperless_url"`                   // API base, e.g. http://paperless:8000
 	PaperlessExternalURL          string `json:"paperless_external_url"`          // URL used for links in the browser (defaults to PaperlessURL)
 	PaperlessToken                string `json:"paperless_token"`                 // API token (never cleared by an empty PUT)
@@ -91,6 +91,7 @@ type Settings struct {
 	PaperlessArchiveInvoices      string `json:"paperless_archive_invoices"`      // off | sent | paid — archive the invoice automatically
 	PaperlessCategoryAsType       bool   `json:"paperless_category_as_type"`      // use the document category as Paperless document type
 	PaperlessClearToken           bool   `json:"paperless_clear_token,omitempty"` // transient: PUT with true removes the stored token
+	PaperlessMode                 string `json:"paperless_mode"`                  // core | direct | off; empty = direct with a token, else core when Pocket Core is there
 
 	SetupComplete bool `json:"setup_complete"`
 }

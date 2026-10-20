@@ -363,3 +363,16 @@ table.table tfoot td { font-weight: 600; background: var(--surface-2); }
 .items-table .sel.cell { min-width: 76px; }
 .items-table .sel-btn { padding: 6px 24px 6px 8px; font-size: 13.5px; min-height: 0; }
 .items-table .sel-chevron { right: 6px; }
+
+/* service connections: Pocket Core | Direct | Off */
+.segmented { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--surface); }
+.segmented button { font: inherit; font-size: 13px; padding: 6px 12px; border: 0; background: transparent; color: var(--muted); cursor: pointer; }
+.segmented button + button { border-left: 1px solid var(--border); }
+.segmented button.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.conn-block { display: grid; gap: 12px; }
+.conn-status { display: flex; align-items: flex-start; gap: 8px; font-size: 13px; color: var(--muted); padding: 8px 10px; border-radius: 8px; background: var(--surface-2); line-height: 1.4; }
+.conn-status .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex-shrink: 0; margin-top: 5px; }
+.conn-status.ok { color: var(--text); }
+.conn-status.ok .dot { background: var(--success); }
+.conn-status.bad .dot { background: var(--warning); }
+.danger-text { color: var(--danger) !important; }

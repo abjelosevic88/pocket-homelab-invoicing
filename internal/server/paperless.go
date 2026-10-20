@@ -16,23 +16,85 @@ import (
 	"github.com/abjelosevic88/pocket-homelab-invoicing/internal/store"
 )
 
-// paperlessClient returns a client for the user's Paperless instance, or nil when they have
-// not configured one. The PAPERLESS_URL/PAPERLESS_TOKEN environment defaults are a single
-// box-wide credential, so they only stand in for the box owner; members configure their own.
-// Clients are cached per URL+token so name lookups stay warm between requests.
-func (s *Server) paperlessClient(ctx context.Context, uid int64) (*paperless.Client, store.Settings) {
-	st, _ := s.store.GetSettings(ctx, uid)
-	base, token := st.PaperlessURL, st.PaperlessToken
-	if uid > 0 && uid == s.store.OwnerID(ctx) {
-		if base == "" {
-			base = s.cfg.PaperlessURL
-		}
-		if token == "" {
-			token = s.cfg.PaperlessToken
-		}
+// seedPaperlessEnv copies PAPERLESS_URL / PAPERLESS_TOKEN into the box
+// owner's own Paperless settings, once: they are a single box-wide credential,
+// so they only stand in for the owner (members configure their own). After
+// that the saved settings are all there is, so a Disconnect stays
+// disconnected across restarts. Without an account yet it waits.
+func (s *Server) seedPaperlessEnv(ctx context.Context) {
+	if s.plSeeded.Load() {
+		return
 	}
-	if base == "" || token == "" {
-		return nil, st
+	if s.cfg.PaperlessURL == "" && s.cfg.PaperlessToken == "" {
+		s.plSeeded.Store(true)
+		return
+	}
+	if v, _ := s.store.GetKV(ctx, "paperless_env_seeded"); v != "" {
+		s.plSeeded.Store(true)
+		return
+	}
+	owner := s.store.OwnerID(ctx)
+	if owner == 0 {
+		return
+	}
+	st, err := s.store.GetSettings(ctx, owner)
+	if err != nil {
+		return
+	}
+	if st.PaperlessURL == "" && st.PaperlessToken == "" {
+		st.PaperlessURL, st.PaperlessToken = s.cfg.PaperlessURL, s.cfg.PaperlessToken
+		if err := s.store.SaveSettings(ctx, owner, st); err != nil {
+			return
+		}
+		s.log.Info("paperless: PAPERLESS_URL/PAPERLESS_TOKEN saved as the owner's Paperless connection")
+	}
+	if s.store.SetKV(ctx, "paperless_env_seeded", store.Now()) == nil {
+		s.plSeeded.Store(true)
+	}
+}
+
+// paperlessMode is the person's connection mode in effect.
+func (s *Server) paperlessMode(st store.Settings) string {
+	return connMode(st.PaperlessMode, st.PaperlessToken, s.core.Configured())
+}
+
+// paperlessConn returns a client for the person's Paperless, following their
+// connection mode (Settings → Paperless):
+//
+//   - core: Pocket Core hands out the address and the person's own token (the
+//     box's token only for an admin), asked again on every use;
+//   - direct: the URL and token saved here;
+//   - off: no client.
+//
+// The returned settings carry the address in use (PaperlessURL /
+// PaperlessExternalURL) so links open the right place. Clients are cached per
+// URL+token so name lookups stay warm between requests.
+func (s *Server) paperlessConn(ctx context.Context, uid int64) (*paperless.Client, store.Settings, error) {
+	s.seedPaperlessEnv(ctx)
+	st, _ := s.store.GetSettings(ctx, uid)
+	var base, token string
+	switch s.paperlessMode(st) {
+	case modeOff:
+		return nil, st, fmt.Errorf("paperless is switched off (Settings → Paperless)")
+	case modeCore:
+		u, err := s.store.GetUser(ctx, uid)
+		if err != nil {
+			return nil, st, fmt.Errorf("paperless: no account to act for")
+		}
+		cred, err := s.serviceFor(ctx, u.Email, "paperless", "Paperless-ngx")
+		if err != nil {
+			return nil, st, err
+		}
+		base, token = strings.TrimRight(cred.URL, "/"), cred.Key
+		st.PaperlessURL, st.PaperlessExternalURL = base, firstNonEmpty(cred.PublicURL, base)
+		if token == "" {
+			return nil, st, fmt.Errorf("the Paperless-ngx credential in Pocket Core has no token")
+		}
+	default:
+		base, token = st.PaperlessURL, st.PaperlessToken
+		if base == "" || token == "" {
+			return nil, st, fmt.Errorf("paperless is not configured (Settings → Paperless)")
+		}
 	}
 	key := base + "\x00" + token
 	s.plMu.Lock()
@@ -45,6 +107,16 @@ func (s *Server) paperlessClient(ctx context.Context, uid int64) (*paperless.Cli
 		cl = paperless.New(base, token)
 		s.pl[key] = cl
 	}
+	return cl, st, nil
+}
+
+// paperlessClient is paperlessConn without the reason: nil when the person
+// has no working Paperless connection.
+func (s *Server) paperlessClient(ctx context.Context, uid int64) (*paperless.Client, store.Settings) {
+	cl, st, err := s.paperlessConn(ctx, uid)
+	if err != nil {
+		return nil, st
+	}
 	return cl, st
 }
 
@@ -53,10 +125,7 @@ func (s *Server) paperlessExternalURL(st store.Settings) string {
 	if st.PaperlessExternalURL != "" {
 		return strings.TrimRight(st.PaperlessExternalURL, "/")
 	}
-	if st.PaperlessURL != "" {
-		return strings.TrimRight(st.PaperlessURL, "/")
-	}
-	return s.cfg.PaperlessURL
+	return strings.TrimRight(st.PaperlessURL, "/")
 }
 
 func (s *Server) paperlessDocURL(st store.Settings, id int64) string {
@@ -88,6 +157,11 @@ func (s *Server) paperlessLink(ctx context.Context, uid int64, kind string, refI
 // resolvePaperlessLink fills the browser URL and, for pending uploads, checks the task once.
 func (s *Server) resolvePaperlessLink(ctx context.Context, l *store.PaperlessLink) *store.PaperlessLink {
 	cl, st := s.paperlessClient(ctx, l.UserID)
+	return s.resolvePaperlessLinkWith(ctx, l, cl, st)
+}
+
+// resolvePaperlessLinkWith is resolvePaperlessLink with the person's client already in hand.
+func (s *Server) resolvePaperlessLinkWith(ctx context.Context, l *store.PaperlessLink, cl *paperless.Client, st store.Settings) *store.PaperlessLink {
 	if l.PaperlessID == 0 && l.TaskID != "" && l.Error == "" && cl != nil {
 		if t, err := cl.Task(ctx, l.TaskID); err == nil {
 			s.applyTask(ctx, l, t)
@@ -139,9 +213,9 @@ func (s *Server) watchTask(uid int64, kind string, refID int64, taskID string) {
 
 // paperlessUpload sends bytes to Paperless and records the link. wait=true blocks up to 20 s for the document id.
 func (s *Server) paperlessUpload(ctx context.Context, uid int64, kind string, refID int64, filename string, data []byte, o paperless.UploadOptions, wait bool) (*store.PaperlessLink, error) {
-	cl, st := s.paperlessClient(ctx, uid)
-	if cl == nil {
-		return nil, fmt.Errorf("paperless is not configured (Settings → Paperless)")
+	cl, st, err := s.paperlessConn(ctx, uid)
+	if err != nil {
+		return nil, err
 	}
 	if len(o.Tags) == 0 {
 		o.Tags = paperlessTags(st)
@@ -194,9 +268,9 @@ func (s *Server) paperlessSendDocument(ctx context.Context, uid int64, d *store.
 // files, following the same mode as email attachments. Already-archived parts are skipped.
 func (s *Server) paperlessArchiveInvoice(ctx context.Context, inv *store.Invoice, source string, wait bool) ([]*store.PaperlessLink, error) {
 	uid := inv.UserID
-	cl, st := s.paperlessClient(ctx, uid)
-	if cl == nil {
-		return nil, fmt.Errorf("paperless is not configured (Settings → Paperless)")
+	_, st, err := s.paperlessConn(ctx, uid)
+	if err != nil {
+		return nil, err
 	}
 	if source == "" {
 		source = firstNonEmpty(st.EmailAttachmentMode, "generated")
@@ -290,11 +364,13 @@ func (s *Server) paperlessAutoArchive(inv *store.Invoice) {
 
 // decorateInvoicePaperless adds link info to an invoice and its attachments.
 func (s *Server) decorateInvoicePaperless(ctx context.Context, inv *store.Invoice) {
-	cl, _ := s.paperlessClient(ctx, inv.UserID)
+	cl, st := s.paperlessClient(ctx, inv.UserID)
 	if cl == nil {
 		return
 	}
-	inv.Paperless = s.paperlessLink(ctx, inv.UserID, "invoice", inv.ID)
+	if l, err := s.store.GetPaperlessLink(ctx, inv.UserID, "invoice", inv.ID); err == nil && l != nil {
+		inv.Paperless = s.resolvePaperlessLinkWith(ctx, l, cl, st)
+	}
 	if len(inv.Attachments) > 0 {
 		ids := make([]int64, len(inv.Attachments))
 		for i := range inv.Attachments {
@@ -303,7 +379,7 @@ func (s *Server) decorateInvoicePaperless(ctx context.Context, inv *store.Invoic
 		links, _ := s.store.PaperlessLinksFor(ctx, inv.UserID, "attachment", ids)
 		for i := range inv.Attachments {
 			if l, ok := links[inv.Attachments[i].ID]; ok {
-				inv.Attachments[i].Paperless = s.resolvePaperlessLink(ctx, l)
+				inv.Attachments[i].Paperless = s.resolvePaperlessLinkWith(ctx, l, cl, st)
 			}
 		}
 	}
@@ -312,12 +388,13 @@ func (s *Server) decorateInvoicePaperless(ctx context.Context, inv *store.Invoic
 // resolvePendingPaperless is the scheduler step that finishes one user's consume tasks
 // with that user's Paperless credentials.
 func (s *Server) resolvePendingPaperless(ctx context.Context, uid int64) int {
-	cl, _ := s.paperlessClient(ctx, uid)
-	if cl == nil {
+	// the database first: most runs have nothing pending, and then Core is not asked
+	pending, err := s.store.PendingPaperlessLinks(ctx, uid)
+	if err != nil || len(pending) == 0 {
 		return 0
 	}
-	pending, err := s.store.PendingPaperlessLinks(ctx, uid)
-	if err != nil {
+	cl, _ := s.paperlessClient(ctx, uid)
+	if cl == nil {
 		return 0
 	}
 	n := 0
@@ -362,7 +439,9 @@ func (s *Server) handlePaperlessStatus(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// handleTestPaperless checks a URL/token pair before it is saved.
+// handleTestPaperless checks the connection: a URL/token typed into the form
+// is tried as is (before it is saved); otherwise the person's mode decides
+// (Pocket Core, the saved URL and token, or off).
 func (s *Server) handleTestPaperless(w http.ResponseWriter, r *http.Request) {
 	var in struct {
 		URL   string `json:"url"`
@@ -370,36 +449,44 @@ func (s *Server) handleTestPaperless(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = decode(r, &in)
 	uid := uidOf(r)
-	st, _ := s.store.GetSettings(r.Context(), uid)
-	envURL, envToken := "", ""
-	if uid == s.store.OwnerID(r.Context()) { // the environment credential is the owner's
-		envURL, envToken = s.cfg.PaperlessURL, s.cfg.PaperlessToken
-	}
-	if in.Token == "" {
-		in.Token = firstNonEmpty(st.PaperlessToken, envToken)
-	}
-	if in.URL == "" {
-		in.URL = firstNonEmpty(st.PaperlessURL, envURL)
-	}
-	cl := paperless.New(in.URL, in.Token)
-	if !cl.Configured() {
-		writeErr(w, http.StatusBadRequest, "URL and token are required")
-		return
-	}
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
+	var cl *paperless.Client
+	via, source := modeDirect, ""
+	if in.Token != "" {
+		st, _ := s.store.GetSettings(ctx, uid)
+		cl = paperless.New(firstNonEmpty(in.URL, st.PaperlessURL), in.Token)
+		if !cl.Configured() {
+			writeErr(w, http.StatusBadRequest, "URL and token are required")
+			return
+		}
+	} else {
+		var st store.Settings
+		var err error
+		cl, st, err = s.paperlessConn(ctx, uid)
+		if err != nil {
+			writeErr(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if s.paperlessMode(st) == modeCore {
+			via = modeCore
+			if u, err := s.store.GetUser(ctx, uid); err == nil {
+				source = s.sources.get(u.Email, "paperless")
+			}
+		}
+	}
 	ps := cl.Ping(ctx)
 	if !ps.OK {
 		writeErr(w, http.StatusBadGateway, ps.Error)
 		return
 	}
-	writeJSON(w, http.StatusOK, ps)
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "version": ps.Version, "document_count": ps.DocumentCount, "via": via, "source": source})
 }
 
 func (s *Server) requirePaperless(w http.ResponseWriter, r *http.Request) (*paperless.Client, store.Settings, bool) {
-	cl, st := s.paperlessClient(r.Context(), uidOf(r))
-	if cl == nil {
-		writeErr(w, http.StatusConflict, "paperless is not configured (Settings → Paperless)")
+	cl, st, err := s.paperlessConn(r.Context(), uidOf(r))
+	if err != nil {
+		writeErr(w, http.StatusConflict, err.Error())
 		return nil, st, false
 	}
 	return cl, st, true

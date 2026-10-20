@@ -47,6 +47,8 @@ type Server struct {
 	hooks    *webhook.Dispatcher
 	plMu     sync.Mutex
 	pl       map[string]*paperless.Client // per URL+token: each user may point at their own Paperless
+	sources  sourceMemo                   // whose key Core last handed out, per person and service
+	plSeeded atomic.Bool                  // PAPERLESS_URL/TOKEN copied into the owner's settings
 	webFS    fs.FS
 	started  time.Time
 	requests atomic.Int64
@@ -124,6 +126,7 @@ func (s *Server) registerWithCore(ctx context.Context) error {
 		URL: s.cfg.CoreAppURL, PublicURL: s.cfg.BaseURL, HealthPath: "/healthz", EnvPrefix: "INVOICING",
 		Publishes: []string{"invoicing.invoice_created", "invoicing.invoice_sent", "invoicing.invoice_paid"},
 		Offers:    linkOffers,
+		Services:  serviceUses,
 	}
 	if s.cfg.BaseURL != "" {
 		// ask Core for a relying-party client so "Sign in with Pocket Core" needs no configuration

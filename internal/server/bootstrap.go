@@ -40,6 +40,7 @@ func (s *Server) Bootstrap(ctx context.Context) error {
 			}
 		}
 	}
+	s.seedPaperlessEnv(ctx)
 	if s.cfg.DemoData {
 		if err := s.seedDemo(ctx); err != nil {
 			return err

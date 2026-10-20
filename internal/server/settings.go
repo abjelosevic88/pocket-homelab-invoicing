@@ -27,7 +27,42 @@ func (s *Server) handleGetSettings(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err, "settings")
 		return
 	}
-	writeJSON(w, http.StatusOK, maskSettings(st))
+	writeJSON(w, http.StatusOK, s.publicSettings(r.Context(), userFrom(r.Context()), st))
+}
+
+// publicSettings is maskSettings plus how the person reaches Paperless:
+// paperless_mode (in effect), paperless_via ("core" | "direct" | "" for not
+// connected), paperless_source (whose key Core last handed out) and
+// paperless_detail (why not).
+func (s *Server) publicSettings(ctx context.Context, u *store.User, st store.Settings) map[string]any {
+	m := maskSettings(st)
+	mode := s.paperlessMode(st)
+	via, detail, source := "", "", ""
+	switch mode {
+	case modeOff:
+		detail = "switched off"
+	case modeDirect:
+		if st.PaperlessURL == "" || st.PaperlessToken == "" {
+			detail = "add the URL and a token"
+		} else {
+			via = modeDirect
+		}
+	case modeCore:
+		if u == nil {
+			detail = "nobody to act for"
+			break
+		}
+		via, detail = s.serviceStatus(ctx, u.Email, "paperless", "Paperless-ngx")
+		if via != "" {
+			source = s.sources.get(u.Email, "paperless")
+			if source == "" && u.Role != roleAdmin {
+				source = "personal" // Core gives members only their own key
+			}
+		}
+	}
+	m["paperless_mode"], m["paperless_via"], m["paperless_detail"], m["paperless_source"] = mode, via, detail, source
+	m["core_configured"] = s.core.Configured()
+	return m
 }
 
 // maskSettings hides the SMTP password and the Paperless token: they are write-only, and a
@@ -55,7 +90,7 @@ func (s *Server) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	prevPwd := st.SMTPPassword
-	prevToken := st.PaperlessToken
+	prevToken, prevMode := st.PaperlessToken, st.PaperlessMode
 	prevBase, prevProvider, prevSetup := st.BaseCurrency, st.ExchangeRateProvider, st.SetupComplete
 	if err := decode(r, &st); err != nil {
 		writeErr(w, http.StatusBadRequest, "invalid json")
@@ -75,6 +110,9 @@ func (s *Server) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 		st.PaperlessToken = ""
 	}
 	st.PaperlessClearToken = false
+	if !validMode(st.PaperlessMode) {
+		st.PaperlessMode = prevMode
+	}
 	st.PaperlessURL = strings.TrimRight(strings.TrimSpace(st.PaperlessURL), "/")
 	st.PaperlessExternalURL = strings.TrimRight(strings.TrimSpace(st.PaperlessExternalURL), "/")
 	switch st.PaperlessArchiveInvoices {
@@ -143,7 +181,7 @@ func (s *Server) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 			}
 		}()
 	}
-	writeJSON(w, http.StatusOK, maskSettings(st))
+	writeJSON(w, http.StatusOK, s.publicSettings(ctx, userFrom(ctx), st))
 }
 
 func slugify(v string) string {

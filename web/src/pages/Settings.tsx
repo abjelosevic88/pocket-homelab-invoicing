@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { api, V1 } from '../lib/api'
 import { useApp } from '../lib/app-context'
 import { BILLING_MODES, UNITS, fmtDate, fmtDateTime, money, today } from '../lib/format'
-import type { APIToken, Currency, CustomFieldDef, ExchangeRate, Holiday, InvoiceTemplate, Product, Settings as S, TaxRate, User, Webhook, WorkingDays } from '../lib/types'
+import type { APIToken, ConnMode, Currency, CustomFieldDef, ExchangeRate, Holiday, InvoiceTemplate, Product, Settings as S, TaxRate, User, Webhook, WorkingDays } from '../lib/types'
 import { Card, Confirm, Empty, Field, Loading, Modal, Tabs, useAsync, useToast } from '../components/ui'
 import { Select } from '../components/Select'
 
@@ -604,33 +604,73 @@ function System() {
 }
 
 // ---------- Paperless-ngx ----------
+const connBadge = (mode: ConnMode, via?: string) => mode === 'off' ? <span className="badge">off</span>
+  : via ? <span className="badge accent">{via === 'core' ? 'Pocket Core' : 'direct'}</span>
+  : <span className="badge partial">not connected</span>
+
+const sourceText = (source?: string) => source === 'personal' ? ' (your own key)' : source === 'box' ? " (the box's key)" : ''
+
+/** Pocket Core | Direct | Off for one third-party service; the switch saves at once. */
+function Connection({ app, mode, via, detail, source, core, onMode, onDisconnect, hasToken, test, direct }: {
+  app: string; mode: ConnMode; via?: string; detail?: string; source?: string; core: boolean; onMode: (m: ConnMode) => void; onDisconnect: () => void
+  hasToken: boolean; test: React.ReactNode; direct: React.ReactNode
+}) {
+  const ok = !!via
+  const line = mode === 'off' ? `Off: Pocket Invoicing does not talk to ${app}.`
+    : mode === 'core' ? (ok ? `Connected through Pocket Core${sourceText(source)}. Nothing to fill in; switch it off for yourself in Pocket Core → Settings → Apps acting for me.` : `Not connected: ${detail}.`)
+    : (ok ? `Direct connection with your own ${app} URL and token; use Test connection to check it.` : `Not connected: ${detail || 'add the URL and a token'}.`)
+  return (
+    <div className="conn-block">
+      <div className="segmented" role="radiogroup">
+        {([['core', 'Pocket Core', core ? 'Through Pocket Core: your own account there, nothing to paste' : 'There is no Pocket Core on this box'], ['direct', 'Direct', 'Your own URL and API token'], ['off', 'Off', '']] as const).map(([v, label, title]) =>
+          <button type="button" key={v} role="radio" aria-checked={mode === v} title={title} className={mode === v ? 'active' : ''} onClick={() => onMode(v)}>{label}</button>)}
+      </div>
+      <div className={`conn-status ${mode === 'off' ? '' : ok ? 'ok' : 'bad'}`}><span className="dot" />{line}</div>
+      {mode === 'direct' && <>
+        {direct}
+        <div className="row">{test}{hasToken && <button type="button" className="btn ghost sm danger-text" onClick={onDisconnect} title="Remove the saved URL and token">Disconnect</button>}</div>
+      </>}
+      {mode === 'core' && <div className="row">{test}</div>}
+    </div>
+  )
+}
+
 function Paperless() {
   const { s, set, put, save, busy, setS } = useSettingsForm()
+  const { refresh } = useApp()
   const toast = useToast()
   const [testing, setTesting] = useState(false)
-  const [result, setResult] = useState<{ ok: boolean; version?: string; document_count?: number } | null>(null)
+  const [result, setResult] = useState<{ ok: boolean; version?: string; document_count?: number; via?: string; source?: string } | null>(null)
   if (!s) return <Loading />
-  const configured = !!s.paperless_url && (!!s.paperless_token || !!s.paperless_token_set)
+  const configured = !!s.paperless_via
+  const typed = s.paperless_mode === 'direct' && !!s.paperless_token
   const test = async () => {
     setTesting(true); setResult(null)
-    try { const r = await api.post<{ ok: boolean; version: string; document_count: number }>(`${V1}/settings/test-paperless`, { url: s.paperless_url, token: s.paperless_token }); setResult(r); toast(`Connected to Paperless-ngx ${r.version || ''} (${r.document_count} documents)`, 'success') } catch (e) { toast((e as Error).message, 'error') } finally { setTesting(false) }
+    try {
+      const r = await api.post<{ ok: boolean; version: string; document_count: number; via: string; source: string }>(`${V1}/settings/test-paperless`, typed ? { url: s.paperless_url, token: s.paperless_token } : {})
+      setResult(r)
+      toast(`Connected to Paperless-ngx ${r.version || ''} (${r.document_count} documents)${r.via === 'core' ? ' through Pocket Core' + sourceText(r.source) : ''}`, 'success')
+    } catch (e) { toast((e as Error).message, 'error') } finally { setTesting(false) }
+  }
+  // the switch and Disconnect are saved right away, like in the other Pocket apps
+  const saveNow = async (patch: Partial<S>, msg: string) => {
+    try { const r = await api.put<S>(`${V1}/settings`, { ...s, ...patch }); setS(r); setResult(null); await refresh(); toast(msg, 'success') } catch (e) { toast((e as Error).message, 'error') }
   }
   return (
     <div className="grid" style={{ maxWidth: 820 }}>
-      <Card title="Connection">
-        <p className="muted small">Optional. When a URL and API token are set, invoices and company documents can be archived in <a href="https://docs.paperless-ngx.com/" target="_blank" rel="noreferrer">Paperless-ngx</a> and your Paperless archive can be browsed under Documents. Leave empty to keep the integration off. The token is created in Paperless under your profile (top right → My profile → API token).</p>
-        <div className="form-grid">
-          <Field label="Paperless URL" help="As reached from this container, e.g. http://paperless-ngx:8000"><input value={s.paperless_url} onChange={set('paperless_url')} placeholder="http://paperless:8000" /></Field>
-          <Field label="Browser URL (optional)" help="Used for links you click, when different from the URL above"><input value={s.paperless_external_url} onChange={set('paperless_external_url')} placeholder="https://paperless.example.org" /></Field>
-          <Field label="API token" help={s.paperless_token_set ? 'A token is stored. Leave blank to keep it.' : 'Paperless → profile → API token'}><input type="password" value={s.paperless_token} onChange={set('paperless_token')} autoComplete="new-password" placeholder={s.paperless_token_set ? '••••••••' : ''} /></Field>
-          <Field label=" ">
-            <span className="row">
-              <button type="button" className="btn" disabled={testing || !s.paperless_url} onClick={test}>{testing ? 'Testing…' : 'Test connection'}</button>
-              {s.paperless_token_set && <button type="button" className="btn ghost sm" onClick={() => { setS(x => x ? { ...x, paperless_clear_token: true, paperless_token: '', paperless_token_set: false } : x); toast('Token will be removed when you save', 'success') }}>Remove token</button>}
-            </span>
-            {result && <div className="muted small">Paperless-ngx {result.version} · {result.document_count} documents</div>}
-          </Field>
-        </div>
+      <Card title="Connection" actions={connBadge(s.paperless_mode, s.paperless_via)}>
+        <p className="muted small">Optional. Connected, invoices and company documents can be archived in <a href="https://docs.paperless-ngx.com/" target="_blank" rel="noreferrer">Paperless-ngx</a> and your Paperless archive can be browsed under Documents. Everything goes into <b>your</b> Paperless account: through Pocket Core with your own account there, or directly with a URL and an API token of yours (Paperless → top right → My profile → API token).</p>
+        <Connection app="Paperless-ngx" mode={s.paperless_mode} via={s.paperless_via} detail={s.paperless_detail} source={s.paperless_source} core={!!s.core_configured}
+          hasToken={!!s.paperless_token_set || !!s.paperless_url}
+          onMode={m => saveNow({ paperless_mode: m }, m === 'off' ? 'Paperless switched off' : m === 'core' ? 'Paperless through Pocket Core' : 'Direct Paperless connection')}
+          onDisconnect={() => saveNow({ paperless_url: '', paperless_external_url: '', paperless_token: '', paperless_clear_token: true }, 'Paperless URL and token removed')}
+          test={<><button type="button" className="btn" disabled={testing || (s.paperless_mode === 'direct' && !s.paperless_url)} onClick={test}>{testing ? 'Testing…' : 'Test connection'}</button>
+            {result && <span className="muted small">Paperless-ngx {result.version} · {result.document_count} documents</span>}</>}
+          direct={<div className="form-grid">
+            <Field label="Paperless URL" help="As reached from this container, e.g. http://paperless-ngx:8000"><input value={s.paperless_url} onChange={set('paperless_url')} placeholder="http://paperless:8000" /></Field>
+            <Field label="Browser URL (optional)" help="Used for links you click, when different from the URL above"><input value={s.paperless_external_url} onChange={set('paperless_external_url')} placeholder="https://paperless.example.org" /></Field>
+            <Field label="API token" help={s.paperless_token_set ? 'A token is stored. Leave blank to keep it; Save changes below to store a new one.' : 'Paperless → profile → API token; Save changes below to store it'}><input type="password" value={s.paperless_token} onChange={set('paperless_token')} autoComplete="new-password" placeholder={s.paperless_token_set ? '••••••••' : ''} /></Field>
+          </div>} />
       </Card>
       <Card title="What gets archived">
         <div className="form-grid">

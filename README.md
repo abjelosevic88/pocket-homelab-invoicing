@@ -44,6 +44,8 @@ On the go, **[Pocket Homelab](https://pockethomelab.com/)** is its companion app
 
 **Offers app links** (Pocket Core 0.5+): another Pocket app the person allowed in Core can read their invoices and the payments received (`invoices:read`: `GET /api/v1/invoices`, `/api/v1/invoices/{id}`, `/api/v1/payments`) with a five-minute `pcx_` token; every other route answers 403. Pocket Day uses it for the journal.
 
+**Service connections** (Pocket Core 0.15+): the manifest lists Paperless-ngx (`services: [{type: paperless}]`), and Settings → Paperless offers **Pocket Core | Direct | Off** per person. Through Core each person's own Paperless account is used, asked for on every use; Direct is the URL and token saved here. See [docs/paperless.md](docs/paperless.md).
+
 ## Quick start
 
 ```bash

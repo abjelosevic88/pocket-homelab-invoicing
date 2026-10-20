@@ -47,7 +47,9 @@ export interface Settings {
   work_week: string; holidays: Holiday[] | null;
   smtp_host: string; smtp_port: number; smtp_user: string; smtp_password: string; smtp_password_set?: boolean; smtp_from: string; smtp_from_name: string; smtp_tls: string; smtp_bcc: string; email_subject: string; email_body: string; reminder_days: string; reminders_enabled: boolean; setup_complete: boolean;
   paperless_url: string; paperless_external_url: string; paperless_token: string; paperless_token_set?: boolean; paperless_clear_token?: boolean; paperless_tags: string; paperless_invoice_type: string; paperless_create_correspondents: boolean; paperless_archive_invoices: string; paperless_category_as_type: boolean;
+  paperless_mode: ConnMode; paperless_via?: string; paperless_detail?: string; paperless_source?: string; core_configured?: boolean;
 }
+export type ConnMode = 'core' | 'direct' | 'off'
 export interface DashboardStats { outstanding: number; outstanding_count: number; overdue: number; overdue_count: number; paid_this_month: number; paid_this_year: number; invoiced_this_year: number; draft_count: number; unbilled_minutes: number; unbilled_expenses: number; active_clients: number }
 export interface MonthlyRevenue { month: string; invoiced: number; paid: number; expenses: number; count: number }
 export interface YearRevenue { year: string; invoiced: number; paid: number; expenses: number; count: number }

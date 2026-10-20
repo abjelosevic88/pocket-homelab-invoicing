@@ -14,15 +14,29 @@ API: `GET/POST /api/v1/documents`, `GET/PUT/DELETE /api/v1/documents/{id}`, `GET
 
 ## Paperless-ngx (optional)
 
-The integration is **off until you enter a URL and an API token** under **Settings → Paperless**. Nothing in the app depends on it.
+Nothing in the app depends on it. Paperless is **per person**: everything goes into the signed-in person's own Paperless account, never into someone else's.
 
 ### Connect
 
-1. In Paperless-ngx open your profile (top right) and create an **API token**.
-2. Settings → Paperless: enter the URL as seen from the Pocket Invoicing container (for Docker on the same host usually `http://host.docker.internal:PORT` or the container name on a shared network) and the token. Optionally a **browser URL** (for example `https://paperless.example.org`) used for the links you click.
-3. **Test connection** shows the Paperless version and document count. Save.
+Settings → Paperless has a switch with three positions; it is saved as soon as you flip it.
 
-Environment variables `PAPERLESS_URL` and `PAPERLESS_TOKEN` can seed the same values; settings in the UI win when set.
+| Mode | How it reaches Paperless |
+|---|---|
+| **Pocket Core** | On a box with [Pocket Core](https://github.com/abjelosevic88/pocket-homelab-core): Core hands out the Paperless address and **your own** token there (set in Core by hand or by its Paperless connector). An admin without a token of their own gets the box's token (Core's rule). Asked again on every use, so switching it off in Core (Links, or Settings → Apps acting for me) applies at once. Nothing to paste. |
+| **Direct** | The URL and API token you save here (how it always worked). |
+| **Off** | The app does not talk to Paperless at all. |
+
+With no choice stored the mode is **Direct** when a token is saved (existing setups keep working), else **Pocket Core** when the box has one, else Direct. The card shows the state: *Connected through Pocket Core (your own key)* / *(the box's key)*, a direct connection, or *Not connected:* with Core's reason (switched off for the box or by you, no account of your own there yet, no Paperless in Core, …).
+
+Direct:
+
+1. In Paperless-ngx open your profile (top right) and create an **API token**.
+2. Settings → Paperless → Direct: enter the URL as seen from the Pocket Invoicing container (for Docker on the same host usually `http://host.docker.internal:PORT` or the container name on a shared network) and the token. Optionally a **browser URL** (for example `https://paperless.example.org`) used for the links you click. Save.
+3. **Test connection** shows the Paperless version and document count (a token typed into the form is tried before it is saved). **Disconnect** removes the saved URL and token.
+
+Environment variables `PAPERLESS_URL` and `PAPERLESS_TOKEN` are one box-wide credential, so they are the **owner's** (first admin): on the first start with an account they are copied into the owner's Direct settings, **once**. After that only the saved settings count, so a Disconnect stays disconnected across restarts.
+
+API: `GET /api/v1/settings` carries `paperless_mode` (in effect: `core` | `direct` | `off`; a PUT stores it), `paperless_via` (`core` | `direct` | empty when not connected), `paperless_source` (`personal` | `box`, whose key Core handed out last) and `paperless_detail` (why not). `POST /api/v1/settings/test-paperless` with `{url, token}` tries those; with `{}` it follows the mode.
 
 ### What it does once connected
 

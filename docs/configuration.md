@@ -83,7 +83,7 @@ pocket-invoicing version
 
 | Variable | Default | Description |
 |---|---|---|
-| `PAPERLESS_URL` | (empty) | Paperless-ngx base URL as reached from the container. Settings → Paperless overrides. |
-| `PAPERLESS_TOKEN` | (empty) | API token. Settings → Paperless overrides. |
+| `PAPERLESS_URL` | (empty) | Paperless-ngx base URL as reached from the container. Copied once into the owner's Settings → Paperless (Direct) on the first start with an account; ignored after that. |
+| `PAPERLESS_TOKEN` | (empty) | API token, seeded once with `PAPERLESS_URL`. On a box with Pocket Core neither is needed: Settings → Paperless → Pocket Core uses each person's own Paperless account from Core. |
 
 See [paperless.md](paperless.md).
