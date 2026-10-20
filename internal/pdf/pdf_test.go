@@ -126,3 +126,11 @@ func TestDraftFallsBackToDefaultText(t *testing.T) {
 		t.Fatalf("sent: %q %q %q", d.Notes, d.Terms, d.Footer)
 	}
 }
+
+func TestTrimRateKeepsAllDecimals(t *testing.T) {
+	for in, want := range map[float64]string{1.95583: "1.95583", 1.955: "1.955", 1.7: "1.7", 2: "2", 0.512345: "0.512345"} {
+		if got := trimRate(in); got != want {
+			t.Errorf("trimRate(%v) = %q, want %q", in, got, want)
+		}
+	}
+}

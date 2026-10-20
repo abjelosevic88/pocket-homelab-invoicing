@@ -21,6 +21,7 @@ All notable changes to this project are documented here. Format follows [Keep a 
 - Recurring profiles and the month-end wizard fall back to the default notes and terms in Settings when the profile has none of its own.
 
 ### Fixed
+- The exchange rate in the sentence under the totals (and `exchange_rate` for Word templates, and the invoice page) is printed with every stored decimal: 1.95583 was shown as 1,9558, so the printed rate did not reproduce the BAM total.
 - Native PDF: the signature line sits to the right of the last text block (notes/terms) instead of on its own row, so a full invoice keeps it on page 1.
 - Card headers: when the title and its buttons do not fit on one line (e.g. Settings → Templates in a narrow column), the buttons wrap below the title instead of overlapping it.
 - Tabs no longer show a vertical scrollbar (the active underline overflowed the strip) or a focus box after a click; tabs inside cards are a little tighter and the template editor tab is just "HTML", so all three fit.

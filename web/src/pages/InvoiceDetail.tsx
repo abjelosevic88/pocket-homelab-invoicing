@@ -128,7 +128,7 @@ export default function InvoiceDetail() {
                 <div className="line grand"><span>Total</span><span>{money(inv.total, inv.currency)}</span></div>
                 {inv.amount_paid > 0 && <div className="line"><span className="muted">Paid</span><span>-{money(inv.amount_paid, inv.currency)}</span></div>}
                 {inv.amount_paid > 0 && <div className="line bold"><span>Balance due</span><span>{money(inv.balance, inv.currency)}</span></div>}
-                {base && inv.currency !== base && <div className="line muted small"><span>≈ {base} @ {inv.exchange_rate.toFixed(4)}</span><span>{money(inv.total * inv.exchange_rate, base)}</span></div>}
+                {base && inv.currency !== base && <div className="line muted small"><span>≈ {base} @ {+inv.exchange_rate.toFixed(6)}</span><span>{money(inv.total * inv.exchange_rate, base)}</span></div>}
               </div>
             </div>
           </Card>

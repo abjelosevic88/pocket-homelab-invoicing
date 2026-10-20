@@ -179,6 +179,16 @@ func fmtDate(layout, s string) string {
 	return t.Format(layout)
 }
 
+// trimRate formats an exchange rate with every stored decimal (up to 6), so the printed
+// rate always reproduces the converted total: 1.95583 stays 1.95583, not 1.9558.
+func trimRate(f float64) string {
+	s := strings.TrimRight(strings.TrimRight(fmt.Sprintf("%.6f", f), "0"), ".")
+	if s == "" || s == "-0" {
+		return "0"
+	}
+	return s
+}
+
 func trimNum(f float64) string {
 	s := fmt.Sprintf("%.4f", f)
 	s = strings.TrimRight(strings.TrimRight(s, "0"), ".")
@@ -360,7 +370,7 @@ func Build(in BuildInput) *Document {
 		totalBase := money.FormatStyle(money.Round(inv.Total*inv.ExchangeRate, bc.Decimals), bc.Decimals, bc.Symbol, bpos, style)
 		d.BaseTotalLabel = d.Label("total_in") + " " + st.BaseCurrency
 		d.BaseTotal = totalBase
-		rateStr := strings.Replace(trimNum(inv.ExchangeRate), ".", style.Decimal, 1)
+		rateStr := strings.Replace(trimRate(inv.ExchangeRate), ".", style.Decimal, 1)
 		note := st.BaseTotalNote
 		if note == "" {
 			note = "Exchange rate 1 {currency} = {rate} {base}. Total in {base}: {total_base}."
@@ -408,7 +418,7 @@ func buildData(d *Document, in BuildInput) map[string]any {
 	return map[string]any{
 		"title": d.Title, "number": d.Number, "status": d.Status, "issue_date": d.IssueDate, "issue_place": d.IssuePlace, "due_date": d.DueDate, "period": d.Period, "period_start": ps, "period_end": pe,
 		"po_number": d.PONumber, "currency": d.Currency, "currency_name": in.Currency.Name, "currency_symbol": strings.TrimSpace(in.Currency.Symbol), "base_currency": st.BaseCurrency, "billing_mode": d.BillingMode,
-		"exchange_rate": strings.Replace(trimNum(inv.ExchangeRate), ".", money.StyleFor(st.NumberFormat).Decimal, 1),
+		"exchange_rate": strings.Replace(trimRate(inv.ExchangeRate), ".", money.StyleFor(st.NumberFormat).Decimal, 1),
 		"company":       map[string]any{"name": st.CompanyName, "email": st.CompanyEmail, "phone": st.CompanyPhone, "website": st.CompanyWebsite, "address1": st.Address1, "address2": st.Address2, "city": st.City, "state": st.State, "postal_code": st.PostalCode, "country": st.Country, "tax_id": st.TaxID, "vat_id": st.VatID, "address": strings.Join(d.From.Lines, ", ")},
 		"client":        map[string]any{"name": c.Name, "contact": c.ContactName, "email": c.Email, "phone": c.Phone, "address1": c.Address1, "address2": c.Address2, "city": c.City, "state": c.State, "postal_code": c.PostalCode, "country": c.Country, "tax_id": c.TaxID, "registration_no": c.RegistrationNo, "website": c.Website, "address": strings.Join(d.To.Lines, ", ")},
 		"items":         items, "taxes": taxes, "custom_fields": customList, "custom": custom,
