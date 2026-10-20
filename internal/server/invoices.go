@@ -270,7 +270,7 @@ func (s *Server) handleCreateInvoice(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if err := s.store.CreateInvoice(ctx, uid, inv); err != nil {
+	if err := s.store.CreateInvoice(ctx, uid, inv, s.invoiceEvent(ctx, uid, "created", inv)); err != nil {
 		s.fail(w, err, "create invoice")
 		return
 	}
@@ -283,7 +283,6 @@ func (s *Server) handleCreateInvoice(w http.ResponseWriter, r *http.Request) {
 	s.store.LogActivity(ctx, uid, "invoice", inv.ID, "created", "Invoice "+inv.Number+" created")
 	full, _ := s.store.GetInvoice(ctx, uid, inv.ID)
 	s.hooks.Emit(uid, "invoice.created", full)
-	s.publishInvoice("invoicing.invoice_created", full)
 	writeJSON(w, http.StatusCreated, full)
 }
 
@@ -373,36 +372,18 @@ func (s *Server) handleInvoiceStatus(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "status must be draft, sent, paid or cancelled")
 		return
 	}
+	var payment *store.Payment
 	if in.Status == store.StatusPaid && inv.Total-inv.AmountPaid > 0 {
-		// Record the remaining balance as a payment so reports stay consistent.
-		p := &store.Payment{InvoiceID: inv.ID, Date: store.Today(), Amount: inv.Total - inv.AmountPaid, Currency: inv.Currency, ExchangeRate: 1, AppliedAmount: inv.Total - inv.AmountPaid, Method: "other", Notes: "Marked as paid"}
-		if err := s.store.CreatePayment(ctx, uid, p); err != nil {
-			s.fail(w, err, "create payment")
-			return
-		}
+		payment = &store.Payment{InvoiceID: inv.ID, Date: store.Today(), Amount: inv.Total - inv.AmountPaid, Currency: inv.Currency, ExchangeRate: 1, AppliedAmount: inv.Total - inv.AmountPaid, Method: "other", Notes: "Marked as paid"}
 	}
-	s.transition(inv, in.Status)
-	if err := s.store.UpdateInvoiceStatus(ctx, uid, inv.ID, inv.Status, inv.SentAt, inv.ViewedAt, inv.PaidAt); err != nil {
+	full, err := s.store.CommitInvoice(ctx, uid, inv.ID, payment, in.Status, s.invoiceEvent(ctx, uid, "status", inv))
+	if err != nil {
 		s.fail(w, err, "update status")
 		return
 	}
-	full, err := s.store.RecalcAmountPaid(ctx, uid, inv.ID)
-	if err != nil {
-		s.fail(w, err, "recalc")
-		return
-	}
-	if in.Status == store.StatusDraft || in.Status == store.StatusCancelled {
-		_ = s.store.UpdateInvoiceStatus(ctx, uid, inv.ID, in.Status, nil, nil, nil)
-		full, _ = s.store.GetInvoice(ctx, uid, inv.ID)
-	}
+
 	s.store.LogActivity(ctx, uid, "invoice", inv.ID, "status", "Status changed to "+full.Status)
 	s.hooks.Emit(uid, "invoice."+full.Status, full)
-	switch full.Status {
-	case store.StatusSent:
-		s.publishInvoice("invoicing.invoice_sent", full)
-	case store.StatusPaid:
-		s.publishInvoice("invoicing.invoice_paid", full)
-	}
 	s.docsAutoFile(full)
 	writeJSON(w, http.StatusOK, full)
 }
@@ -721,12 +702,11 @@ func (s *Server) sendInvoiceEmail(ctx context.Context, inv *store.Invoice, to, s
 		}
 	}
 	err = mailer.Send(cfg, mailer.Message{To: recipients, Subject: subject, Body: body, Attachments: attachments})
-	status, errMsg := "sent", ""
 	if err != nil {
-		status, errMsg = "failed", err.Error()
+		s.store.LogEmail(ctx, uid, inv.ID, to, subject, "failed", err.Error())
+		return err
 	}
-	s.store.LogEmail(ctx, uid, inv.ID, to, subject, status, errMsg)
-	return err
+	return s.store.RecordSentInvoice(ctx, uid, inv.ID, to, subject, s.invoiceEvent(ctx, uid, "sent", inv))
 }
 
 func (s *Server) handleSendInvoice(w http.ResponseWriter, r *http.Request) {
@@ -747,14 +727,9 @@ func (s *Server) handleSendInvoice(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadGateway, "send failed: "+err.Error())
 		return
 	}
-	if inv.Status == store.StatusDraft {
-		s.transition(inv, store.StatusSent)
-		_ = s.store.UpdateInvoiceStatus(ctx, uid, inv.ID, inv.Status, inv.SentAt, nil, nil)
-	}
 	s.store.LogActivity(ctx, uid, "invoice", inv.ID, "sent", "Emailed to "+firstNonEmpty(in.To, "client"))
 	full, _ := s.store.GetInvoice(ctx, uid, inv.ID)
 	s.hooks.Emit(uid, "invoice.sent", full)
-	s.publishInvoice("invoicing.invoice_sent", full)
 	s.docsAutoFile(full)
 	writeJSON(w, http.StatusOK, full)
 }
@@ -964,7 +939,7 @@ func (s *Server) handleInvoiceFromTime(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err, "allocate number")
 		return
 	}
-	if err := s.store.CreateInvoice(ctx, uid, inv); err != nil {
+	if err := s.store.CreateInvoice(ctx, uid, inv, s.invoiceEvent(ctx, uid, "created", inv)); err != nil {
 		s.fail(w, err, "create invoice")
 		return
 	}
@@ -973,7 +948,6 @@ func (s *Server) handleInvoiceFromTime(w http.ResponseWriter, r *http.Request) {
 	s.store.LogActivity(ctx, uid, "invoice", inv.ID, "created", fmt.Sprintf("Created from %d time entries", len(ids)))
 	full, _ := s.store.GetInvoice(ctx, uid, inv.ID)
 	s.hooks.Emit(uid, "invoice.created", full)
-	s.publishInvoice("invoicing.invoice_created", full)
 	writeJSON(w, http.StatusCreated, full)
 }
 

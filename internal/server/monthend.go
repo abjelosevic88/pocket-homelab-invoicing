@@ -348,7 +348,7 @@ func (s *Server) handleMonthEndCreate(w http.ResponseWriter, r *http.Request) {
 			errs = append(errs, fmt.Sprintf("%s: %v", inv.ClientName, err))
 			continue
 		}
-		if err := s.store.CreateInvoice(ctx, uid, inv); err != nil {
+		if err := s.store.CreateInvoice(ctx, uid, inv, s.invoiceEvent(ctx, uid, "created", inv)); err != nil {
 			errs = append(errs, fmt.Sprintf("%s: %v", inv.ClientName, err))
 			continue
 		}
@@ -383,7 +383,6 @@ func (s *Server) handleMonthEndCreate(w http.ResponseWriter, r *http.Request) {
 		if full != nil {
 			created = append(created, *full)
 			s.hooks.Emit(uid, "invoice.created", full)
-			s.publishInvoice("invoicing.invoice_created", full)
 		}
 	}
 	status := http.StatusCreated

@@ -61,20 +61,16 @@ func (s *Server) handleCreatePayment(w http.ResponseWriter, r *http.Request) {
 		}
 		p.AppliedAmount = money.Convert(p.Amount, p.ExchangeRate, cur.Decimals)
 	}
-	if err := s.store.CreatePayment(ctx, uid, &p); err != nil {
+	updated, err := s.store.CommitInvoice(ctx, uid, inv.ID, &p, "", s.invoiceEvent(ctx, uid, "paid", inv))
+	if err != nil {
 		s.fail(w, err, "create payment")
 		return
 	}
-	updated, err := s.store.RecalcAmountPaid(ctx, uid, inv.ID)
-	if err != nil {
-		s.fail(w, err, "recalc")
-		return
-	}
+
 	s.store.LogActivity(ctx, uid, "invoice", inv.ID, "payment", "Payment of "+money.FormatCode(p.Amount, cur.Decimals, p.Currency)+" recorded")
 	s.hooks.Emit(uid, "payment.created", map[string]any{"payment": p, "invoice": updated})
 	if updated.Status == store.StatusPaid {
 		s.hooks.Emit(uid, "invoice.paid", updated)
-		s.publishInvoice("invoicing.invoice_paid", updated)
 		s.docsAutoFile(updated)
 	}
 	writeJSON(w, http.StatusCreated, map[string]any{"payment": p, "invoice": updated})

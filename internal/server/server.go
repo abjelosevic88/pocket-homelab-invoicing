@@ -148,33 +148,6 @@ func (s *Server) registerWithCore(ctx context.Context) error {
 }
 
 // publish persists an event locally; the SDK retries network delivery.
-func (s *Server) publish(topic, subject string, payload map[string]any) {
-	if !s.core.Configured() {
-		return
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	if err := s.core.Publish(ctx, topic, subject, payload); err != nil {
-		s.log.Warn("pocket core: outbox enqueue failed", "topic", topic, "err", err)
-	}
-}
-
-// publishInvoice sends one invoice event (created / sent / paid) to Core. The payload names
-// the invoice's owner (user_email) so consumers can keep each person's events apart.
-func (s *Server) publishInvoice(topic string, inv *store.Invoice) {
-	if inv == nil || !s.core.Configured() {
-		return
-	}
-	owner := ""
-	if u, err := s.store.GetUser(context.Background(), inv.UserID); err == nil {
-		owner = u.Email
-	}
-	s.publish(topic, fmt.Sprintf("invoice:%d", inv.ID), map[string]any{
-		"invoice_id": inv.ID, "number": inv.Number, "client_id": inv.ClientID, "client": inv.ClientName, "status": inv.Status,
-		"issue_date": inv.IssueDate, "due_date": inv.DueDate, "total": inv.Total, "amount_paid": inv.AmountPaid, "currency": inv.Currency,
-		"user_email": owner,
-	})
-}
 
 // resolveSibling asks Core where a sibling app lives (cached a minute) so the
 // *_URL settings may stay empty on a box with Core.

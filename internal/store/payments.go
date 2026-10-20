@@ -1,6 +1,9 @@
 package store
 
-import "context"
+import (
+	"context"
+	"database/sql"
+)
 
 // PaymentFilter narrows ListPayments.
 type PaymentFilter struct {
@@ -85,4 +88,14 @@ func (s *Store) DeletePayment(ctx context.Context, uid, id int64) (int64, error)
 	}
 	_, err := s.DB.ExecContext(ctx, `DELETE FROM payments WHERE id = ? AND user_id = ?`, id, uid)
 	return invoiceID, err
+}
+
+func insertPayment(ctx context.Context, tx *sql.Tx, uid int64, p *Payment) error {
+	res, err := tx.ExecContext(ctx, `INSERT INTO payments (user_id, invoice_id, date, amount, currency, exchange_rate, applied_amount, method, reference, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		NullInt(uid), p.InvoiceID, p.Date, p.Amount, p.Currency, p.ExchangeRate, p.AppliedAmount, p.Method, p.Reference, p.Notes)
+	if err != nil {
+		return err
+	}
+	p.ID, _ = res.LastInsertId()
+	return nil
 }

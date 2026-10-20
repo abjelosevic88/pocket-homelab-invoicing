@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	core "github.com/abjelosevic88/pocket-homelab-core/sdk"
 	"sort"
 	"strings"
 )
@@ -159,7 +160,7 @@ func marshalCF(m map[string]string) string {
 }
 
 // CreateInvoice inserts an invoice and its items.
-func (s *Store) CreateInvoice(ctx context.Context, uid int64, inv *Invoice) error {
+func (s *Store) CreateInvoice(ctx context.Context, uid int64, inv *Invoice, after ...core.CommitHook) error {
 	inv.UserID = uid
 	if inv.PublicToken == "" {
 		inv.PublicToken = RandomToken(16)
@@ -172,7 +173,17 @@ func (s *Store) CreateInvoice(ctx context.Context, uid int64, inv *Invoice) erro
 			return err
 		}
 		inv.ID, _ = res.LastInsertId()
-		return insertItems(ctx, tx, inv)
+		if err := insertItems(ctx, tx, inv); err != nil {
+			return err
+		}
+		for _, hook := range after {
+			if hook != nil {
+				if err := hook(tx); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
 	})
 }
 
@@ -235,12 +246,24 @@ func (s *Store) DeleteInvoice(ctx context.Context, uid, id int64) error {
 
 // RecalcAmountPaid recomputes amount_paid from payments and updates status.
 func (s *Store) RecalcAmountPaid(ctx context.Context, uid, id int64) (*Invoice, error) {
-	inv, err := s.GetInvoice(ctx, uid, id)
+	err := s.Tx(ctx, func(tx *sql.Tx) error { _, err := recalcAmountPaid(ctx, tx, uid, id); return err })
+	if err != nil {
+		return nil, err
+	}
+	return s.GetInvoice(ctx, uid, id)
+}
+
+// InvoiceSnapshot reads the event fields using the caller's transaction.
+func InvoiceSnapshot(ctx context.Context, tx *sql.Tx, uid, id int64) (*Invoice, error) {
+	return scanInvoice(tx.QueryRowContext(ctx, `SELECT `+invoiceCols+` FROM invoices i JOIN clients c ON c.id=i.client_id WHERE i.id=? AND i.user_id=?`, id, uid))
+}
+func recalcAmountPaid(ctx context.Context, tx *sql.Tx, uid, id int64) (*Invoice, error) {
+	inv, err := InvoiceSnapshot(ctx, tx, uid, id)
 	if err != nil {
 		return nil, err
 	}
 	var paid float64
-	if err := s.DB.QueryRowContext(ctx, `SELECT COALESCE(SUM(applied_amount), 0) FROM payments WHERE invoice_id = ?`, id).Scan(&paid); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT COALESCE(SUM(applied_amount), 0) FROM payments WHERE invoice_id = ?`, id).Scan(&paid); err != nil {
 		return nil, err
 	}
 	inv.AmountPaid = paid
@@ -272,10 +295,10 @@ func (s *Store) RecalcAmountPaid(ctx context.Context, uid, id int64) (*Invoice, 
 			status = StatusOverdue
 		}
 	}
-	if _, err := s.DB.ExecContext(ctx, `UPDATE invoices SET amount_paid = ?, status = ?, paid_at = ?, updated_at = ? WHERE id = ? AND user_id = ?`, paid, status, paidAt, Now(), id, uid); err != nil {
+	if _, err := tx.ExecContext(ctx, `UPDATE invoices SET amount_paid = ?, status = ?, paid_at = ?, updated_at = ? WHERE id = ? AND user_id = ?`, paid, status, paidAt, Now(), id, uid); err != nil {
 		return nil, err
 	}
-	return s.GetInvoice(ctx, uid, id)
+	return InvoiceSnapshot(ctx, tx, uid, id)
 }
 
 // MarkOverdue flips open invoices past their due date to overdue. Returns ids changed.
