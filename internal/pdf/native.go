@@ -48,7 +48,31 @@ func firstLabel(d *Document, keys ...string) string {
 }
 
 // RenderNative renders the document with the pure-Go engine.
+// RenderNative renders the invoice. When it would spill onto a second page by a little,
+// it is rendered again with tighter vertical spacing (two steps) so it stays on one page.
 func RenderNative(d *Document, logo []byte, logoType string) ([]byte, error) {
+	var out []byte
+	for _, k := range []float64{1, 0.88, 0.76} {
+		b, pages, err := renderNative(d, logo, logoType, k)
+		if err != nil {
+			return nil, err
+		}
+		if out == nil || pages == 1 {
+			out = b
+		}
+		if pages == 1 {
+			break
+		}
+	}
+	return out, nil
+}
+
+// renderNative draws the document; k scales the vertical gaps and line heights (1 = normal).
+func renderNative(d *Document, logo []byte, logoType string, k float64) ([]byte, int, error) {
+	lh := 4.5 * k // body text line height
+	if lh < 4 {
+		lh = 4
+	}
 	p := fpdf.New("P", "mm", "A4", "")
 	p.AddUTF8FontFromBytes("DejaVu", "", fontRegular)
 	p.AddUTF8FontFromBytes("DejaVu", "B", fontBold)
@@ -109,16 +133,16 @@ func RenderNative(d *Document, logo []byte, logoType string) ([]byte, error) {
 		p.SetFont("DejaVu", "", 9)
 		p.SetTextColor(grey.r, grey.g, grey.b)
 		for _, l := range d.From.Lines {
-			p.CellFormat(contentW/2, 4.5, l, "", 1, "L", false, 0, "")
+			p.CellFormat(contentW/2, lh, l, "", 1, "L", false, 0, "")
 		}
 		for _, l := range nonEmpty(d.From.Email, d.From.Phone, d.From.Website) {
-			p.CellFormat(contentW/2, 4.5, l, "", 1, "L", false, 0, "")
+			p.CellFormat(contentW/2, lh, l, "", 1, "L", false, 0, "")
 		}
 		if d.From.TaxID != "" {
-			p.CellFormat(contentW/2, 4.5, d.Label("tax_id")+": "+d.From.TaxID, "", 1, "L", false, 0, "")
+			p.CellFormat(contentW/2, lh, d.Label("tax_id")+": "+d.From.TaxID, "", 1, "L", false, 0, "")
 		}
 		if d.From.VatID != "" {
-			p.CellFormat(contentW/2, 4.5, d.Label("vat_id")+": "+d.From.VatID, "", 1, "L", false, 0, "")
+			p.CellFormat(contentW/2, lh, d.Label("vat_id")+": "+d.From.VatID, "", 1, "L", false, 0, "")
 		}
 		fromBottom := p.GetY()
 
@@ -141,7 +165,7 @@ func RenderNative(d *Document, logo []byte, logoType string) ([]byte, error) {
 	}
 
 	// ----- Meta + Bill to -----
-	p.Ln(6)
+	p.Ln(6 * k)
 	top := p.GetY()
 	// Bill to (left)
 	p.SetFont("DejaVu", "B", 8)
@@ -153,19 +177,19 @@ func RenderNative(d *Document, logo []byte, logoType string) ([]byte, error) {
 	p.SetFont("DejaVu", "", 9)
 	p.SetTextColor(grey.r, grey.g, grey.b)
 	if d.To.Contact != "" {
-		p.CellFormat(contentW/2, 4.5, d.To.Contact, "", 1, "L", false, 0, "")
+		p.CellFormat(contentW/2, lh, d.To.Contact, "", 1, "L", false, 0, "")
 	}
 	for _, l := range d.To.Lines {
-		p.CellFormat(contentW/2, 4.5, l, "", 1, "L", false, 0, "")
+		p.CellFormat(contentW/2, lh, l, "", 1, "L", false, 0, "")
 	}
 	if d.To.Email != "" {
-		p.CellFormat(contentW/2, 4.5, d.To.Email, "", 1, "L", false, 0, "")
+		p.CellFormat(contentW/2, lh, d.To.Email, "", 1, "L", false, 0, "")
 	}
 	if d.To.TaxID != "" {
-		p.CellFormat(contentW/2, 4.5, d.Label("client_tax_id")+": "+d.To.TaxID, "", 1, "L", false, 0, "")
+		p.CellFormat(contentW/2, lh, d.Label("client_tax_id")+": "+d.To.TaxID, "", 1, "L", false, 0, "")
 	}
 	if d.To.RegNo != "" {
-		p.CellFormat(contentW/2, 4.5, d.Label("registration_no")+" "+d.To.RegNo, "", 1, "L", false, 0, "")
+		p.CellFormat(contentW/2, lh, d.Label("registration_no")+" "+d.To.RegNo, "", 1, "L", false, 0, "")
 	}
 	leftBottom := p.GetY()
 
@@ -191,7 +215,7 @@ func RenderNative(d *Document, logo []byte, logoType string) ([]byte, error) {
 		last := i == len(meta)-1
 		p.SetFont("DejaVu", "", 9)
 		p.SetTextColor(grey.r, grey.g, grey.b)
-		p.CellFormat(contentW/4, 6, kv[0], "", 0, "R", false, 0, "")
+		p.CellFormat(contentW/4, 6*k, kv[0], "", 0, "R", false, 0, "")
 		if last {
 			p.SetFont("DejaVu", "B", 11)
 			p.SetTextColor(accent.r, accent.g, accent.b)
@@ -199,12 +223,12 @@ func RenderNative(d *Document, logo []byte, logoType string) ([]byte, error) {
 			p.SetFont("DejaVu", "", 9)
 			p.SetTextColor(dark.r, dark.g, dark.b)
 		}
-		p.CellFormat(contentW/4, 6, kv[1], "", 1, "R", false, 0, "")
+		p.CellFormat(contentW/4, 6*k, kv[1], "", 1, "R", false, 0, "")
 	}
 	if p.GetY() < leftBottom {
 		p.SetY(leftBottom)
 	}
-	p.Ln(8)
+	p.Ln(8 * k)
 
 	// ----- Table -----
 	cols := []struct {
@@ -304,7 +328,7 @@ func RenderNative(d *Document, logo []byte, logoType string) ([]byte, error) {
 		for ci, c := range cols {
 			p.SetXY(x, y+1.5)
 			if ci == 0 {
-				p.MultiCell(c.w-2, 4.5, vals[c.key], "", "L", false)
+				p.MultiCell(c.w-2, lh, vals[c.key], "", "L", false)
 			} else {
 				p.CellFormat(c.w, 5, vals[c.key], "", 0, c.align, false, 0, "")
 			}
@@ -315,7 +339,7 @@ func RenderNative(d *Document, logo []byte, logoType string) ([]byte, error) {
 	}
 
 	// ----- Totals -----
-	p.Ln(4)
+	p.Ln(4 * k)
 	totalsW := 70.0
 	tx := left + contentW - totalsW
 	totalsTop := p.GetY()
@@ -337,9 +361,9 @@ func RenderNative(d *Document, logo []byte, logoType string) ([]byte, error) {
 			return
 		}
 		p.SetTextColor(grey.r, grey.g, grey.b)
-		p.CellFormat(totalsW/2, 6, label, "", 0, "L", false, 0, "")
+		p.CellFormat(totalsW/2, 6*k, label, "", 0, "L", false, 0, "")
 		p.SetTextColor(dark.r, dark.g, dark.b)
-		p.CellFormat(totalsW/2, 6, value, "", 1, "R", false, 0, "")
+		p.CellFormat(totalsW/2, 6*k, value, "", 1, "R", false, 0, "")
 	}
 	if d.QuantityTotal != "" {
 		row(firstLabel(d, "quantity_total", "quantity"), d.QuantityTotal, false, false)
@@ -376,7 +400,7 @@ func RenderNative(d *Document, logo []byte, logoType string) ([]byte, error) {
 	}
 
 	// ----- Notes / terms / payment details -----
-	p.Ln(8)
+	p.Ln(8 * k)
 	signature := func(y float64) {
 		x := left + contentW - 60
 		p.SetDrawColor(dark.r, dark.g, dark.b)
@@ -389,8 +413,8 @@ func RenderNative(d *Document, logo []byte, logoType string) ([]byte, error) {
 	if d.BaseCurrencyNote != "" {
 		p.SetFont("DejaVu", "", 9)
 		p.SetTextColor(dark.r, dark.g, dark.b)
-		p.MultiCell(contentW, 4.5, d.BaseCurrencyNote, "", "L", false)
-		p.Ln(4)
+		p.MultiCell(contentW, lh, d.BaseCurrencyNote, "", "L", false)
+		p.Ln(4 * k)
 	}
 	type textSection struct{ title, body string }
 	var sections []textSection
@@ -400,7 +424,7 @@ func RenderNative(d *Document, logo []byte, logoType string) ([]byte, error) {
 		}
 	}
 	for i, sec := range sections {
-		if p.GetY()+20 > 297-28 {
+		if p.GetY()+5+lh*2 > 297-28 { // title + two lines; longer blocks continue on the next page
 			p.AddPage()
 		}
 		// The signature sits to the right of the last text block instead of on its own row below it.
@@ -415,7 +439,7 @@ func RenderNative(d *Document, logo []byte, logoType string) ([]byte, error) {
 		p.CellFormat(w, 5, strings.ToUpper(sec.title), "", 1, "L", false, 0, "")
 		p.SetFont("DejaVu", "", 9)
 		p.SetTextColor(dark.r, dark.g, dark.b)
-		p.MultiCell(w, 4.5, sec.body, "", "L", false)
+		p.MultiCell(w, lh, sec.body, "", "L", false)
 		if withSig {
 			bottom := p.GetY()
 			signature(top + 12)
@@ -423,19 +447,20 @@ func RenderNative(d *Document, logo []byte, logoType string) ([]byte, error) {
 				p.SetY(bottom)
 			}
 		}
-		p.Ln(3)
+		p.Ln(3 * k)
 	}
 	if d.SignatureLabel != "" && len(sections) == 0 {
 		if p.GetY()+12 > 297-28 { // 6 gap + 1 + 5 label: only break when it really does not fit
 			p.AddPage()
 		}
-		p.Ln(6)
+		p.Ln(6 * k)
 		signature(p.GetY())
 	}
 
+	pages := p.PageNo()
 	var buf bytes.Buffer
 	if err := p.Output(&buf); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
-	return buf.Bytes(), nil
+	return buf.Bytes(), pages, nil
 }

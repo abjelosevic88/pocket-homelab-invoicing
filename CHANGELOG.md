@@ -21,6 +21,7 @@ All notable changes to this project are documented here. Format follows [Keep a 
 - Recurring profiles and the month-end wizard fall back to the default notes and terms in Settings when the profile has none of its own.
 
 ### Fixed
+- Native PDF stays on one page when it can: text blocks only move to a new page when their title and first two lines do not fit (a fixed 20 mm reserve pushed the notes to page 2), and an invoice that still spills over by a little is re-rendered with tighter spacing (two steps) before a second page is accepted.
 - The exchange rate in the sentence under the totals (and `exchange_rate` for Word templates, and the invoice page) is printed with every stored decimal: 1.95583 was shown as 1,9558, so the printed rate did not reproduce the BAM total.
 - Native PDF: the signature line sits to the right of the last text block (notes/terms) instead of on its own row, so a full invoice keeps it on page 1.
 - Card headers: when the title and its buttons do not fit on one line (e.g. Settings → Templates in a narrow column), the buttons wrap below the title instead of overlapping it.
