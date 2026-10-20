@@ -15,6 +15,8 @@ All notable changes to this project are documented here. Format follows [Keep a 
 - Recurring profiles and the month-end wizard fall back to the default notes and terms in Settings when the profile has none of its own.
 
 ### Fixed
+- Card headers: when the title and its buttons do not fit on one line (e.g. Settings → Templates in a narrow column), the buttons wrap below the title instead of overlapping it.
+- Tabs no longer show a vertical scrollbar (the active underline overflowed the strip) or a focus box after a click; tabs inside cards are a little tighter and the template editor tab is just "HTML", so all three fit.
 - Native PDF: the signature line only moves to a new page when it really does not fit (it reserved 4 mm too much, so one line of notes pushed it alone onto page 2).
 
 ## [0.5.0] - 2026-10-20

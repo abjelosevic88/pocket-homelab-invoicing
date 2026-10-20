@@ -381,7 +381,7 @@ function Templates() {
         <div className="muted small" style={{ padding: 12 }}>Word templates: a .docx with placeholders like <code>{'{{number}}'}</code>. Each client can pick its own template; otherwise the default applies. Download <a href="https://github.com/abjelosevic88/pocket-homelab-invoicing/tree/main/docs/templates" target="_blank" rel="noreferrer">sample templates</a>.</div>
       </Card>
       {sel && <Card title={sel.id ? `Edit "${sel.name}"` : 'New template'} actions={<div className="row">{sel.id > 0 && !sel.is_default && <button className="btn sm danger" onClick={() => setDel(sel)}>Delete</button>}<button className="btn sm primary" onClick={save}>Save</button></div>}>
-        <Tabs tabs={sel.kind === 'docx' ? [{ id: 'word' as const, label: 'Word file' }, { id: 'labels' as const, label: 'Labels / language' }] : [{ id: 'design' as const, label: 'Design' }, { id: 'labels' as const, label: 'Labels / language' }, { id: 'html' as const, label: 'HTML (advanced)' }]} value={tab} onChange={setTab} />
+        <Tabs tabs={sel.kind === 'docx' ? [{ id: 'word' as const, label: 'Word file' }, { id: 'labels' as const, label: 'Labels / language' }] : [{ id: 'design' as const, label: 'Design' }, { id: 'labels' as const, label: 'Labels / language' }, { id: 'html' as const, label: 'HTML' }]} value={tab} onChange={setTab} />
         {tab === 'word' && <div className="grid" style={{ gap: 12 }}>
           <Field label="Name"><input value={sel.name} onChange={e => setSel({ ...sel, name: e.target.value })} /></Field>
           <label className="check"><input type="checkbox" checked={sel.is_default} onChange={e => setSel({ ...sel, is_default: e.target.checked })} /> Use as default template</label>
