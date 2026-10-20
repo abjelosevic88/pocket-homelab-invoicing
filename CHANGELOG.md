@@ -4,6 +4,15 @@ All notable changes to this project are documented here. Format follows [Keep a 
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-20
+
+### Changed
+- Core SDK v0.16.0. Paperless through Pocket Core reuses the person's credential for about a minute and rides out a Core restart; Test connection asks Core afresh.
+- Settings → Paperless with a Pocket Core: **Pocket Core | Off**, Direct behind "Advanced: connect directly with a URL and key" (shown whenever it is the current mode, and normally without a Core).
+
+### Added
+- Connection modes on Core's map: every person's Paperless mode in effect is reported to Core (`service:paperless`) after registering, every 30 minutes and right after a switch or Disconnect.
+
 ## [0.2.1] - 2026-10-19
 
 ### Changed

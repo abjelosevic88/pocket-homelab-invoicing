@@ -610,11 +610,15 @@ const connBadge = (mode: ConnMode, via?: string) => mode === 'off' ? <span class
 
 const sourceText = (source?: string) => source === 'personal' ? ' (your own key)' : source === 'box' ? " (the box's key)" : ''
 
-/** Pocket Core | Direct | Off for one third-party service; the switch saves at once. */
+/** Pocket Core | Off for one third-party service, with Direct as an advanced option
+ * when the box has a Pocket Core (always shown while it is the current mode, and
+ * shown normally without a Core); the switch saves at once. */
 function Connection({ app, mode, via, detail, source, core, onMode, onDisconnect, hasToken, test, direct }: {
   app: string; mode: ConnMode; via?: string; detail?: string; source?: string; core: boolean; onMode: (m: ConnMode) => void; onDisconnect: () => void
   hasToken: boolean; test: React.ReactNode; direct: React.ReactNode
 }) {
+  const [advanced, setAdvanced] = useState(false)
+  const showDirect = !core || mode === 'direct' || advanced
   const ok = !!via
   const line = mode === 'off' ? `Off: Pocket Invoicing does not talk to ${app}.`
     : mode === 'core' ? (ok ? `Connected through Pocket Core${sourceText(source)}. Nothing to fill in; switch it off for yourself in Pocket Core → Settings → Apps acting for me.` : `Not connected: ${detail}.`)
@@ -622,9 +626,10 @@ function Connection({ app, mode, via, detail, source, core, onMode, onDisconnect
   return (
     <div className="conn-block">
       <div className="segmented" role="radiogroup">
-        {([['core', 'Pocket Core', core ? 'Through Pocket Core: your own account there, nothing to paste' : 'There is no Pocket Core on this box'], ['direct', 'Direct', 'Your own URL and API token'], ['off', 'Off', '']] as const).map(([v, label, title]) =>
+        {([['core', 'Pocket Core', core ? 'Through Pocket Core: your own account there, nothing to paste' : 'There is no Pocket Core on this box'], ['direct', 'Direct', 'Your own URL and API token'], ['off', 'Off', '']] as const).filter(([v]) => v !== 'direct' || showDirect).map(([v, label, title]) =>
           <button type="button" key={v} role="radio" aria-checked={mode === v} title={title} className={mode === v ? 'active' : ''} onClick={() => onMode(v)}>{label}</button>)}
       </div>
+      {!showDirect && <div><button type="button" className="link-btn small" onClick={() => setAdvanced(true)}>Advanced: connect directly with a URL and key</button></div>}
       <div className={`conn-status ${mode === 'off' ? '' : ok ? 'ok' : 'bad'}`}><span className="dot" />{line}</div>
       {mode === 'direct' && <>
         {direct}

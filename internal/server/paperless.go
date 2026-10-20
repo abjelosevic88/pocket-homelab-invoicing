@@ -62,7 +62,7 @@ func (s *Server) paperlessMode(st store.Settings) string {
 // connection mode (Settings → Paperless):
 //
 //   - core: Pocket Core hands out the address and the person's own token (the
-//     box's token only for an admin), asked again on every use;
+//     box's token only for an admin), reused by the SDK for about a minute;
 //   - direct: the URL and token saved here;
 //   - off: no client.
 //
@@ -70,6 +70,11 @@ func (s *Server) paperlessMode(st store.Settings) string {
 // PaperlessExternalURL) so links open the right place. Clients are cached per
 // URL+token so name lookups stay warm between requests.
 func (s *Server) paperlessConn(ctx context.Context, uid int64) (*paperless.Client, store.Settings, error) {
+	return s.paperlessConnect(ctx, uid, false)
+}
+
+// paperlessConnect is paperlessConn; fresh skips the credential cache (Test connection).
+func (s *Server) paperlessConnect(ctx context.Context, uid int64, fresh bool) (*paperless.Client, store.Settings, error) {
 	s.seedPaperlessEnv(ctx)
 	st, _ := s.store.GetSettings(ctx, uid)
 	var base, token string
@@ -81,7 +86,7 @@ func (s *Server) paperlessConn(ctx context.Context, uid int64) (*paperless.Clien
 		if err != nil {
 			return nil, st, fmt.Errorf("paperless: no account to act for")
 		}
-		cred, err := s.serviceFor(ctx, u.Email, "paperless", "Paperless-ngx")
+		cred, err := s.serviceFor(ctx, u.Email, "paperless", "Paperless-ngx", fresh)
 		if err != nil {
 			return nil, st, err
 		}
@@ -463,7 +468,7 @@ func (s *Server) handleTestPaperless(w http.ResponseWriter, r *http.Request) {
 	} else {
 		var st store.Settings
 		var err error
-		cl, st, err = s.paperlessConn(ctx, uid)
+		cl, st, err = s.paperlessConnect(ctx, uid, true)
 		if err != nil {
 			writeErr(w, http.StatusBadRequest, err.Error())
 			return

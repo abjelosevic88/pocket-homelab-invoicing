@@ -62,6 +62,7 @@ type Server struct {
 	coreMu   sync.Mutex
 	coreOK   bool
 	coreErr  string
+	modesMu  sync.Mutex // one connection-mode report to Core at a time
 	resolved map[string]resolvedURL
 }
 
@@ -91,7 +92,9 @@ func New(cfg *config.Config, st *store.Store, log *slog.Logger, webFS fs.FS) *Se
 // ---- Pocket Core ----
 
 // coreLoop registers with Core on start (retrying until it answers) and
-// re-registers every 30 minutes so version and last-seen stay fresh.
+// re-registers every 30 minutes so version and last-seen stay fresh; each
+// successful registration is followed by a report of everyone's Paperless
+// connection mode.
 func (s *Server) coreLoop(ctx context.Context) {
 	wait := 5 * time.Second
 	for {
@@ -106,6 +109,7 @@ func (s *Server) coreLoop(ctx context.Context) {
 			s.log.Warn("pocket core: registration failed, retrying", "err", err, "in", wait.String())
 		} else {
 			wait = 30 * time.Minute
+			s.reportModes(ctx, 0) // on start and every 30 minutes: how everyone reaches Paperless
 		}
 		select {
 		case <-ctx.Done():

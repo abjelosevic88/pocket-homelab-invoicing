@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/abjelosevic88/pocket-homelab-invoicing/internal/config"
 	"github.com/abjelosevic88/pocket-homelab-invoicing/internal/store"
@@ -52,6 +53,8 @@ type fakeServiceCore struct {
 	refuse  map[string]string         // email → reason
 	asked   []string                  // "<auth> <user> <type>" per credential request
 	statusN int
+	modes   map[string]string // "<user> <target>" → last reported mode
+	reports int               // PUT /links/modes calls
 }
 
 func newFakeServiceCore(t *testing.T, paperlessURL string) *fakeServiceCore {
@@ -77,6 +80,25 @@ func newFakeServiceCore(t *testing.T, paperlessURL string) *fakeServiceCore {
 				return
 			}
 			_ = json.NewEncoder(w).Encode(f.creds[in.User])
+		case "/api/v1/apps/register":
+			_ = json.NewEncoder(w).Encode(map[string]any{"app": map[string]any{"slug": "invoicing"}})
+		case "/api/v1/links/modes":
+			if r.Method != http.MethodPut || r.Header.Get("Authorization") != "Bearer pca_invoicing" {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			var in struct {
+				Modes []struct{ User, Target, Mode string }
+			}
+			_ = json.NewDecoder(r.Body).Decode(&in)
+			if f.modes == nil {
+				f.modes = map[string]string{}
+			}
+			for _, m := range in.Modes {
+				f.modes[m.User+" "+m.Target] = m.Mode
+			}
+			f.reports++
+			_ = json.NewEncoder(w).Encode(map[string]any{"recorded": len(in.Modes)})
 		case "/api/v1/links/status":
 			f.statusN++
 			if r.URL.Query().Get("app") != "service:paperless" {
@@ -101,6 +123,29 @@ func (f *fakeServiceCore) credentialCalls() []string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return append([]string{}, f.asked...)
+}
+
+// reported is the last mode Core heard for a person's Paperless, and how many reports came in.
+func (f *fakeServiceCore) reported(email string) (string, int) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.modes[email+" service:paperless"], f.reports
+}
+
+// waitReported waits for Core to hear want for the person (reports are sent in the background).
+func waitReported(t *testing.T, f *fakeServiceCore, email, want string) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		got, _ := f.reported(email)
+		if got == want {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("Core heard %q for %s, want %q", got, email, want)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 }
 
 func serviceTestServer(t *testing.T, coreURL string, mod func(*config.Config)) (*Server, *store.Store) {
@@ -157,12 +202,19 @@ func TestPaperlessConnectionModes(t *testing.T) {
 	if u := s.paperlessDocURL(mst, 12); u != "https://paperless.example.org/documents/12/details" {
 		t.Fatalf("browser link through core = %q, want Core's public URL", u)
 	}
-	// asked again on the next use (the key is not kept)
+	// the next use within the minute reuses the SDK's cached credential
 	if _, _, err := s.paperlessConn(ctx, member.ID); err != nil {
 		t.Fatal(err)
 	}
+	if n := len(fc.credentialCalls()); n != 1 {
+		t.Fatalf("core asked %d times, want once (cached)", n)
+	}
+	// a connection test always asks afresh
+	if _, _, err := s.paperlessConnect(ctx, member.ID, true); err != nil {
+		t.Fatal(err)
+	}
 	if n := len(fc.credentialCalls()); n != 2 {
-		t.Fatalf("core asked %d times, want once per use", n)
+		t.Fatalf("core asked %d times, want a fresh ask for the test", n)
 	}
 	// the admin gets the box's key, and the status line says so
 	if _, _, err := s.paperlessConn(ctx, owner.ID); err != nil {
@@ -325,10 +377,14 @@ func TestPaperlessSettingsAPI(t *testing.T) {
 	if code != 200 || got["paperless_mode"] != "core" || got["paperless_via"] != "core" || got["paperless_source"] != "personal" {
 		t.Fatalf("GET settings: %d mode=%v via=%v source=%v", code, got["paperless_mode"], got["paperless_via"], got["paperless_source"])
 	}
-	// test through core
+	// test through core, asking Core afresh every time (no cache)
+	asked := len(fc.credentialCalls())
 	code, res := call("POST", "/settings/test-paperless", map[string]any{})
 	if code != 200 || res["via"] != "core" || res["source"] != "personal" {
 		t.Fatalf("test through core: %d %v", code, res)
+	}
+	if code, _ = call("POST", "/settings/test-paperless", map[string]any{}); code != 200 || len(fc.credentialCalls()) != asked+2 {
+		t.Fatalf("tests asked Core %d times, want 2", len(fc.credentialCalls())-asked)
 	}
 	// switch to direct and save a URL + token
 	got["paperless_mode"], got["paperless_url"], got["paperless_token"] = "direct", pl.srv.URL, "direct-token"
@@ -375,5 +431,83 @@ func TestPaperlessSettingsAPI(t *testing.T) {
 	got["paperless_mode"] = "sideways"
 	if _, got = call("PUT", "/settings", got); got["paperless_mode"] != "off" {
 		t.Fatalf("bad mode stored: %v", got["paperless_mode"])
+	}
+}
+
+// Core hears every person's Paperless mode in effect (defaults included) after
+// registering, and a person's new mode right after they switch or disconnect.
+func TestPaperlessModesReported(t *testing.T) {
+	pl := newFakePaperless(t)
+	fc := newFakeServiceCore(t, pl.srv.URL)
+	s, st := serviceTestServer(t, fc.srv.URL, nil)
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	owner := mkUser(t, st, "owner@example.com", roleAdmin)
+	member := mkUser(t, st, "member@example.com", roleMember)
+	other := mkUser(t, st, "other@example.com", roleMember)
+	mst, _ := st.GetSettings(ctx, member.ID)
+	mst.PaperlessURL, mst.PaperlessToken = pl.srv.URL, "direct-token" // no mode stored: direct by default
+	_ = st.SaveSettings(ctx, member.ID, mst)
+	ost, _ := st.GetSettings(ctx, other.ID)
+	ost.PaperlessMode = modeOff
+	_ = st.SaveSettings(ctx, other.ID, ost)
+
+	if err := s.Bootstrap(ctx); err != nil { // starts the Core loop: register, then report
+		t.Fatal(err)
+	}
+	waitReported(t, fc, "owner@example.com", modeCore)
+	waitReported(t, fc, "member@example.com", modeDirect)
+	waitReported(t, fc, "other@example.com", modeOff)
+	_ = owner
+
+	tok, _, err := st.CreateAPIToken(ctx, member.ID, "t")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ts := httptest.NewServer(s.Router())
+	t.Cleanup(ts.Close)
+	put := func(body map[string]any) map[string]any {
+		t.Helper()
+		b, _ := json.Marshal(body)
+		req, _ := http.NewRequest("PUT", ts.URL+"/api/v1/settings", strings.NewReader(string(b)))
+		req.Header.Set("Authorization", "Bearer "+tok)
+		req.Header.Set("Content-Type", "application/json")
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer res.Body.Close()
+		var out map[string]any
+		_ = json.NewDecoder(res.Body).Decode(&out)
+		if res.StatusCode != 200 {
+			t.Fatalf("PUT settings: %d %v", res.StatusCode, out)
+		}
+		return out
+	}
+	got := put(map[string]any{"paperless_mode": "off", "paperless_url": pl.srv.URL})
+	waitReported(t, fc, "member@example.com", modeOff)
+	got["paperless_mode"] = "core"
+	got = put(got)
+	waitReported(t, fc, "member@example.com", modeCore)
+	// an unrelated save does not report again
+	_, n := fc.reported("member@example.com")
+	got["paperless_tags"] = "x"
+	put(got)
+	time.Sleep(100 * time.Millisecond)
+	if _, n2 := fc.reported("member@example.com"); n2 != n {
+		t.Fatalf("an unrelated save reported modes (%d → %d)", n, n2)
+	}
+	if m, _ := fc.reported("other@example.com"); m != modeOff {
+		t.Fatalf("other's mode changed to %q", m)
+	}
+}
+
+// Without Pocket Core nothing is reported (and nothing fails).
+func TestPaperlessModesNotReportedWithoutCore(t *testing.T) {
+	s, st := serviceTestServer(t, "", nil)
+	mkUser(t, st, "owner@example.com", roleAdmin)
+	s.reportModes(context.Background(), 0) // no Core: a no-op
+	if modes, err := s.paperlessModes(context.Background(), 0); err != nil || len(modes) != 1 || modes[0].Mode != modeDirect || modes[0].Target != "service:paperless" {
+		t.Fatalf("modes without core: %v %v", modes, err)
 	}
 }

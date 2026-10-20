@@ -5,8 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"time"
 
 	core "github.com/abjelosevic88/pocket-homelab-core/sdk"
+	"github.com/abjelosevic88/pocket-homelab-invoicing/internal/store"
 )
 
 // ---- Service connections (Pocket Core) ----
@@ -15,13 +17,20 @@ import (
 // chosen per person under Settings → Paperless:
 //
 //	core   – Pocket Core hands out the service's address and the person's own
-//	         key (the box's key only when the person is a Core admin); asked
-//	         again on every use, so a switch-off in Core applies at once
+//	         key (the box's key only when the person is a Core admin); the SDK
+//	         reuses it for about a minute (a switch-off in Core applies within
+//	         that, a refusal at once) and rides out a Core restart; Test
+//	         connection always asks afresh
 //	direct – the URL and token saved here (how it always worked)
 //	off    – the app does not talk to the service at all
 //
 // With no mode stored: direct when a token is saved (existing setups keep
 // working), else Pocket Core when the box has one, else direct.
+//
+// The mode in effect is reported to Core (service:paperless per person) so its
+// Links page shows Direct connections too: after registering (on start and
+// every 30 minutes with the re-registration) and right after someone changes
+// their mode or disconnects. Report only; failures are logged.
 
 const (
 	modeCore   = "core"
@@ -111,12 +120,20 @@ func (sm *sourceMemo) get(email, typ string) string {
 	return sm.m[email+"\x00"+typ]
 }
 
-// serviceFor asks Core for the person's way into a service (every use).
-func (s *Server) serviceFor(ctx context.Context, email, typ, name string) (*core.ServiceCred, error) {
+// serviceFor asks Core for the person's way into a service: ServiceFor (the
+// SDK's one-minute cache) for normal work, ServiceForFresh when fresh (Test
+// connection).
+func (s *Server) serviceFor(ctx context.Context, email, typ, name string, fresh bool) (*core.ServiceCred, error) {
 	if !s.core.Configured() {
 		return nil, fmt.Errorf("%s through Pocket Core: there is no Pocket Core on this box; use a direct connection", name)
 	}
-	cred, err := s.core.ServiceFor(ctx, email, typ)
+	var cred *core.ServiceCred
+	var err error
+	if fresh {
+		cred, err = s.core.ServiceForFresh(ctx, email, typ)
+	} else {
+		cred, err = s.core.ServiceFor(ctx, email, typ)
+	}
 	if err != nil {
 		return nil, serviceErr(name, err)
 	}
@@ -147,4 +164,54 @@ func (s *Server) serviceStatus(ctx context.Context, email, typ, name string) (vi
 		}
 	}
 	return modeCore, ""
+}
+
+// ---- Modes on Core's map ----
+
+// paperlessModes is the Paperless mode in effect (what Settings → Paperless
+// shows, defaults included) for each person, or just uid when uid > 0.
+func (s *Server) paperlessModes(ctx context.Context, uid int64) ([]core.ConnMode, error) {
+	s.seedPaperlessEnv(ctx) // the owner's mode follows the seeded token
+	var users []store.User
+	if uid > 0 {
+		u, err := s.store.GetUser(ctx, uid)
+		if err != nil {
+			return nil, err
+		}
+		users = []store.User{*u}
+	} else {
+		list, err := s.store.ListUsers(ctx)
+		if err != nil {
+			return nil, err
+		}
+		users = list
+	}
+	out := make([]core.ConnMode, 0, len(users))
+	for _, u := range users {
+		st, err := s.store.GetSettings(ctx, u.ID)
+		if err != nil {
+			continue
+		}
+		out = append(out, core.ConnMode{User: u.Email, Target: "service:paperless", Mode: s.paperlessMode(st)})
+	}
+	return out, nil
+}
+
+// reportModes tells Core how people reach Paperless (everyone, or just uid).
+// Only with a Core; never fatal.
+func (s *Server) reportModes(ctx context.Context, uid int64) {
+	if !s.core.Configured() {
+		return
+	}
+	s.modesMu.Lock() // one report at a time, so an older list never lands after a newer one
+	defer s.modesMu.Unlock()
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	modes, err := s.paperlessModes(ctx, uid)
+	if err == nil {
+		err = s.core.ReportModes(ctx, modes)
+	}
+	if err != nil {
+		s.log.Warn("pocket core: reporting connection modes failed", "err", err)
+	}
 }

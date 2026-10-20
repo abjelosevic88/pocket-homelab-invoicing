@@ -18,13 +18,15 @@ Nothing in the app depends on it. Paperless is **per person**: everything goes i
 
 ### Connect
 
-Settings → Paperless has a switch with three positions; it is saved as soon as you flip it.
+Settings → Paperless has a switch; it is saved as soon as you flip it. On a box with Pocket Core it shows **Pocket Core | Off**, with *Advanced: connect directly with a URL and key* revealing **Direct** (always shown while Direct is the current mode). Without a Core all three positions show.
 
 | Mode | How it reaches Paperless |
 |---|---|
-| **Pocket Core** | On a box with [Pocket Core](https://github.com/abjelosevic88/pocket-homelab-core): Core hands out the Paperless address and **your own** token there (set in Core by hand or by its Paperless connector). An admin without a token of their own gets the box's token (Core's rule). Asked again on every use, so switching it off in Core (Links, or Settings → Apps acting for me) applies at once. Nothing to paste. |
+| **Pocket Core** | On a box with [Pocket Core](https://github.com/abjelosevic88/pocket-homelab-core): Core hands out the Paperless address and **your own** token there (set in Core by hand or by its Paperless connector). An admin without a token of their own gets the box's token (Core's rule). The credential is reused for about a minute (Core SDK cache), so switching it off in Core (Links, or Settings → Apps acting for me) applies within a minute, a refusal at once, and a Core restart does not interrupt Paperless; **Test connection** always asks Core afresh. Nothing to paste. |
 | **Direct** | The URL and API token you save here (how it always worked). |
 | **Off** | The app does not talk to Paperless at all. |
+
+Pocket Invoicing reports each person's mode in effect to Core (`PUT /api/v1/links/modes`, target `service:paperless`) after registering, every 30 minutes and right after someone switches or disconnects, so Core's Links page shows Direct connections too. Report only; Core decides nothing on it.
 
 With no choice stored the mode is **Direct** when a token is saved (existing setups keep working), else **Pocket Core** when the box has one, else Direct. The card shows the state: *Connected through Pocket Core (your own key)* / *(the box's key)*, a direct connection, or *Not connected:* with Core's reason (switched off for the box or by you, no account of your own there yet, no Paperless in Core, …).
 

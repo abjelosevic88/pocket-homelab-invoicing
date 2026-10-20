@@ -3,7 +3,7 @@ module github.com/abjelosevic88/pocket-homelab-invoicing
 go 1.26.5
 
 require (
-	github.com/abjelosevic88/pocket-homelab-core v0.15.0
+	github.com/abjelosevic88/pocket-homelab-core v0.16.0
 	github.com/go-chi/chi/v5 v5.5.0
 	github.com/go-pdf/fpdf v0.9.0
 	github.com/shopspring/decimal v1.5.0

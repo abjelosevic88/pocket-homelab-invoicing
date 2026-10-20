@@ -91,6 +91,7 @@ func (s *Server) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	prevPwd := st.SMTPPassword
 	prevToken, prevMode := st.PaperlessToken, st.PaperlessMode
+	prevEffective := s.paperlessMode(st)
 	prevBase, prevProvider, prevSetup := st.BaseCurrency, st.ExchangeRateProvider, st.SetupComplete
 	if err := decode(r, &st); err != nil {
 		writeErr(w, http.StatusBadRequest, "invalid json")
@@ -106,6 +107,7 @@ func (s *Server) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 	if st.PaperlessToken == "" {
 		st.PaperlessToken = prevToken
 	}
+	disconnect := st.PaperlessClearToken
 	if st.PaperlessClearToken {
 		st.PaperlessToken = ""
 	}
@@ -158,6 +160,9 @@ func (s *Server) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 	if err := s.store.SaveSettings(ctx, uid, st); err != nil {
 		s.fail(w, err, "save settings")
 		return
+	}
+	if disconnect || st.PaperlessMode != prevMode || s.paperlessMode(st) != prevEffective {
+		go s.reportModes(context.Background(), uid) // Core's Links page follows the switch right away
 	}
 	if isAdmin {
 		_ = s.store.SetCurrencyEnabled(ctx, st.BaseCurrency, true)
