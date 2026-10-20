@@ -171,7 +171,11 @@ func RenderNative(d *Document, logo []byte, logoType string) ([]byte, error) {
 
 	// Meta (right)
 	p.SetXY(left+contentW/2, top)
-	meta := [][2]string{{d.Label("issue_date"), d.IssueDate}, {d.Label("due_date"), d.DueDate}}
+	meta := [][2]string{{d.Label("issue_date"), d.IssueDate}}
+	if d.IssuePlace != "" {
+		meta = append(meta, [2]string{d.Label("issue_place"), d.IssuePlace})
+	}
+	meta = append(meta, [2]string{d.Label("due_date"), d.DueDate})
 	if d.Period != "" {
 		meta = append(meta, [2]string{d.Label("period"), d.Period})
 	}
@@ -373,20 +377,14 @@ func RenderNative(d *Document, logo []byte, logoType string) ([]byte, error) {
 
 	// ----- Notes / terms / payment details -----
 	p.Ln(8)
-	section := func(title, body string) {
-		if strings.TrimSpace(body) == "" {
-			return
-		}
-		if p.GetY()+20 > 297-28 {
-			p.AddPage()
-		}
-		p.SetFont("DejaVu", "B", 8)
-		p.SetTextColor(grey.r, grey.g, grey.b)
-		p.CellFormat(contentW, 5, strings.ToUpper(title), "", 1, "L", false, 0, "")
+	signature := func(y float64) {
+		x := left + contentW - 60
+		p.SetDrawColor(dark.r, dark.g, dark.b)
+		p.Line(x, y, x+60, y)
+		p.SetXY(x, y+1)
 		p.SetFont("DejaVu", "", 9)
-		p.SetTextColor(dark.r, dark.g, dark.b)
-		p.MultiCell(contentW, 4.5, body, "", "L", false)
-		p.Ln(3)
+		p.SetTextColor(grey.r, grey.g, grey.b)
+		p.CellFormat(60, 5, d.SignatureLabel, "", 1, "C", false, 0, "")
 	}
 	if d.BaseCurrencyNote != "" {
 		p.SetFont("DejaVu", "", 9)
@@ -394,22 +392,45 @@ func RenderNative(d *Document, logo []byte, logoType string) ([]byte, error) {
 		p.MultiCell(contentW, 4.5, d.BaseCurrencyNote, "", "L", false)
 		p.Ln(4)
 	}
-	section(d.Label("payment_details"), d.PaymentDetails)
-	section(d.Label("notes"), d.Notes)
-	section(d.Label("terms"), d.Terms)
-	if d.SignatureLabel != "" {
+	type textSection struct{ title, body string }
+	var sections []textSection
+	for _, sec := range []textSection{{d.Label("payment_details"), d.PaymentDetails}, {d.Label("notes"), d.Notes}, {d.Label("terms"), d.Terms}} {
+		if strings.TrimSpace(sec.body) != "" {
+			sections = append(sections, sec)
+		}
+	}
+	for i, sec := range sections {
+		if p.GetY()+20 > 297-28 {
+			p.AddPage()
+		}
+		// The signature sits to the right of the last text block instead of on its own row below it.
+		withSig := d.SignatureLabel != "" && i == len(sections)-1
+		w := contentW
+		if withSig {
+			w = contentW - 70
+		}
+		top := p.GetY()
+		p.SetFont("DejaVu", "B", 8)
+		p.SetTextColor(grey.r, grey.g, grey.b)
+		p.CellFormat(w, 5, strings.ToUpper(sec.title), "", 1, "L", false, 0, "")
+		p.SetFont("DejaVu", "", 9)
+		p.SetTextColor(dark.r, dark.g, dark.b)
+		p.MultiCell(w, 4.5, sec.body, "", "L", false)
+		if withSig {
+			bottom := p.GetY()
+			signature(top + 12)
+			if p.GetY() < bottom {
+				p.SetY(bottom)
+			}
+		}
+		p.Ln(3)
+	}
+	if d.SignatureLabel != "" && len(sections) == 0 {
 		if p.GetY()+12 > 297-28 { // 6 gap + 1 + 5 label: only break when it really does not fit
 			p.AddPage()
 		}
 		p.Ln(6)
-		x := left + contentW - 60
-		y := p.GetY()
-		p.SetDrawColor(dark.r, dark.g, dark.b)
-		p.Line(x, y, x+60, y)
-		p.SetXY(x, y+1)
-		p.SetFont("DejaVu", "", 9)
-		p.SetTextColor(grey.r, grey.g, grey.b)
-		p.CellFormat(60, 5, d.SignatureLabel, "", 1, "C", false, 0, "")
+		signature(p.GetY())
 	}
 
 	var buf bytes.Buffer

@@ -91,6 +91,7 @@
     <div class="block meta">
       <table>
         <tr><td>{{.Label "issue_date"}}</td><td>{{.IssueDate}}</td></tr>
+        {{if .IssuePlace}}<tr><td>{{.Label "issue_place"}}</td><td>{{.IssuePlace}}</td></tr>{{end}}
         <tr><td>{{.Label "due_date"}}</td><td>{{.DueDate}}</td></tr>
         {{if .Period}}<tr><td>{{.Label "period"}}</td><td>{{.Period}}</td></tr>{{end}}
         {{if .PONumber}}<tr><td>{{.Label "po_number"}}</td><td>{{.PONumber}}</td></tr>{{end}}

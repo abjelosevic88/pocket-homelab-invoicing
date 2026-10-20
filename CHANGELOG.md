@@ -12,12 +12,16 @@ All notable changes to this project are documented here. Format follows [Keep a 
 
 - Clients: **Company reg. no.** (e.g. Luxembourg RCS B274410), printed under Bill to as "Reg. no. RCS B274410" (template label `registration_no`, no colon) and available to Word templates as `client.registration_no`.
 
+- Settings → Company: **Place of issue** (e.g. Banja Luka), printed under the invoice date (label `issue_place`, Word: `issue_place`).
+- Settings → Invoicing: **Always print the tax line** — the totals show "Tax 0% 0,00" when an invoice has no tax, for laws that require the VAT rate and amount on every invoice (BiH Zakon o PDV-u čl. 107).
+
 ### Changed
 - The client's tax number is now labelled **VAT ID** (template label `client_tax_id`) in the client form and under Bill to, separate from your own `tax_id` label, so a template that prints yours as "JIB" no longer prints the client's as "JIB" too.
 - Counter suggestions now bump the last number of any value, not only `N`, `N/M` or `N/MПП`, so the month-end wizard also suggests the PFR number.
 - Recurring profiles and the month-end wizard fall back to the default notes and terms in Settings when the profile has none of its own.
 
 ### Fixed
+- Native PDF: the signature line sits to the right of the last text block (notes/terms) instead of on its own row, so a full invoice keeps it on page 1.
 - Card headers: when the title and its buttons do not fit on one line (e.g. Settings → Templates in a narrow column), the buttons wrap below the title instead of overlapping it.
 - Tabs no longer show a vertical scrollbar (the active underline overflowed the strip) or a focus box after a click; tabs inside cards are a little tighter and the template editor tab is just "HTML", so all three fit.
 - Settings → Invoicing reorganised: Numbering and Custom invoice fields stacked beside Defaults; one full-width "Text printed on invoices" card (sentence under the totals, notes, terms, footer, in PDF order); Working days & holidays full width (cards marked full width now really span both columns); a single sticky Save button that shows when there are unsaved changes.

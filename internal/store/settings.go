@@ -25,6 +25,7 @@ type Settings struct {
 	TaxID          string `json:"tax_id"`
 	VatID          string `json:"vat_id"` // VAT registration number, printed under the tax ID (e.g. PDV broj next to the JIB)
 	LogoPath       string `json:"logo_path"`
+	IssuePlace     string `json:"issue_place"` // place of issue printed next to the date (e.g. Banja Luka)
 
 	BaseCurrency         string  `json:"base_currency"`
 	ExchangeRateProvider string  `json:"exchange_rate_provider"` // frankfurter | cbbh | none; empty = EXCHANGE_RATE_PROVIDER env
@@ -47,6 +48,7 @@ type Settings struct {
 	HoursPerDay          float64 `json:"hours_per_day"`
 	TimeRoundingMin      int     `json:"time_rounding_minutes"`
 	ShowTaxColumn        bool    `json:"show_tax_column"`
+	AlwaysShowTax        bool    `json:"always_show_tax"` // print the tax line in the totals even at 0% (VAT rate and amount must appear on the invoice)
 
 	PaymentDetails           string            `json:"payment_details"`             // bank account, IBAN, PayPal etc. shown on invoice
 	PaymentDetailsByCurrency map[string]string `json:"payment_details_by_currency"` // optional per-currency override (e.g. USD IBAN)

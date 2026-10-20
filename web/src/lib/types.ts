@@ -39,9 +39,9 @@ export interface Webhook { id: number; url: string; events: string; secret: stri
 export interface APIToken { id: number; name: string; prefix: string; last_used_at: string | null; created_at: string }
 export interface Activity { id: number; entity_type: string; entity_id: number; action: string; message: string; created_at: string }
 export interface Settings {
-  company_name: string; brand_name: string; company_email: string; company_phone: string; company_website: string; address1: string; address2: string; city: string; state: string; postal_code: string; country: string; tax_id: string; vat_id: string; logo_path: string;
+  company_name: string; brand_name: string; company_email: string; company_phone: string; company_website: string; address1: string; address2: string; city: string; state: string; postal_code: string; country: string; tax_id: string; vat_id: string; issue_place: string; logo_path: string;
   base_currency: string; exchange_rate_provider: string; locale: string; date_format: string; timezone: string; invoice_number_format: string; invoice_next_seq: number; invoice_seq_reset_yearly: boolean; invoice_seq_year: number; default_due_days: number; default_notes: string; default_terms: string; default_footer: string; default_billing_mode: string;
-  default_hourly_rate: number; default_daily_rate: number; default_monthly_rate: number; default_tax_rate: number; hours_per_day: number; time_rounding_minutes: number; show_tax_column: boolean; payment_details: string;
+  default_hourly_rate: number; default_daily_rate: number; default_monthly_rate: number; default_tax_rate: number; hours_per_day: number; time_rounding_minutes: number; show_tax_column: boolean; always_show_tax: boolean; payment_details: string;
   payment_details_by_currency: Record<string, string> | null; number_format: string; custom_fields: CustomFieldDef[] | null; show_base_total: boolean; base_total_note: string; email_attachment_mode: string;
   income_tax_rate: number; income_tax_basis: string; income_tax_by_payment_date: boolean; income_tax_min_yearly: number; income_tax_deduction: number; contributions_monthly: number; income_tax_label: string;
   work_week: string; holidays: Holiday[] | null;

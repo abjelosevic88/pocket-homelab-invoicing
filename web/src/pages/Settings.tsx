@@ -79,6 +79,7 @@ function Company() {
           <Field label="Website"><input value={s.company_website} onChange={set('company_website')} /></Field>
           <Field label="Tax ID" help="e.g. JIB; printed as the template's tax_id label"><input value={s.tax_id} onChange={set('tax_id')} /></Field>
           <Field label="VAT ID" help="e.g. PDV broj; printed under the tax ID (label vat_id)"><input value={s.vat_id || ''} onChange={set('vat_id')} /></Field>
+          <Field label="Place of issue" help="Printed next to the invoice date, e.g. Banja Luka"><input value={s.issue_place || ''} onChange={set('issue_place')} /></Field>
           <Field label="Address line 1" className="full"><input value={s.address1} onChange={set('address1')} /></Field>
           <Field label="Address line 2" className="full"><input value={s.address2} onChange={set('address2')} /></Field>
           <Field label="Postal code"><input value={s.postal_code} onChange={set('postal_code')} /></Field>
@@ -167,6 +168,7 @@ function Invoicing() {
             <Field label="Number format"><Select value={s.number_format} onChange={put('number_format')} options={['1,234.56', '1.234,56', '1 234,56', "1'234.56", '1234.56'].map(f => ({ value: f, label: f }))} /></Field>
             <Field label="Email attachment" help="What to attach when emailing an invoice"><Select value={s.email_attachment_mode} onChange={put('email_attachment_mode')} options={[{ value: 'generated', label: 'Generated PDF' }, { value: 'uploaded', label: 'Uploaded files only', hint: 'falls back to generated if none' }, { value: 'both', label: 'Generated PDF + uploaded files' }]} /></Field>
             <label className="check full"><input type="checkbox" checked={s.show_tax_column} onChange={set('show_tax_column')} /> Show tax column on invoices</label>
+            <label className="check full"><input type="checkbox" checked={!!s.always_show_tax} onChange={set('always_show_tax')} /> Always print the tax line in the totals (0% when the invoice has no tax)</label>
           </div>
         </Card>
         <Card title="Text printed on invoices" className="full">
@@ -357,7 +359,7 @@ function Catalog() {
 }
 
 // ---------- Templates ----------
-const LABEL_KEYS = ['invoice', 'invoice_number', 'issue_date', 'due_date', 'period', 'po_number', 'bill_to', 'description', 'unit', 'quantity', 'unit_price', 'discount', 'tax', 'amount', 'subtotal', 'total', 'amount_paid', 'balance_due', 'notes', 'terms', 'payment_details', 'tax_id', 'vat_id', 'client_tax_id', 'registration_no', 'page', 'paid_stamp', 'hour', 'hours', 'day', 'days', 'month', 'months']
+const LABEL_KEYS = ['invoice', 'invoice_number', 'issue_date', 'issue_place', 'due_date', 'period', 'po_number', 'bill_to', 'description', 'unit', 'quantity', 'unit_price', 'discount', 'tax', 'amount', 'subtotal', 'total', 'amount_paid', 'balance_due', 'notes', 'terms', 'payment_details', 'tax_id', 'vat_id', 'client_tax_id', 'registration_no', 'page', 'paid_stamp', 'hour', 'hours', 'day', 'days', 'month', 'months']
 
 function WordUpload({ templateId, onDone, label = '+ Upload Word template' }: { templateId?: number; onDone: (t: InvoiceTemplate, ph: string[]) => void; label?: string }) {
   const toast = useToast()

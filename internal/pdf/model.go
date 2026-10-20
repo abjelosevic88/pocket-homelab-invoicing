@@ -54,6 +54,7 @@ type Document struct {
 	Number      string
 	Status      string
 	IssueDate   string
+	IssuePlace  string
 	DueDate     string
 	Period      string
 	PONumber    string
@@ -102,6 +103,7 @@ var DefaultLabels = map[string]string{
 	"invoice":         "INVOICE",
 	"invoice_number":  "Invoice #",
 	"issue_date":      "Date",
+	"issue_place":     "Place of issue",
 	"due_date":        "Due date",
 	"period":          "Service period",
 	"po_number":       "PO number",
@@ -204,6 +206,7 @@ func Build(in BuildInput) *Document {
 		Number:         inv.Number,
 		Status:         inv.Status,
 		IssueDate:      fmtDate(st.DateFormat, inv.IssueDate),
+		IssuePlace:     st.IssuePlace,
 		DueDate:        fmtDate(st.DateFormat, inv.DueDate),
 		PONumber:       inv.PONumber,
 		Currency:       inv.Currency,
@@ -340,6 +343,9 @@ func Build(in BuildInput) *Document {
 	for _, k := range keys {
 		d.Taxes = append(d.Taxes, TaxLine{Label: fmt.Sprintf("%s %s%%", d.Label("tax"), k), Amount: m(tot.TaxBreakdown[k])})
 	}
+	if len(d.Taxes) == 0 && st.AlwaysShowTax {
+		d.Taxes = append(d.Taxes, TaxLine{Label: d.Label("tax") + " 0%", Amount: m(0)})
+	}
 	d.Total = m(inv.Total)
 	d.AmountPaid = m(inv.AmountPaid)
 	d.Balance = m(inv.Total - inv.AmountPaid)
@@ -400,7 +406,7 @@ func buildData(d *Document, in BuildInput) map[string]any {
 		pe = fmtDate(st.DateFormat, *inv.PeriodEnd)
 	}
 	return map[string]any{
-		"title": d.Title, "number": d.Number, "status": d.Status, "issue_date": d.IssueDate, "due_date": d.DueDate, "period": d.Period, "period_start": ps, "period_end": pe,
+		"title": d.Title, "number": d.Number, "status": d.Status, "issue_date": d.IssueDate, "issue_place": d.IssuePlace, "due_date": d.DueDate, "period": d.Period, "period_start": ps, "period_end": pe,
 		"po_number": d.PONumber, "currency": d.Currency, "currency_name": in.Currency.Name, "currency_symbol": strings.TrimSpace(in.Currency.Symbol), "base_currency": st.BaseCurrency, "billing_mode": d.BillingMode,
 		"exchange_rate": strings.Replace(trimNum(inv.ExchangeRate), ".", money.StyleFor(st.NumberFormat).Decimal, 1),
 		"company":       map[string]any{"name": st.CompanyName, "email": st.CompanyEmail, "phone": st.CompanyPhone, "website": st.CompanyWebsite, "address1": st.Address1, "address2": st.Address2, "city": st.City, "state": st.State, "postal_code": st.PostalCode, "country": st.Country, "tax_id": st.TaxID, "vat_id": st.VatID, "address": strings.Join(d.From.Lines, ", ")},
@@ -441,7 +447,7 @@ func fmtMoney(in BuildInput, v float64) string {
 
 // DataKeys documents the placeholders available to Word templates.
 var DataKeys = []struct{ Key, Description string }{
-	{"number", "Invoice number"}, {"issue_date", "Issue date"}, {"due_date", "Due date"}, {"period", "Service period (start – end)"}, {"period_start", "Service period start"}, {"period_end", "Service period end"},
+	{"number", "Invoice number"}, {"issue_date", "Issue date"}, {"issue_place", "Place of issue"}, {"due_date", "Due date"}, {"period", "Service period (start – end)"}, {"period_start", "Service period start"}, {"period_end", "Service period end"},
 	{"po_number", "PO / reference"}, {"currency", "Currency code, e.g. EUR"}, {"currency_name", "Currency name"}, {"currency_symbol", "Currency symbol"}, {"base_currency", "Base currency code"}, {"exchange_rate", "Rate to base currency"}, {"status", "draft / sent / paid …"},
 	{"company.name", "Your company name"}, {"company.address", "Your address on one line"}, {"company.address1 / address2 / city / postal_code / state / country", "Address parts"}, {"company.email / phone / website / tax_id / vat_id", "Contact details"},
 	{"client.name", "Client name"}, {"client.contact", "Contact person"}, {"client.address", "Client address on one line"}, {"client.address1 / address2 / city / postal_code / state / country", "Address parts"}, {"client.email / phone / tax_id / registration_no / website", "Client contact details (tax_id = VAT ID, registration_no = company register number)"},
