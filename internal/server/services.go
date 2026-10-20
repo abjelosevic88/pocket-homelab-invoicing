@@ -27,7 +27,7 @@ const (
 
 // docsUses is what Invoicing does in other Pocket apps for a person (manifest Uses).
 var docsUses = []core.Use{
-	{App: "documents", Scopes: documentsScopes, Reason: "File issued invoices and quotes as documents of the client, and show a client's documents"},
+	{App: "documents", Scopes: documentsScopes, Reason: "File issued invoices, their attachments and company documents as documents of the client, and show a client's documents"},
 }
 
 func validMode(m string) bool { return m == modeCore || m == modeDirect || m == modeOff }
