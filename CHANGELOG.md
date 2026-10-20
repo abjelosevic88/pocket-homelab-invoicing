@@ -2,7 +2,7 @@
 
 All notable changes to this project are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/) and the project uses [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.7.0] - 2026-10-20
 
 ### Changed
 - **Pocket Documents replaces Paperless-ngx.** Issued invoices (the PDF and/or the uploaded files) and company documents are filed in the person's own [Pocket Documents](https://github.com/abjelosevic88/pocket-homelab-documents) under the client as correspondent, with the invoice type and tags, and the external id `invoicing:invoice:<id>` (`…:attachment:…`, `…:document:…`) so filing again links the existing document instead of making a copy (Documents answers `409 duplicate_of`). Uploads answer at once, so there is no "consuming…" state or task polling any more. The client page lists the client's documents in Pocket Documents (thumbnails through Invoicing, the browser never gets a token), Documents has a Pocket Documents tab (search, open, download, import into Company documents), and the client form picks or creates the correspondent. See [docs/pocket-documents.md](docs/pocket-documents.md).
