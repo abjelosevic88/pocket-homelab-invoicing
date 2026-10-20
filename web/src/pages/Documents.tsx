@@ -2,9 +2,9 @@ import { useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { api, V1 } from '../lib/api'
 import { fileSize, fmtDate, today } from '../lib/format'
-import type { Client, Document, PaperlessDoc, PaperlessLink } from '../lib/types'
+import type { Client, Document, DocsLink, DocsPage, PocketDoc } from '../lib/types'
 import { Card, Confirm, DropZone, Empty, Field, Loading, Modal, PageHeader, Tabs, useAsync, useDebounce, useToast } from '../components/ui'
-import { PaperlessBadge, PaperlessOffNote, usePaperless } from '../components/paperless'
+import { DocsBadge, DocsOffNote, usePocketDocs } from '../components/pocketdocs'
 import { Select } from '../components/Select'
 
 type Meta = { categories: Record<string, number>; expiring: Document[] }
@@ -17,11 +17,11 @@ function expiryState(d: Document): 'expired' | 'soon' | '' {
   return ''
 }
 
-export function DocForm({ initial, categories, clients, onSaved, onClose, paperlessOn, defaultClientId = 0 }: { initial?: Document; categories: string[]; clients: Client[]; onSaved: () => void; onClose: () => void; paperlessOn: boolean; defaultClientId?: number }) {
+export function DocForm({ initial, categories, clients, onSaved, onClose, docsOn, defaultClientId = 0 }: { initial?: Document; categories: string[]; clients: Client[]; onSaved: () => void; onClose: () => void; docsOn: boolean; defaultClientId?: number }) {
   const toast = useToast()
   const [files, setFiles] = useState<File[]>([])
   const [f, setF] = useState({ title: initial?.title || '', category: initial?.category || '', client_id: initial?.client_id || defaultClientId || 0, doc_date: initial?.doc_date || (initial ? '' : today()), expires_at: initial?.expires_at || '', notes: initial?.notes || '' })
-  const [sendPaperless, setSendPaperless] = useState(false)
+  const [fileInDocs, setFileInDocs] = useState(false)
   const [busy, setBusy] = useState(false)
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => setF(x => ({ ...x, [k]: k === 'client_id' ? Number(e.target.value) : e.target.value }))
   const submit = async (e: React.FormEvent) => {
@@ -36,7 +36,7 @@ export function DocForm({ initial, categories, clients, onSaved, onClose, paperl
         const fd = new FormData()
         files.forEach(x => fd.append('file', x))
         Object.entries(f).forEach(([k, v]) => fd.append(k, String(v ?? '')))
-        if (sendPaperless) fd.append('paperless', '1')
+        if (fileInDocs) fd.append('pocket_documents', '1')
         await api.post(`${V1}/documents`, fd)
         toast(files.length > 1 ? `${files.length} documents uploaded` : 'Document uploaded', 'success')
       }
@@ -55,14 +55,14 @@ export function DocForm({ initial, categories, clients, onSaved, onClose, paperl
         <Field label="Document date"><input type="date" value={f.doc_date} onChange={set('doc_date')} /></Field>
         <Field label="Expires (optional)" help="Shown with a warning 30 days before"><input type="date" value={f.expires_at} onChange={set('expires_at')} /></Field>
         <Field label="Notes" className="full"><textarea rows={3} value={f.notes} onChange={set('notes')} /></Field>
-        {!initial && paperlessOn && <label className="check full"><input type="checkbox" checked={sendPaperless} onChange={e => setSendPaperless(e.target.checked)} /> Also send to Paperless-ngx</label>}
+        {!initial && docsOn && <label className="check full"><input type="checkbox" checked={fileInDocs} onChange={e => setFileInDocs(e.target.checked)} /> Also file in Pocket Documents</label>}
       </div>
       <div className="form-actions"><button type="button" className="btn" onClick={onClose}>Cancel</button><button className="btn primary" disabled={busy}>{initial ? 'Save' : 'Upload'}</button></div>
     </form>
   )
 }
 
-function LocalDocuments({ paperlessOn }: { paperlessOn: boolean }) {
+function LocalDocuments({ docsOn }: { docsOn: boolean }) {
   const toast = useToast()
   const { data: clientList } = useAsync(() => api.get<Client[]>(`${V1}/clients`), [])
   const clients = clientList || []
@@ -78,7 +78,7 @@ function LocalDocuments({ paperlessOn }: { paperlessOn: boolean }) {
   const reload = () => { list.reload(); meta.reload() }
   const categories = Object.keys(meta.data?.categories || {}).sort()
   const send = async (d: Document) => {
-    try { const l = await api.post<PaperlessLink>(`${V1}/documents/${d.id}/paperless`); toast(l.paperless_id ? `Archived as Paperless #${l.paperless_id}` : 'Sent to Paperless, consuming…', 'success'); reload() } catch (e) { toast((e as Error).message, 'error') }
+    try { const l = await api.post<DocsLink>(`${V1}/documents/${d.id}/pocket-documents`); toast(`Filed in Pocket Documents as #${l.documents_id}`, 'success'); reload() } catch (e) { toast((e as Error).message, 'error') }
   }
   const expiring = meta.data?.expiring || []
   return (
@@ -97,7 +97,7 @@ function LocalDocuments({ paperlessOn }: { paperlessOn: boolean }) {
           <tbody>{list.data.map(d => {
             const ex = expiryState(d)
             return <tr key={d.id}>
-              <td><a className="bold" href={`${V1}/documents/${d.id}/file`} target="_blank" rel="noreferrer">{d.title}</a><div className="muted small">{d.filename}{d.notes ? ` · ${d.notes}` : ''} {paperlessOn && <PaperlessBadge link={d.paperless} />}</div></td>
+              <td><a className="bold" href={`${V1}/documents/${d.id}/file`} target="_blank" rel="noreferrer">{d.title}</a><div className="muted small">{d.filename}{d.notes ? ` · ${d.notes}` : ''} {docsOn && <DocsBadge link={d.pocket_documents} />}</div></td>
               <td>{d.category && <span className="badge">{d.category}</span>}</td>
               <td className="muted">{d.client_id ? <Link to={`/clients/${d.client_id}`}>{d.client_name}</Link> : ''}</td>
               <td className="muted">{fmtDate(d.doc_date)}</td>
@@ -107,56 +107,56 @@ function LocalDocuments({ paperlessOn }: { paperlessOn: boolean }) {
                 <a className="btn ghost sm" href={`${V1}/documents/${d.id}/file?download=1`} title="Download the file">Download</a>
                 <button className="btn ghost sm" onClick={() => setModal(d)} title="Edit title, category, dates">Edit</button>
                 <label className="btn ghost sm" title="Upload a new version of the file">Replace<input type="file" style={{ display: 'none' }} onChange={async e => { const f = e.target.files?.[0]; if (!f) return; const fd = new FormData(); fd.append('file', f); try { await api.post(`${V1}/documents/${d.id}/file`, fd); toast('File replaced', 'success'); reload() } catch (err) { toast((err as Error).message, 'error') } }} /></label>
-                {paperlessOn && !(d.paperless && d.paperless.paperless_id > 0) && <button className="btn ghost sm" onClick={() => send(d)} title="Send a copy to Paperless-ngx">To Paperless</button>}
+                {docsOn && !(d.pocket_documents && d.pocket_documents.documents_id > 0) && <button className="btn ghost sm" onClick={() => send(d)} title="File a copy in Pocket Documents">To Documents</button>}
                 <button className="btn ghost sm danger" onClick={() => setDel(d)} title="Delete">Delete</button>
               </td>
             </tr>
           })}</tbody>
         </table></div></Card>}
       {modal && <Modal title={modal === 'new' ? 'Upload documents' : 'Edit document'} size="lg" onClose={() => setModal(null)}>
-        <DocForm initial={modal === 'new' ? undefined : modal} categories={categories} clients={clients} paperlessOn={paperlessOn} onSaved={() => { setModal(null); reload() }} onClose={() => setModal(null)} />
+        <DocForm initial={modal === 'new' ? undefined : modal} categories={categories} clients={clients} docsOn={docsOn} onSaved={() => { setModal(null); reload() }} onClose={() => setModal(null)} />
       </Modal>}
-      {del && <Confirm title="Delete document" message={<>Delete <b>{del.title}</b>? The file is removed from this app{del.paperless?.paperless_id ? ' (it stays in Paperless)' : ''}.</>} onCancel={() => setDel(null)} onConfirm={async () => { await api.del(`${V1}/documents/${del.id}`); setDel(null); toast('Deleted', 'success'); reload() }} />}
+      {del && <Confirm title="Delete document" message={<>Delete <b>{del.title}</b>? The file is removed from this app{del.pocket_documents?.documents_id ? ' (it stays in Pocket Documents)' : ''}.</>} onCancel={() => setDel(null)} onConfirm={async () => { await api.del(`${V1}/documents/${del.id}`); setDel(null); toast('Deleted', 'success'); reload() }} />}
     </>
   )
 }
 
-function PaperlessBrowser() {
+function DocsBrowser() {
   const toast = useToast()
   const [q, setQ] = useState('')
   const [page, setPage] = useState(1)
   const dq = useDebounce(q)
   useEffect(() => { setPage(1) }, [dq])
-  const res = useAsync(() => api.get<{ count: number; page: number; pages: number; results: PaperlessDoc[]; linked: Record<number, PaperlessLink> }>(`${V1}/paperless/documents?q=${encodeURIComponent(dq)}&page=${page}`), [dq, page])
+  const res = useAsync(() => api.get<DocsPage>(`${V1}/pocket-documents/documents?q=${encodeURIComponent(dq)}&page=${page}`), [dq, page])
   const [importing, setImporting] = useState<number | null>(null)
-  const importDoc = async (d: PaperlessDoc) => {
+  const importDoc = async (d: PocketDoc) => {
     setImporting(d.id)
-    try { await api.post(`${V1}/paperless/documents/${d.id}/import`, {}); toast(`"${d.title}" copied into Documents`, 'success'); res.reload() } catch (e) { toast((e as Error).message, 'error') } finally { setImporting(null) }
+    try { await api.post(`${V1}/pocket-documents/documents/${d.id}/import`, {}); toast(`"${d.title}" copied into Company documents`, 'success'); res.reload() } catch (e) { toast((e as Error).message, 'error') } finally { setImporting(null) }
   }
   return (
     <>
       <div className="filters">
-        <input className="search" placeholder="Full-text search in Paperless…" value={q} onChange={e => setQ(e.target.value)} />
+        <input className="search" placeholder="Search in Pocket Documents (from:client tag:x created:2026 …)" value={q} onChange={e => setQ(e.target.value)} />
         <span className="muted small">{res.data ? `${res.data.count} document${res.data.count === 1 ? '' : 's'}` : ''}</span>
         <span className="spacer" />
         {res.data && res.data.pages > 1 && <span className="row"><button className="btn sm" disabled={page <= 1} onClick={() => setPage(p => p - 1)}>‹</button><span className="muted small">{page} / {res.data.pages}</span><button className="btn sm" disabled={page >= res.data.pages} onClick={() => setPage(p => p + 1)}>›</button></span>}
       </div>
-      {res.error ? <div className="callout warn">{String(res.error)}</div> : res.loading && !res.data ? <Loading /> : !res.data?.results.length ? <Empty title="Nothing found in Paperless" /> :
+      {res.error ? <div className="callout warn">{String(res.error)}</div> : res.loading && !res.data ? <Loading /> : !res.data?.results.length ? <Empty title="Nothing found in Pocket Documents" /> :
         <Card flush><div className="table-wrap"><table className="table">
           <thead><tr><th></th><th>Title</th><th>Correspondent</th><th>Type</th><th>Tags</th><th>Created</th><th></th></tr></thead>
           <tbody>{res.data.results.map(d => {
             const linked = res.data!.linked?.[d.id]
             return <tr key={d.id}>
-              <td style={{ width: 48 }}><a href={`${V1}/paperless/documents/${d.id}/file`} target="_blank" rel="noreferrer"><img src={`${V1}/paperless/documents/${d.id}/thumb`} alt="" style={{ width: 40, height: 52, objectFit: 'cover', borderRadius: 4, border: '1px solid var(--border)', background: 'var(--surface-2)' }} loading="lazy" /></a></td>
-              <td><a className="bold" href={`${V1}/paperless/documents/${d.id}/file`} target="_blank" rel="noreferrer">{d.title}</a><div className="muted small">#{d.id}{d.archive_serial_number ? ` · ASN ${d.archive_serial_number}` : ''}{d.original_file_name ? ` · ${d.original_file_name}` : ''}{linked && <> · <span className="badge paid">{linked.kind === 'document' ? 'in Documents' : linked.kind === 'invoice' ? 'invoice' : 'invoice file'}</span></>}</div></td>
+              <td style={{ width: 48 }}><a href={`${V1}/pocket-documents/documents/${d.id}/file`} target="_blank" rel="noreferrer"><img src={`${V1}/pocket-documents/documents/${d.id}/thumb`} alt="" style={{ width: 40, height: 52, objectFit: 'cover', borderRadius: 4, border: '1px solid var(--border)', background: 'var(--surface-2)' }} loading="lazy" /></a></td>
+              <td><a className="bold" href={`${V1}/pocket-documents/documents/${d.id}/file`} target="_blank" rel="noreferrer">{d.title}</a><div className="muted small">#{d.id}{d.asn ? ` · ASN ${d.asn}` : ''}{d.original_file_name ? ` · ${d.original_file_name}` : ''}{linked && <> · <span className="badge paid">{linked.kind === 'document' ? 'in Company documents' : linked.kind === 'invoice' ? 'invoice' : 'invoice file'}</span></>}</div></td>
               <td className="muted">{d.correspondent}</td>
               <td className="muted">{d.document_type}</td>
               <td>{d.tags.map(t => <span key={t} className="badge" style={{ marginRight: 4 }}>{t}</span>)}</td>
               <td className="muted">{fmtDate(d.created)}</td>
               <td className="actions">
-                <a className="btn ghost sm" href={d.url} target="_blank" rel="noreferrer" title="Open this document in Paperless-ngx (new tab)">Open in Paperless ↗</a>
-                <a className="btn ghost sm" href={`${V1}/paperless/documents/${d.id}/file?download=1`} title="Download the file">Download</a>
-                {linked?.kind === 'document' ? <span className="muted small">already in Documents</span> : linked?.kind === 'invoice' || linked?.kind === 'attachment' ? <Link className="btn ghost sm" to={linked.kind === 'invoice' ? `/invoices/${linked.ref_id}` : '/invoices'} title="Open the invoice this file belongs to">Open invoice</Link> : <button className="btn ghost sm" disabled={importing === d.id} onClick={() => importDoc(d)} title="Copy this file into Pocket Invoicing Documents">{importing === d.id ? 'Importing…' : 'Import'}</button>}
+                <a className="btn ghost sm" href={d.url} target="_blank" rel="noreferrer" title="Open this document in Pocket Documents (new tab)">Open ↗</a>
+                <a className="btn ghost sm" href={`${V1}/pocket-documents/documents/${d.id}/file?download=1`} title="Download the file">Download</a>
+                {linked?.kind === 'document' ? <span className="muted small">already in Company documents</span> : linked?.kind === 'invoice' || linked?.kind === 'attachment' ? <Link className="btn ghost sm" to={linked.kind === 'invoice' ? `/invoices/${linked.ref_id}` : '/invoices'} title="Open the invoice this file belongs to">Open invoice</Link> : <button className="btn ghost sm" disabled={importing === d.id} onClick={() => importDoc(d)} title="Copy this file into Pocket Invoicing's Company documents">{importing === d.id ? 'Importing…' : 'Import'}</button>}
               </td>
             </tr>
           })}</tbody>
@@ -168,16 +168,16 @@ function PaperlessBrowser() {
 export { expiryState }
 
 export default function Documents() {
-  const pl = usePaperless()
-  const [tab, setTab] = useState<'local' | 'paperless'>('local')
-  const on = !!pl?.configured
+  const pd = usePocketDocs()
+  const [tab, setTab] = useState<'local' | 'pocket'>('local')
+  const on = !!pd?.configured
   return (
     <>
       <PageHeader title="Documents" sub="Company papers in one place: contracts, registrations, tax decisions, bank letters, certificates." />
-      {pl && !on && <PaperlessOffNote />}
-      {on && pl?.ok === false && <div className="callout warn mb">Paperless-ngx is configured but unreachable: {pl.error}</div>}
-      {on && <Tabs tabs={[{ id: 'local' as const, label: 'Company documents' }, { id: 'paperless' as const, label: `Paperless-ngx${pl?.document_count ? ` (${pl.document_count})` : ''}` }]} value={tab} onChange={setTab} />}
-      {tab === 'local' ? <LocalDocuments paperlessOn={on} /> : <PaperlessBrowser />}
+      {pd && !on && <DocsOffNote status={pd} />}
+      {on && pd?.ok === false && <div className="callout warn mb">Pocket Documents is connected but unreachable: {pd.error}</div>}
+      {on && <Tabs tabs={[{ id: 'local' as const, label: 'Company documents' }, { id: 'pocket' as const, label: `Pocket Documents${pd?.document_count ? ` (${pd.document_count})` : ''}` }]} value={tab} onChange={setTab} />}
+      {tab === 'local' || !on ? <LocalDocuments docsOn={on} /> : <DocsBrowser />}
     </>
   )
 }

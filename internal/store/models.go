@@ -49,34 +49,33 @@ type TaxRate struct {
 
 // Client is a customer.
 type Client struct {
-	ID                       int64   `json:"id"`
-	Name                     string  `json:"name"`
-	ContactName              string  `json:"contact_name"`
-	Email                    string  `json:"email"`
-	Phone                    string  `json:"phone"`
-	Address1                 string  `json:"address1"`
-	Address2                 string  `json:"address2"`
-	City                     string  `json:"city"`
-	State                    string  `json:"state"`
-	PostalCode               string  `json:"postal_code"`
-	Country                  string  `json:"country"`
-	TaxID                    string  `json:"tax_id"`
-	RegistrationNo           string  `json:"registration_no"` // company register number, e.g. RCS B274410
-	Website                  string  `json:"website"`
-	Currency                 string  `json:"currency"`
-	BillingMode              string  `json:"billing_mode"`
-	DefaultRate              float64 `json:"default_rate"`
-	PaymentTermsDays         int     `json:"payment_terms_days"`
-	TemplateID               *int64  `json:"template_id"`
-	EmailSubject             string  `json:"email_subject"`              // per-client override of the invoice email subject ("" = global)
-	EmailBody                string  `json:"email_body"`                 // per-client override of the invoice email body ("" = global)
-	EmailCC                  string  `json:"email_cc"`                   // extra recipients, comma separated
-	PaperlessCorrespondentID int64   `json:"paperless_correspondent_id"` // 0 = not linked
-	PaperlessCorrespondent   string  `json:"paperless_correspondent"`    // cached name for display
-	Notes                    string  `json:"notes"`
-	Archived                 bool    `json:"archived"`
-	CreatedAt                string  `json:"created_at"`
-	UpdatedAt                string  `json:"updated_at"`
+	ID                     int64   `json:"id"`
+	Name                   string  `json:"name"`
+	ContactName            string  `json:"contact_name"`
+	Email                  string  `json:"email"`
+	Phone                  string  `json:"phone"`
+	Address1               string  `json:"address1"`
+	Address2               string  `json:"address2"`
+	City                   string  `json:"city"`
+	State                  string  `json:"state"`
+	PostalCode             string  `json:"postal_code"`
+	Country                string  `json:"country"`
+	TaxID                  string  `json:"tax_id"`
+	RegistrationNo         string  `json:"registration_no"` // company register number, e.g. RCS B274410
+	Website                string  `json:"website"`
+	Currency               string  `json:"currency"`
+	BillingMode            string  `json:"billing_mode"`
+	DefaultRate            float64 `json:"default_rate"`
+	PaymentTermsDays       int     `json:"payment_terms_days"`
+	TemplateID             *int64  `json:"template_id"`
+	EmailSubject           string  `json:"email_subject"`           // per-client override of the invoice email subject ("" = global)
+	EmailBody              string  `json:"email_body"`              // per-client override of the invoice email body ("" = global)
+	EmailCC                string  `json:"email_cc"`                // extra recipients, comma separated
+	DocumentsCorrespondent string  `json:"documents_correspondent"` // correspondent in Pocket Documents, by name ("" = not linked)
+	Notes                  string  `json:"notes"`
+	Archived               bool    `json:"archived"`
+	CreatedAt              string  `json:"created_at"`
+	UpdatedAt              string  `json:"updated_at"`
 
 	// Computed (list views)
 	InvoiceCount int64   `json:"invoice_count,omitempty"`
@@ -133,7 +132,7 @@ type Attachment struct {
 	Size        int64  `json:"size"`
 	CreatedAt   string `json:"created_at"`
 
-	Paperless *PaperlessLink `json:"paperless,omitempty"`
+	PocketDocs *DocsLink `json:"pocket_documents,omitempty"`
 }
 
 // CustomFieldDef describes a user-defined invoice field (Settings → Invoicing).
@@ -204,10 +203,10 @@ type Invoice struct {
 	CustomFields map[string]string `json:"custom_fields"`
 	WorkedDays   []string          `json:"worked_days"` // dates picked in the day calendar (YYYY-MM-DD)
 
-	Items       []InvoiceItem  `json:"items,omitempty"`
-	Payments    []Payment      `json:"payments,omitempty"`
-	Attachments []Attachment   `json:"attachments,omitempty"`
-	Paperless   *PaperlessLink `json:"paperless,omitempty"`
+	Items       []InvoiceItem `json:"items,omitempty"`
+	Payments    []Payment     `json:"payments,omitempty"`
+	Attachments []Attachment  `json:"attachments,omitempty"`
+	PocketDocs  *DocsLink     `json:"pocket_documents,omitempty"`
 }
 
 // Payment records money received against an invoice.
@@ -368,10 +367,25 @@ type Document struct {
 	CreatedAt   string `json:"created_at"`
 	UpdatedAt   string `json:"updated_at"`
 
-	Paperless *PaperlessLink `json:"paperless,omitempty"`
+	PocketDocs *DocsLink `json:"pocket_documents,omitempty"`
 }
 
-// PaperlessLink records that a local file was archived in Paperless-ngx.
+// DocsLink records that a local file (invoice PDF, invoice attachment or
+// company document) was filed in Pocket Documents.
+type DocsLink struct {
+	UserID      int64  `json:"-"`
+	Kind        string `json:"kind"` // document | invoice | attachment
+	RefID       int64  `json:"ref_id"`
+	DocumentsID int64  `json:"documents_id"` // 0 = the last attempt failed (Error says why)
+	Title       string `json:"title"`
+	Error       string `json:"error,omitempty"`
+	URL         string `json:"url,omitempty"` // filled by the server: the document in the browser
+	CreatedAt   string `json:"created_at"`
+	UpdatedAt   string `json:"updated_at"`
+}
+
+// PaperlessLink records that a local file was archived in Paperless-ngx
+// (before Pocket Documents replaced it; kept for history and the adoption into DocsLink).
 type PaperlessLink struct {
 	UserID      int64  `json:"-"`
 	Kind        string `json:"kind"`

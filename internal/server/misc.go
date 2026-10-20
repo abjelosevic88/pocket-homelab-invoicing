@@ -158,7 +158,7 @@ func (s *Server) handleExportJSON(w http.ResponseWriter, r *http.Request) {
 	uid := uidOf(r)
 	st, _ := s.store.GetSettings(ctx, uid)
 	st.SMTPPassword = ""
-	st.PaperlessToken = ""
+	st.DocumentsToken = ""
 	clients, _ := s.store.ListClients(ctx, uid, true, "")
 	invoices, _, _ := s.store.ListInvoices(ctx, uid, store.InvoiceFilter{})
 	full := make([]store.Invoice, 0, len(invoices))

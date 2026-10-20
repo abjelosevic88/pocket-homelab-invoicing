@@ -84,17 +84,19 @@ type Settings struct {
 	ReminderDays     string `json:"reminder_days"` // comma separated days after due date, e.g. "3,7,14"
 	RemindersEnabled bool   `json:"reminders_enabled"`
 
-	// Paperless-ngx integration (optional): through Pocket Core, a URL and token of one's own, or off
-	PaperlessURL                  string `json:"paperless_url"`                   // API base, e.g. http://paperless:8000
-	PaperlessExternalURL          string `json:"paperless_external_url"`          // URL used for links in the browser (defaults to PaperlessURL)
-	PaperlessToken                string `json:"paperless_token"`                 // API token (never cleared by an empty PUT)
-	PaperlessTags                 string `json:"paperless_tags"`                  // comma-separated tag names added to every upload
-	PaperlessInvoiceType          string `json:"paperless_invoice_type"`          // document type for invoices (created if missing)
-	PaperlessCreateCorrespondents bool   `json:"paperless_create_correspondents"` // set the client as correspondent (created if missing)
-	PaperlessArchiveInvoices      string `json:"paperless_archive_invoices"`      // off | sent | paid — archive the invoice automatically
-	PaperlessCategoryAsType       bool   `json:"paperless_category_as_type"`      // use the document category as Paperless document type
-	PaperlessClearToken           bool   `json:"paperless_clear_token,omitempty"` // transient: PUT with true removes the stored token
-	PaperlessMode                 string `json:"paperless_mode"`                  // core | direct | off; empty = direct with a token, else core when Pocket Core is there
+	// Pocket Documents (optional): issued invoices and company documents are
+	// filed there. Through a Pocket Core link (nothing to paste), a URL and a
+	// pd_ API token of one's own, or off.
+	DocumentsMode                 string `json:"documents_mode"`                  // core | direct | off; empty = direct with a token, else core when Pocket Core is there
+	DocumentsURL                  string `json:"documents_url"`                   // direct: how this app reaches it, e.g. http://pocket-documents:8080 (empty = ask Core / DOCUMENTS_URL)
+	DocumentsPublicURL            string `json:"documents_public_url"`            // direct: what a browser opens (defaults to DocumentsURL)
+	DocumentsToken                string `json:"documents_token"`                 // direct: the person's pd_ API token (never cleared by an empty PUT)
+	DocumentsClearToken           bool   `json:"documents_clear_token,omitempty"` // transient: PUT with true removes the stored token
+	DocumentsTags                 string `json:"documents_tags"`                  // comma-separated tag names added to everything filed
+	DocumentsInvoiceType          string `json:"documents_invoice_type"`          // document type for invoices (created if missing)
+	DocumentsCreateCorrespondents bool   `json:"documents_create_correspondents"` // file under the client's name when the client has no correspondent (created if missing)
+	DocumentsArchiveInvoices      string `json:"documents_archive_invoices"`      // off | sent | paid — file the invoice automatically
+	DocumentsCategoryAsType       bool   `json:"documents_category_as_type"`      // use the company document's category as document type
 
 	SetupComplete bool `json:"setup_complete"`
 }
@@ -132,11 +134,11 @@ func DefaultSettings() Settings {
 		IncomeTaxBasis:                "revenue",
 		IncomeTaxByPaymentDate:        true,
 		IncomeTaxLabel:                "Income tax",
-		PaperlessTags:                 "pocket-invoicing",
-		PaperlessInvoiceType:          "Invoice",
-		PaperlessCreateCorrespondents: true,
-		PaperlessArchiveInvoices:      "off",
-		PaperlessCategoryAsType:       true,
+		DocumentsTags:                 "pocket-invoicing",
+		DocumentsInvoiceType:          "Invoice",
+		DocumentsCreateCorrespondents: true,
+		DocumentsArchiveInvoices:      "off",
+		DocumentsCategoryAsType:       true,
 	}
 }
 

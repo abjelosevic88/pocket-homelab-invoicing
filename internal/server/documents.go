@@ -122,7 +122,7 @@ func (s *Server) handleGetDocument(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err, "get document")
 		return
 	}
-	d.Paperless = s.paperlessLink(r.Context(), uidOf(r), "document", d.ID)
+	d.PocketDocs = s.docsLinkFor(r.Context(), uidOf(r), "document", d.ID)
 	writeJSON(w, http.StatusOK, d)
 }
 
@@ -177,10 +177,8 @@ func (s *Server) handleUploadDocuments(w http.ResponseWriter, r *http.Request) {
 		s.store.LogActivity(ctx, uid, "document", d.ID, "created", "Uploaded "+d.Title)
 		saved = append(saved, d)
 	}
-	if r.FormValue("paperless") == "1" {
-		for i := range saved {
-			s.paperlessSendDocument(ctx, uid, &saved[i], false)
-		}
+	if r.FormValue("pocket_documents") == "1" && len(saved) > 0 {
+		s.docsSendDocumentAsync(uid, append([]store.Document(nil), saved...))
 	}
 	s.decorateDocuments(ctx, uid, saved)
 	writeJSON(w, http.StatusCreated, saved)
@@ -220,7 +218,7 @@ func (s *Server) handleUpdateDocument(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	d, _ = s.store.GetDocument(ctx, uid, d.ID)
-	d.Paperless = s.paperlessLink(ctx, uid, "document", d.ID)
+	d.PocketDocs = s.docsLinkFor(ctx, uid, "document", d.ID)
 	writeJSON(w, http.StatusOK, d)
 }
 
@@ -262,7 +260,7 @@ func (s *Server) handleReplaceDocumentFile(w http.ResponseWriter, r *http.Reques
 	}
 	_ = os.Remove(old)
 	d, _ = s.store.GetDocument(ctx, uid, d.ID)
-	d.Paperless = s.paperlessLink(ctx, uid, "document", d.ID)
+	d.PocketDocs = s.docsLinkFor(ctx, uid, "document", d.ID)
 	writeJSON(w, http.StatusOK, d)
 }
 
@@ -303,7 +301,7 @@ func (s *Server) handleDeleteDocument(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
-// decorateDocuments attaches Paperless link info to a list.
+// decorateDocuments attaches Pocket Documents link info to a list.
 func (s *Server) decorateDocuments(ctx context.Context, uid int64, list []store.Document) {
 	if len(list) == 0 {
 		return
@@ -312,13 +310,15 @@ func (s *Server) decorateDocuments(ctx context.Context, uid int64, list []store.
 	for i := range list {
 		ids[i] = list[i].ID
 	}
-	links, err := s.store.PaperlessLinksFor(ctx, uid, "document", ids)
-	if err != nil {
+	links, err := s.store.DocsLinksFor(ctx, uid, "document", ids)
+	if err != nil || len(links) == 0 {
 		return
 	}
+	st, _ := s.store.GetSettings(ctx, uid)
+	public := s.docsPublicFor(ctx, uid, st)
 	for i := range list {
 		if l, ok := links[list[i].ID]; ok {
-			list[i].Paperless = s.resolvePaperlessLink(ctx, l)
+			list[i].PocketDocs = withURL(l, public)
 		}
 	}
 }

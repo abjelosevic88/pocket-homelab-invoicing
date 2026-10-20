@@ -40,7 +40,9 @@ func (s *Server) Bootstrap(ctx context.Context) error {
 			}
 		}
 	}
-	s.seedPaperlessEnv(ctx)
+	if s.cfg.PaperlessEnvSet {
+		s.log.Warn("PAPERLESS_URL / PAPERLESS_TOKEN are set but ignored: Pocket Invoicing files invoices in Pocket Documents now (Settings → Pocket Documents); remove them from the environment")
+	}
 	if s.cfg.DemoData {
 		if err := s.seedDemo(ctx); err != nil {
 			return err

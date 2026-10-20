@@ -4,6 +4,18 @@ All notable changes to this project are documented here. Format follows [Keep a 
 
 ## [Unreleased]
 
+### Changed
+- **Pocket Documents replaces Paperless-ngx.** Issued invoices (the PDF and/or the uploaded files) and company documents are filed in the person's own [Pocket Documents](https://github.com/abjelosevic88/pocket-homelab-documents) under the client as correspondent, with the invoice type and tags, and the external id `invoicing:invoice:<id>` (`…:attachment:…`, `…:document:…`) so filing again links the existing document instead of making a copy (Documents answers `409 duplicate_of`). Uploads answer at once, so there is no "consuming…" state or task polling any more. The client page lists the client's documents in Pocket Documents (thumbnails through Invoicing, the browser never gets a token), Documents has a Pocket Documents tab (search, open, download, import into Company documents), and the client form picks or creates the correspondent. See [docs/pocket-documents.md](docs/pocket-documents.md).
+- Settings → **Pocket Documents** (was Settings → Paperless): **Pocket Core | Direct | Off** per person. Through Pocket Core it is an app link: the manifest now declares `uses: [{app: documents, scopes: [documents:read, documents:write]}]` and Invoicing acts as the person with a short-lived link token (`ActAs`) on every use; Direct is a URL (optional with Core or `DOCUMENTS_URL`) and the person's own `pd_` API token. The mode in effect is reported to Core as target `documents`. The manifest no longer lists the Paperless service (`services` is empty).
+- API: `/api/v1/paperless/…` is now `/api/v1/pocket-documents/…` (`status`, `documents` with `?client_id=` for a client's documents, `documents/{pid}/file|thumb|import`, `correspondents`, `correspondents/sync`, `links/{id}`); `POST /invoices/{id}/paperless`, `/attachments/{aid}/paperless`, `/documents/{id}/paperless` are now `…/pocket-documents`; `POST /settings/test-paperless` is `/settings/test-documents`; records carry `pocket_documents: {documents_id, url, error?}` instead of `paperless`; settings `paperless_*` are `documents_*`; clients have `documents_correspondent` (a name) instead of `paperless_correspondent_id` / `paperless_correspondent`; the company document upload field is `pocket_documents=1`.
+
+### Migration
+- `0013_pocket_documents`: new `documents_links` table; each client's Paperless correspondent carries over **by name** to `documents_correspondent` (ids in Pocket Documents differ; it is looked up by name when needed); the archiving preferences (tags, invoice type, automatic filing, correspondent toggles) carry over to the `documents_*` settings. The Paperless URL, token and mode do not. `paperless_links` and the `paperless_correspondent*` columns stay for history.
+- The scheduler links records filed in Paperless to the same document in Pocket Documents (its Paperless import keeps `paperless:<id>` as external id); one that is missing shows as "Not filed".
+
+### Removed
+- Paperless-ngx support, the `PAPERLESS_URL` / `PAPERLESS_TOKEN` environment variables (ignored; a warning is logged at startup while they are set). New: `DOCUMENTS_URL`, the default address for direct connections.
+
 ## [0.6.0] - 2026-10-20
 
 ### Added

@@ -30,42 +30,18 @@ func (s *Server) handleGetSettings(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, s.publicSettings(r.Context(), userFrom(r.Context()), st))
 }
 
-// publicSettings is maskSettings plus how the person reaches Paperless:
-// paperless_mode (in effect), paperless_via ("core" | "direct" | "" for not
-// connected), paperless_source (whose key Core last handed out) and
-// paperless_detail (why not).
+// publicSettings is maskSettings plus how the person reaches Pocket
+// Documents: documents_mode (in effect), documents_via ("core" | "direct" |
+// "" for not connected) and documents_detail (why not).
 func (s *Server) publicSettings(ctx context.Context, u *store.User, st store.Settings) map[string]any {
 	m := maskSettings(st)
-	mode := s.paperlessMode(st)
-	via, detail, source := "", "", ""
-	switch mode {
-	case modeOff:
-		detail = "switched off"
-	case modeDirect:
-		if st.PaperlessURL == "" || st.PaperlessToken == "" {
-			detail = "add the URL and a token"
-		} else {
-			via = modeDirect
-		}
-	case modeCore:
-		if u == nil {
-			detail = "nobody to act for"
-			break
-		}
-		via, detail = s.serviceStatus(ctx, u.Email, "paperless", "Paperless-ngx")
-		if via != "" {
-			source = s.sources.get(u.Email, "paperless")
-			if source == "" && u.Role != roleAdmin {
-				source = "personal" // Core gives members only their own key
-			}
-		}
-	}
-	m["paperless_mode"], m["paperless_via"], m["paperless_detail"], m["paperless_source"] = mode, via, detail, source
+	mode, via, detail := s.docsStatus(ctx, u, st)
+	m["documents_mode"], m["documents_via"], m["documents_detail"] = mode, via, detail
 	m["core_configured"] = s.core.Configured()
 	return m
 }
 
-// maskSettings hides the SMTP password and the Paperless token: they are write-only, and a
+// maskSettings hides the SMTP password and the Pocket Documents token: they are write-only, and a
 // blank value on PUT keeps the stored one. `*_set` says whether one is stored.
 func maskSettings(st store.Settings) map[string]any {
 	b, _ := json.Marshal(st)
@@ -73,8 +49,8 @@ func maskSettings(st store.Settings) map[string]any {
 	_ = json.Unmarshal(b, &m)
 	m["smtp_password_set"] = st.SMTPPassword != ""
 	m["smtp_password"] = ""
-	m["paperless_token_set"] = st.PaperlessToken != ""
-	m["paperless_token"] = ""
+	m["documents_token_set"] = st.DocumentsToken != ""
+	m["documents_token"] = ""
 	return m
 }
 
@@ -90,8 +66,8 @@ func (s *Server) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	prevPwd := st.SMTPPassword
-	prevToken, prevMode := st.PaperlessToken, st.PaperlessMode
-	prevEffective := s.paperlessMode(st)
+	prevToken, prevMode := st.DocumentsToken, st.DocumentsMode
+	prevEffective := s.documentsMode(st)
 	prevBase, prevProvider, prevSetup := st.BaseCurrency, st.ExchangeRateProvider, st.SetupComplete
 	prevText := map[string]string{"notes": st.DefaultNotes, "terms": st.DefaultTerms, "footer": st.DefaultFooter}
 	if err := decode(r, &st); err != nil {
@@ -105,23 +81,24 @@ func (s *Server) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 	if st.SMTPPassword == "" {
 		st.SMTPPassword = prevPwd // password is never echoed back as cleared
 	}
-	if st.PaperlessToken == "" {
-		st.PaperlessToken = prevToken
+	st.DocumentsToken = strings.TrimSpace(st.DocumentsToken)
+	if st.DocumentsToken == "" {
+		st.DocumentsToken = prevToken
 	}
-	disconnect := st.PaperlessClearToken
-	if st.PaperlessClearToken {
-		st.PaperlessToken = ""
+	disconnect := st.DocumentsClearToken
+	if st.DocumentsClearToken {
+		st.DocumentsToken = ""
 	}
-	st.PaperlessClearToken = false
-	if !validMode(st.PaperlessMode) {
-		st.PaperlessMode = prevMode
+	st.DocumentsClearToken = false
+	if !validMode(st.DocumentsMode) {
+		st.DocumentsMode = prevMode
 	}
-	st.PaperlessURL = strings.TrimRight(strings.TrimSpace(st.PaperlessURL), "/")
-	st.PaperlessExternalURL = strings.TrimRight(strings.TrimSpace(st.PaperlessExternalURL), "/")
-	switch st.PaperlessArchiveInvoices {
+	st.DocumentsURL = strings.TrimRight(strings.TrimSpace(st.DocumentsURL), "/")
+	st.DocumentsPublicURL = strings.TrimRight(strings.TrimSpace(st.DocumentsPublicURL), "/")
+	switch st.DocumentsArchiveInvoices {
 	case "off", "sent", "paid":
 	default:
-		st.PaperlessArchiveInvoices = "off"
+		st.DocumentsArchiveInvoices = "off"
 	}
 	st.BaseCurrency = strings.ToUpper(strings.TrimSpace(st.BaseCurrency))
 	if st.BaseCurrency == "" {
@@ -171,7 +148,7 @@ func (s *Server) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if disconnect || st.PaperlessMode != prevMode || s.paperlessMode(st) != prevEffective {
+	if disconnect || st.DocumentsMode != prevMode || s.documentsMode(st) != prevEffective {
 		go s.reportModes(context.Background(), uid) // Core's Links page follows the switch right away
 	}
 	if isAdmin {

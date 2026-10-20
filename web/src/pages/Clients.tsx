@@ -3,8 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { api, V1 } from '../lib/api'
 import { useApp } from '../lib/app-context'
 import { BILLING_MODES, money } from '../lib/format'
-import type { Client, InvoiceTemplate, PaperlessEntry } from '../lib/types'
-import { usePaperless } from '../components/paperless'
+import type { Client, DocsEntry, InvoiceTemplate } from '../lib/types'
+import { usePocketDocs } from '../components/pocketdocs'
 import { Card, Empty, Field, Loading, Modal, PageHeader, useAsync, useDebounce, useToast } from '../components/ui'
 import { Select } from '../components/Select'
 
@@ -13,8 +13,8 @@ const blank = (currency: string, terms: number): Partial<Client> => ({ name: '',
 export function ClientForm({ initial, onSaved, onClose }: { initial?: Client; onSaved: (c: Client) => void; onClose: () => void }) {
   const { settings, currencies } = useApp()
   const { data: templates } = useAsync(() => api.get<InvoiceTemplate[]>(`${V1}/templates`))
-  const paperless = usePaperless()
-  const { data: correspondents } = useAsync(() => paperless?.configured ? api.get<PaperlessEntry[]>(`${V1}/paperless/correspondents`) : Promise.resolve(null), [paperless?.configured])
+  const docs = usePocketDocs()
+  const { data: correspondents } = useAsync(() => docs?.configured ? api.get<DocsEntry[]>(`${V1}/pocket-documents/correspondents`) : Promise.resolve(null), [docs?.configured])
   const [createCorr, setCreateCorr] = useState(false)
   const [c, setC] = useState<Partial<Client>>(initial ?? blank(settings?.base_currency || 'EUR', settings?.default_due_days || 14))
   const [busy, setBusy] = useState(false)
@@ -25,7 +25,7 @@ export function ClientForm({ initial, onSaved, onClose }: { initial?: Client; on
     setBusy(true)
     try {
       const body = { ...c }
-      if (createCorr && c.name) { const e = await api.post<PaperlessEntry>(`${V1}/paperless/correspondents`, { name: c.name }); body.paperless_correspondent_id = e.id; body.paperless_correspondent = e.name }
+      if (createCorr && c.name) { const e = await api.post<DocsEntry>(`${V1}/pocket-documents/correspondents`, { name: c.name }); body.documents_correspondent = e.name }
       const saved = initial ? await api.put<Client>(`${V1}/clients/${initial.id}`, body) : await api.post<Client>(`${V1}/clients`, body)
       toast(initial ? 'Client updated' : 'Client created', 'success')
       onSaved(saved)
@@ -52,12 +52,13 @@ export function ClientForm({ initial, onSaved, onClose }: { initial?: Client; on
         <Field label="Default billing mode"><Select value={c.billing_mode || ''} onChange={v => setC(x => ({ ...x, billing_mode: v as Client['billing_mode'] }))} options={BILLING_MODES.map(b => ({ value: b.value, label: b.label }))} /></Field>
         <Field label="Default rate" help="Per hour / day / month depending on billing mode"><input type="number" step="0.01" value={c.default_rate} onChange={set('default_rate')} /></Field>
         <Field label="Payment terms (days)" help="0 = due on receipt"><input type="number" value={c.payment_terms_days} onChange={set('payment_terms_days')} /></Field>
-        {paperless?.configured && <Field label="Paperless correspondent" help="Documents of this correspondent show on the client page; everything archived for this client is filed under it">
-          <Select value={createCorr ? '__create__' : String(c.paperless_correspondent_id || '')} placeholder="— not linked —" onChange={v => { if (v === '__create__') { setCreateCorr(true) } else { setCreateCorr(false); setC(x => ({ ...x, paperless_correspondent_id: Number(v) || 0, paperless_correspondent: correspondents?.find(k => k.id === Number(v))?.name || '' })) } }}
+        {docs?.configured && <Field label="Pocket Documents correspondent" help="Documents of this correspondent show on the client page; everything filed for this client goes under it (linked by name)">
+          <Select value={createCorr ? '__create__' : c.documents_correspondent || ''} placeholder="— not linked —" onChange={v => { if (v === '__create__') { setCreateCorr(true) } else { setCreateCorr(false); setC(x => ({ ...x, documents_correspondent: v })) } }}
             options={[
               { value: '', label: '— not linked —' },
-              ...(correspondents || []).map(k => ({ value: String(k.id), label: k.name })),
-              ...(c.name && !correspondents?.some(k => k.name.toLowerCase() === c.name!.toLowerCase()) ? [{ value: '__create__', label: `Create "${c.name}" in Paperless` }] : []),
+              ...(correspondents || []).map(k => ({ value: k.name, label: k.name })),
+              ...(c.documents_correspondent && correspondents && !correspondents.some(k => k.name.toLowerCase() === c.documents_correspondent!.toLowerCase()) ? [{ value: c.documents_correspondent, label: c.documents_correspondent, hint: 'not in Pocket Documents yet; created when something is filed' }] : []),
+              ...(c.name && !correspondents?.some(k => k.name.toLowerCase() === c.name!.toLowerCase()) ? [{ value: '__create__', label: `Create "${c.name}" in Pocket Documents` }] : []),
             ]} />
         </Field>}
         <Field label="Invoice template" help="Used for this client's invoices unless an invoice picks another"><Select value={String(c.template_id || '')} onChange={v => setC(x => ({ ...x, template_id: Number(v) || null }))} placeholder="Global default" options={[{ value: '', label: 'Global default' }, ...(templates || []).map(t => ({ value: String(t.id), label: t.name, hint: t.kind === 'docx' ? 'Word' : undefined }))]} /></Field>

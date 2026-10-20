@@ -31,7 +31,7 @@ On the go, **[Pocket Homelab](https://pockethomelab.com/)** is its companion app
 | **Month-end wizard** | One screen per month: proposed invoice per client (working days, tracked hours or profile), fiscal counters pre-filled, create all drafts at once, then upload the fiscal PDF and email from the same list. Working-days calendar with holiday presets (RS, FBiH, Orthodox Easter). |
 | **Multi-currency** | Invoice each client in its own currency. Rates from the ECB or the Central Bank of BiH (free, no key) or entered manually. Payments can arrive in a third currency. Reports convert everything to your base currency at the rate locked on each invoice. 56 currencies seeded, add your own (incl. crypto). |
 | **PDF & templates** | Three built-in layouts (Classic, Modern, Minimal), accent colour, logo, per-template label overrides for localisation (RECHNUNG / FAKTURA / …), optional custom HTML template. **Word templates:** upload any `.docx` with `{{placeholders}}`, keep several, assign per client, converted by Gotenberg. Pure-Go PDF engine by default. |
-| **Documents** | Company papers (contracts, registration, tax, bank, certificates) in one place with categories, client link, expiry reminders. Optional **Paperless-ngx** integration: archive invoices and documents, browse and pull from your archive. |
+| **Documents** | Company papers (contracts, registration, tax, bank, certificates) in one place with categories, client link, expiry reminders. Optional **Pocket Documents** integration: file invoices and documents under the client, see each client's documents on the client page, browse and pull from your archive. |
 | **Payments** | Partial payments, multiple methods, references. Status flow draft → sent → viewed → partial → paid, with automatic overdue marking. |
 | **Client portal link** | Every invoice has a share link (`/i/<token>`) with web view, PDF download and view tracking. No client accounts needed. |
 | **Email** | SMTP with PDF attachment, test button, BCC yourself, automatic payment reminders (e.g. 3, 7, 14 days after due). |
@@ -44,7 +44,7 @@ On the go, **[Pocket Homelab](https://pockethomelab.com/)** is its companion app
 
 **Offers app links** (Pocket Core 0.5+): another Pocket app the person allowed in Core can read their invoices and the payments received (`invoices:read`: `GET /api/v1/invoices`, `/api/v1/invoices/{id}`, `/api/v1/payments`) with a five-minute `pcx_` token; every other route answers 403. Pocket Day uses it for the journal.
 
-**Service connections** (Pocket Core 0.15+): the manifest lists Paperless-ngx (`services: [{type: paperless}]`), and Settings → Paperless offers **Pocket Core | Direct | Off** per person. Through Core each person's own Paperless account is used, asked for on every use; Direct is the URL and token saved here. See [docs/paperless.md](docs/paperless.md).
+**Uses app links** (Pocket Core 0.5+): the manifest asks for `documents:read` + `documents:write` in **Pocket Documents** (`uses: [{app: documents, …}]`), and Settings → Pocket Documents offers **Pocket Core | Direct | Off** per person. Through Core Invoicing acts as the person in their own Pocket Documents with a short-lived link token asked for on every use; Direct is a URL and the person's own `pd_` token saved here. See [docs/pocket-documents.md](docs/pocket-documents.md).
 
 ## Quick start
 
@@ -134,7 +134,7 @@ Details and examples: [docs/billing-modes.md](docs/billing-modes.md).
 - **Chromium / Gotenberg engines:** render the customisable HTML template (Go `html/template`). Use `ghcr.io/…:latest-chromium` or `docker compose --profile gotenberg up -d`.
 - Localise labels per template: Settings → Templates → Labels.
 
-See [docs/templates.md](docs/templates.md) and, for Word templates, [docs/word-templates.md](docs/word-templates.md) (samples in `docs/templates/`). Company documents and the optional Paperless-ngx integration are described in [docs/paperless.md](docs/paperless.md).
+See [docs/templates.md](docs/templates.md) and, for Word templates, [docs/word-templates.md](docs/word-templates.md) (samples in `docs/templates/`). Company documents and the optional Pocket Documents integration are described in [docs/pocket-documents.md](docs/pocket-documents.md).
 
 ## API & webhooks
 

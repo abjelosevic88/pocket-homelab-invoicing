@@ -230,7 +230,7 @@ func (s *Server) handleGetInvoice(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err, "get invoice")
 		return
 	}
-	s.decorateInvoicePaperless(r.Context(), inv)
+	s.decorateInvoiceDocs(r.Context(), inv)
 	writeJSON(w, http.StatusOK, inv)
 }
 
@@ -403,7 +403,7 @@ func (s *Server) handleInvoiceStatus(w http.ResponseWriter, r *http.Request) {
 	case store.StatusPaid:
 		s.publishInvoice("invoicing.invoice_paid", full)
 	}
-	s.paperlessAutoArchive(full)
+	s.docsAutoFile(full)
 	writeJSON(w, http.StatusOK, full)
 }
 
@@ -420,9 +420,9 @@ func (s *Server) handleDeleteInvoice(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.removeAttachmentFiles(id)
-	_ = s.store.DeletePaperlessLink(r.Context(), uid, "invoice", id)
+	_ = s.store.DeleteDocsLink(r.Context(), uid, "invoice", id)
 	for _, a := range inv.Attachments {
-		_ = s.store.DeletePaperlessLink(r.Context(), uid, "attachment", a.ID)
+		_ = s.store.DeleteDocsLink(r.Context(), uid, "attachment", a.ID)
 	}
 	s.store.LogActivity(r.Context(), uid, "invoice", id, "deleted", "Invoice "+inv.Number+" deleted")
 	s.hooks.Emit(uid, "invoice.deleted", map[string]any{"id": id, "number": inv.Number})
@@ -755,7 +755,7 @@ func (s *Server) handleSendInvoice(w http.ResponseWriter, r *http.Request) {
 	full, _ := s.store.GetInvoice(ctx, uid, inv.ID)
 	s.hooks.Emit(uid, "invoice.sent", full)
 	s.publishInvoice("invoicing.invoice_sent", full)
-	s.paperlessAutoArchive(full)
+	s.docsAutoFile(full)
 	writeJSON(w, http.StatusOK, full)
 }
 

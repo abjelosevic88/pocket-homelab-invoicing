@@ -61,9 +61,13 @@ type Config struct {
 	SchedulerEnabled  bool
 	SchedulerInterval time.Duration
 
-	// Paperless-ngx (optional defaults; Settings → Paperless overrides)
-	PaperlessURL   string
-	PaperlessToken string
+	// Pocket Documents: where a direct connection reaches it when the person
+	// gave no URL and Pocket Core cannot say (Settings → Pocket Documents).
+	// Tokens are personal (pd_…), so there is no box-wide one.
+	DocumentsURL string
+	// PaperlessEnvSet: PAPERLESS_URL / PAPERLESS_TOKEN are still set; they are
+	// ignored now that Pocket Documents replaced Paperless (logged once at startup).
+	PaperlessEnvSet bool
 
 	// Pocket Core: when CORE_URL is set the app registers itself on start,
 	// publishes events and accepts the tokens Core hands to paired phones.
@@ -145,8 +149,8 @@ func Load() (*Config, error) {
 		ChromiumPath:    env("CHROMIUM_PATH", "chromium"),
 		GotenbergURL:    strings.TrimRight(env("GOTENBERG_URL", "http://gotenberg:3000"), "/"),
 		DocxConverter:   strings.ToLower(env("DOCX_CONVERTER", "gotenberg")),
-		PaperlessURL:    strings.TrimRight(env("PAPERLESS_URL", ""), "/"),
-		PaperlessToken:  env("PAPERLESS_TOKEN", ""),
+		DocumentsURL:    strings.TrimRight(env("DOCUMENTS_URL", ""), "/"),
+		PaperlessEnvSet: env("PAPERLESS_URL", "") != "" || env("PAPERLESS_TOKEN", "") != "",
 		LibreOfficePath: env("LIBREOFFICE_PATH", "soffice"),
 
 		ExchangeRateProvider: strings.ToLower(env("EXCHANGE_RATE_PROVIDER", "frankfurter")),

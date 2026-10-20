@@ -96,8 +96,10 @@ func (s *Store) DeleteDocument(ctx context.Context, uid, id int64) error {
 	if _, err := s.GetDocument(ctx, uid, id); err != nil {
 		return err
 	}
-	if _, err := s.DB.ExecContext(ctx, `DELETE FROM paperless_links WHERE kind = 'document' AND ref_id = ? AND user_id = ?`, id, uid); err != nil {
-		return err
+	for _, t := range []string{"documents_links", "paperless_links"} {
+		if _, err := s.DB.ExecContext(ctx, `DELETE FROM `+t+` WHERE kind = 'document' AND ref_id = ? AND user_id = ?`, id, uid); err != nil {
+			return err
+		}
 	}
 	_, err := s.DB.ExecContext(ctx, `DELETE FROM documents WHERE id = ? AND user_id = ?`, id, uid)
 	return err
@@ -140,34 +142,34 @@ func (s *Store) ExpiringDocuments(ctx context.Context, uid int64, until string) 
 	return out, rows.Err()
 }
 
-// ---------- Paperless links ----------
+// ---------- Pocket Documents links ----------
 
-const paperlessCols = `kind, ref_id, paperless_id, task_id, title, error, created_at, updated_at, COALESCE(user_id, 0)`
+const docsLinkCols = `kind, ref_id, documents_id, title, error, created_at, updated_at, COALESCE(user_id, 0)`
 
-func scanPaperless(sc interface{ Scan(...any) error }) (*PaperlessLink, error) {
-	var l PaperlessLink
-	if err := sc.Scan(&l.Kind, &l.RefID, &l.PaperlessID, &l.TaskID, &l.Title, &l.Error, &l.CreatedAt, &l.UpdatedAt, &l.UserID); err != nil {
+func scanDocsLink(sc interface{ Scan(...any) error }) (*DocsLink, error) {
+	var l DocsLink
+	if err := sc.Scan(&l.Kind, &l.RefID, &l.DocumentsID, &l.Title, &l.Error, &l.CreatedAt, &l.UpdatedAt, &l.UserID); err != nil {
 		return nil, err
 	}
 	return &l, nil
 }
 
-// GetPaperlessLink returns the link for a record, or nil when none exists.
-func (s *Store) GetPaperlessLink(ctx context.Context, uid int64, kind string, refID int64) (*PaperlessLink, error) {
-	l, err := scanPaperless(s.DB.QueryRowContext(ctx, `SELECT `+paperlessCols+` FROM paperless_links WHERE kind = ? AND ref_id = ? AND user_id = ?`, kind, refID, uid))
+// GetDocsLink returns the link for a record, or nil when none exists.
+func (s *Store) GetDocsLink(ctx context.Context, uid int64, kind string, refID int64) (*DocsLink, error) {
+	l, err := scanDocsLink(s.DB.QueryRowContext(ctx, `SELECT `+docsLinkCols+` FROM documents_links WHERE kind = ? AND ref_id = ? AND user_id = ?`, kind, refID, uid))
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
 	return l, err
 }
 
-// PaperlessLinksFor returns links of one kind for a set of ids.
-func (s *Store) PaperlessLinksFor(ctx context.Context, uid int64, kind string, ids []int64) (map[int64]*PaperlessLink, error) {
-	out := map[int64]*PaperlessLink{}
+// DocsLinksFor returns links of one kind for a set of ids.
+func (s *Store) DocsLinksFor(ctx context.Context, uid int64, kind string, ids []int64) (map[int64]*DocsLink, error) {
+	out := map[int64]*DocsLink{}
 	if len(ids) == 0 {
 		return out, nil
 	}
-	q := `SELECT ` + paperlessCols + ` FROM paperless_links WHERE user_id = ? AND kind = ? AND ref_id IN (?` + strings.Repeat(",?", len(ids)-1) + `)`
+	q := `SELECT ` + docsLinkCols + ` FROM documents_links WHERE user_id = ? AND kind = ? AND ref_id IN (?` + strings.Repeat(",?", len(ids)-1) + `)`
 	args := make([]any, 0, len(ids)+2)
 	args = append(args, uid, kind)
 	for _, id := range ids {
@@ -179,7 +181,7 @@ func (s *Store) PaperlessLinksFor(ctx context.Context, uid int64, kind string, i
 	}
 	defer rows.Close()
 	for rows.Next() {
-		l, err := scanPaperless(rows)
+		l, err := scanDocsLink(rows)
 		if err != nil {
 			return nil, err
 		}
@@ -188,57 +190,78 @@ func (s *Store) PaperlessLinksFor(ctx context.Context, uid int64, kind string, i
 	return out, rows.Err()
 }
 
-// SavePaperlessLink inserts or updates one of the user's links. The record it points at
-// (document, invoice or attachment) must belong to the user.
-func (s *Store) SavePaperlessLink(ctx context.Context, uid int64, l *PaperlessLink) error {
-	table := map[string]string{"document": "documents", "invoice": "invoices", "attachment": "attachments"}[l.Kind]
+var linkTables = map[string]string{"document": "documents", "invoice": "invoices", "attachment": "attachments"}
+
+// ownsLinked checks that the record a link points at (document, invoice or
+// attachment) belongs to the user.
+func (s *Store) ownsLinked(ctx context.Context, uid int64, kind string, refID int64) error {
+	table := linkTables[kind]
 	if table == "" {
-		return fmt.Errorf("unknown paperless link kind %q", l.Kind)
+		return fmt.Errorf("unknown link kind %q", kind)
 	}
 	var n int
-	if err := s.DB.QueryRowContext(ctx, `SELECT COUNT(1) FROM `+table+` WHERE id = ? AND user_id = ?`, l.RefID, uid).Scan(&n); err != nil {
+	if err := s.DB.QueryRowContext(ctx, `SELECT COUNT(1) FROM `+table+` WHERE id = ? AND user_id = ?`, refID, uid).Scan(&n); err != nil {
 		return err
 	}
 	if n == 0 {
 		return ErrNotFound
 	}
+	return nil
+}
+
+// SaveDocsLink inserts or updates one of the user's links. The record it points at
+// (document, invoice or attachment) must belong to the user.
+func (s *Store) SaveDocsLink(ctx context.Context, uid int64, l *DocsLink) error {
+	if err := s.ownsLinked(ctx, uid, l.Kind, l.RefID); err != nil {
+		return err
+	}
 	l.UserID = uid
-	_, err := s.DB.ExecContext(ctx, `INSERT INTO paperless_links (user_id, kind, ref_id, paperless_id, task_id, title, error, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-		ON CONFLICT(kind, ref_id) DO UPDATE SET paperless_id = excluded.paperless_id, task_id = excluded.task_id, title = excluded.title, error = excluded.error, updated_at = excluded.updated_at
-		WHERE paperless_links.user_id = excluded.user_id`,
-		uid, l.Kind, l.RefID, l.PaperlessID, l.TaskID, l.Title, l.Error, Now())
+	_, err := s.DB.ExecContext(ctx, `INSERT INTO documents_links (user_id, kind, ref_id, documents_id, title, error, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(kind, ref_id) DO UPDATE SET documents_id = excluded.documents_id, title = excluded.title, error = excluded.error, updated_at = excluded.updated_at
+		WHERE documents_links.user_id = excluded.user_id`,
+		uid, l.Kind, l.RefID, l.DocumentsID, l.Title, l.Error, Now())
 	return err
 }
 
-// DeletePaperlessLink removes a link (does not touch Paperless itself).
-func (s *Store) DeletePaperlessLink(ctx context.Context, uid int64, kind string, refID int64) error {
-	_, err := s.DB.ExecContext(ctx, `DELETE FROM paperless_links WHERE kind = ? AND ref_id = ? AND user_id = ?`, kind, refID, uid)
-	return err
+// DeleteDocsLink removes a link (does not touch Pocket Documents itself),
+// and the record's old Paperless link with it so it is not adopted again.
+func (s *Store) DeleteDocsLink(ctx context.Context, uid int64, kind string, refID int64) error {
+	for _, t := range []string{"documents_links", "paperless_links"} {
+		if _, err := s.DB.ExecContext(ctx, `DELETE FROM `+t+` WHERE kind = ? AND ref_id = ? AND user_id = ?`, kind, refID, uid); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
-// PendingPaperlessLinks returns links whose consume task has not resolved yet.
-func (s *Store) PendingPaperlessLinks(ctx context.Context, uid int64) ([]PaperlessLink, error) {
-	rows, err := s.DB.QueryContext(ctx, `SELECT `+paperlessCols+` FROM paperless_links WHERE user_id = ? AND paperless_id = 0 AND task_id <> '' AND error = '' ORDER BY created_at`, uid)
+// DocsLinkByDocumentsID finds a local record already linked to a Pocket Documents document.
+func (s *Store) DocsLinkByDocumentsID(ctx context.Context, uid, documentsID int64) (*DocsLink, error) {
+	l, err := scanDocsLink(s.DB.QueryRowContext(ctx, `SELECT `+docsLinkCols+` FROM documents_links WHERE user_id = ? AND documents_id = ? AND documents_id > 0 ORDER BY created_at LIMIT 1`, uid, documentsID))
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	return l, err
+}
+
+// PaperlessLinksToAdopt returns the user's old Paperless links (a document id
+// there) whose record has no Pocket Documents link yet.
+func (s *Store) PaperlessLinksToAdopt(ctx context.Context, uid int64) ([]PaperlessLink, error) {
+	rows, err := s.DB.QueryContext(ctx, `SELECT p.kind, p.ref_id, p.paperless_id, p.task_id, p.title, p.error, p.created_at, p.updated_at, COALESCE(p.user_id, 0)
+		FROM paperless_links p
+		WHERE p.user_id = ? AND p.paperless_id > 0
+		  AND NOT EXISTS (SELECT 1 FROM documents_links d WHERE d.kind = p.kind AND d.ref_id = p.ref_id)
+		ORDER BY p.created_at`, uid)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	out := []PaperlessLink{}
 	for rows.Next() {
-		l, err := scanPaperless(rows)
-		if err != nil {
+		var l PaperlessLink
+		if err := rows.Scan(&l.Kind, &l.RefID, &l.PaperlessID, &l.TaskID, &l.Title, &l.Error, &l.CreatedAt, &l.UpdatedAt, &l.UserID); err != nil {
 			return nil, err
 		}
-		out = append(out, *l)
+		out = append(out, l)
 	}
 	return out, rows.Err()
-}
-
-// PaperlessLinkByPaperlessID finds a local record already linked to a Paperless document.
-func (s *Store) PaperlessLinkByPaperlessID(ctx context.Context, uid, paperlessID int64) (*PaperlessLink, error) {
-	l, err := scanPaperless(s.DB.QueryRowContext(ctx, `SELECT `+paperlessCols+` FROM paperless_links WHERE user_id = ? AND paperless_id = ? AND paperless_id > 0 ORDER BY created_at LIMIT 1`, uid, paperlessID))
-	if err == sql.ErrNoRows {
-		return nil, nil
-	}
-	return l, err
 }

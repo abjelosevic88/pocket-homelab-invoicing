@@ -143,7 +143,7 @@ func (s *Server) handleDeleteAttachment(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	_ = os.Remove(s.attachmentPath(a))
-	_ = s.store.DeletePaperlessLink(r.Context(), uid, "attachment", a.ID)
+	_ = s.store.DeleteDocsLink(r.Context(), uid, "attachment", a.ID)
 	if err := s.store.DeleteAttachment(r.Context(), uid, a.ID); err != nil {
 		s.fail(w, err, "delete attachment")
 		return

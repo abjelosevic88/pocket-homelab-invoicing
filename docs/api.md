@@ -182,6 +182,6 @@ automation:
         message: "💸 {{ trigger.json.data.client_name }} paid {{ trigger.json.data.number }}"
 ```
 
-## Documents and Paperless-ngx
+## Documents and Pocket Documents
 
-See [paperless.md](paperless.md) for the document store endpoints (`/api/v1/documents…`) and the Paperless proxy endpoints (`/api/v1/paperless/…`).
+See [pocket-documents.md](pocket-documents.md) for the document store endpoints (`/api/v1/documents…`) and the Pocket Documents endpoints (`/api/v1/pocket-documents/…`, `POST /api/v1/invoices/{id}/pocket-documents` …).

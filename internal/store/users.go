@@ -173,7 +173,7 @@ func (s *Store) DeleteAPIToken(ctx context.Context, userID, id int64) error {
 
 // ContentTables lists every table whose rows belong to one user (user_id column).
 // invoice_items is not listed: its rows inherit the owner of their invoice.
-var ContentTables = []string{"clients", "products", "tax_rates", "invoice_templates", "invoices", "payments", "recurring_invoices", "time_entries", "expenses", "webhooks", "activity_log", "email_log", "attachments", "documents", "paperless_links"}
+var ContentTables = []string{"clients", "products", "tax_rates", "invoice_templates", "invoices", "payments", "recurring_invoices", "time_entries", "expenses", "webhooks", "activity_log", "email_log", "attachments", "documents", "paperless_links", "documents_links"}
 
 // OwnerID returns the box owner: the first admin account, else the first account, else 0.
 func (s *Store) OwnerID(ctx context.Context) int64 {

@@ -79,11 +79,11 @@ pocket-invoicing scheduler       # run jobs once and exit
 pocket-invoicing version
 ```
 
-## Paperless-ngx (optional)
+## Pocket Documents (optional)
 
 | Variable | Default | Description |
 |---|---|---|
-| `PAPERLESS_URL` | (empty) | Paperless-ngx base URL as reached from the container. Copied once into the owner's Settings → Paperless (Direct) on the first start with an account; ignored after that. |
-| `PAPERLESS_TOKEN` | (empty) | API token, seeded once with `PAPERLESS_URL`. On a box with Pocket Core neither is needed: Settings → Paperless → Pocket Core uses each person's own Paperless account from Core. |
+| `DOCUMENTS_URL` | (empty) | Pocket Documents as reached from the container (e.g. `http://pocket-documents:8080`), for **direct** connections of people who saved no URL of their own and when Pocket Core cannot say. Tokens are personal (`pd_…`, Settings → Pocket Documents), so there is no box-wide one. On a box with Pocket Core nothing is needed: each person's link goes through Core. |
+| `PAPERLESS_URL` / `PAPERLESS_TOKEN` | – | **Ignored** since Pocket Documents replaced Paperless-ngx; a warning is logged at startup while they are set. Remove them. |
 
-See [paperless.md](paperless.md).
+See [pocket-documents.md](pocket-documents.md).

@@ -75,7 +75,7 @@ func (s *Server) handleCreatePayment(w http.ResponseWriter, r *http.Request) {
 	if updated.Status == store.StatusPaid {
 		s.hooks.Emit(uid, "invoice.paid", updated)
 		s.publishInvoice("invoicing.invoice_paid", updated)
-		s.paperlessAutoArchive(updated)
+		s.docsAutoFile(updated)
 	}
 	writeJSON(w, http.StatusCreated, map[string]any{"payment": p, "invoice": updated})
 }

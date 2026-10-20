@@ -60,6 +60,9 @@ func TestPerUserMigrationBackfill(t *testing.T) {
 	}
 	defer s.Close()
 	for _, tbl := range ContentTables {
+		if tbl == "documents_links" {
+			continue // 0013, empty right after the move
+		}
 		var total, owned int
 		if err := s.DB.QueryRow(`SELECT COUNT(1), COALESCE(SUM(user_id = 1), 0) FROM `+tbl).Scan(&total, &owned); err != nil {
 			t.Fatal(err)
@@ -128,8 +131,8 @@ func TestStoreScopesByUser(t *testing.T) {
 	if err := s.CreatePayment(ctx, b, &Payment{InvoiceID: inv.ID, Date: "2026-01-02", Amount: 1, Currency: "EUR", AppliedAmount: 1}); err != ErrNotFound {
 		t.Fatalf("B pays A's invoice: %v", err)
 	}
-	if err := s.SavePaperlessLink(ctx, b, &PaperlessLink{Kind: "invoice", RefID: inv.ID, PaperlessID: 1}); err != ErrNotFound {
-		t.Fatalf("B links A's invoice to Paperless: %v", err)
+	if err := s.SaveDocsLink(ctx, b, &DocsLink{Kind: "invoice", RefID: inv.ID, DocumentsID: 1}); err != ErrNotFound {
+		t.Fatalf("B links A's invoice to Pocket Documents: %v", err)
 	}
 	if d, _ := s.Dashboard(ctx, b); d.Outstanding != 0 || d.ActiveClients != 0 {
 		t.Fatalf("B's dashboard shows A's numbers: %+v", d)

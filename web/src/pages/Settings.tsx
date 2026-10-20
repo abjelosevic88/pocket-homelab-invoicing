@@ -7,10 +7,10 @@ import type { APIToken, ConnMode, Currency, CustomFieldDef, ExchangeRate, Holida
 import { Card, Confirm, Empty, Field, Loading, Modal, Tabs, useAsync, useToast } from '../components/ui'
 import { Select } from '../components/Select'
 
-type Tab = 'company' | 'invoicing' | 'currencies' | 'taxes' | 'catalog' | 'templates' | 'email' | 'paperless' | 'api' | 'webhooks' | 'users' | 'backup' | 'system'
+type Tab = 'company' | 'invoicing' | 'currencies' | 'taxes' | 'catalog' | 'templates' | 'email' | 'documents' | 'api' | 'webhooks' | 'users' | 'backup' | 'system'
 const TABS: { id: Tab; label: string }[] = [
   { id: 'company', label: 'Company' }, { id: 'invoicing', label: 'Invoicing' }, { id: 'currencies', label: 'Currencies' }, { id: 'taxes', label: 'Taxes' }, { id: 'catalog', label: 'Catalog' },
-  { id: 'templates', label: 'Templates' }, { id: 'email', label: 'Email' }, { id: 'paperless', label: 'Paperless' }, { id: 'api', label: 'API tokens' }, { id: 'webhooks', label: 'Webhooks' }, { id: 'users', label: 'Users' }, { id: 'backup', label: 'Backup' }, { id: 'system', label: 'System' },
+  { id: 'templates', label: 'Templates' }, { id: 'email', label: 'Email' }, { id: 'documents', label: 'Pocket Documents' }, { id: 'api', label: 'API tokens' }, { id: 'webhooks', label: 'Webhooks' }, { id: 'users', label: 'Users' }, { id: 'backup', label: 'Backup' }, { id: 'system', label: 'System' },
 ]
 
 export default function Settings() {
@@ -21,7 +21,7 @@ export default function Settings() {
   // Everything here is the signed-in person's own, except System (admins only) and the
   // user list; members see just their profile under that tab.
   const tabs = TABS.filter(t => isAdmin || t.id !== 'system').map(t => (!isAdmin && t.id === 'users' ? { ...t, label: 'Profile' } : t))
-  const tab = (tabs.find(t => t.id === sub)?.id || 'company') as Tab
+  const tab = (tabs.find(t => t.id === (sub === 'paperless' ? 'documents' : sub))?.id || 'company') as Tab // old bookmarks of the Paperless tab
   return (
     <>
       <div className="page-header"><div><h1>Settings</h1></div></div>
@@ -33,7 +33,7 @@ export default function Settings() {
       {tab === 'catalog' && <Catalog />}
       {tab === 'templates' && <Templates />}
       {tab === 'email' && <Email />}
-      {tab === 'paperless' && <Paperless />}
+      {tab === 'documents' && <PocketDocuments />}
       {tab === 'api' && <Tokens />}
       {tab === 'webhooks' && <Webhooks />}
       {tab === 'users' && <Users />}
@@ -617,33 +617,31 @@ function System() {
   )
 }
 
-// ---------- Paperless-ngx ----------
+// ---------- Pocket Documents ----------
 const connBadge = (mode: ConnMode, via?: string) => mode === 'off' ? <span className="badge">off</span>
   : via ? <span className="badge accent">{via === 'core' ? 'Pocket Core' : 'direct'}</span>
   : <span className="badge partial">not connected</span>
 
-const sourceText = (source?: string) => source === 'personal' ? ' (your own key)' : source === 'box' ? " (the box's key)" : ''
-
-/** Pocket Core | Off for one third-party service, with Direct as an advanced option
+/** Pocket Core | Off for one sibling app, with Direct as an advanced option
  * when the box has a Pocket Core (always shown while it is the current mode, and
  * shown normally without a Core); the switch saves at once. */
-function Connection({ app, mode, via, detail, source, core, onMode, onDisconnect, hasToken, test, direct }: {
-  app: string; mode: ConnMode; via?: string; detail?: string; source?: string; core: boolean; onMode: (m: ConnMode) => void; onDisconnect: () => void
+function Connection({ app, mode, via, detail, core, onMode, onDisconnect, hasToken, test, direct }: {
+  app: string; mode: ConnMode; via?: string; detail?: string; core: boolean; onMode: (m: ConnMode) => void; onDisconnect: () => void
   hasToken: boolean; test: React.ReactNode; direct: React.ReactNode
 }) {
   const [advanced, setAdvanced] = useState(false)
   const showDirect = !core || mode === 'direct' || advanced
   const ok = !!via
   const line = mode === 'off' ? `Off: Pocket Invoicing does not talk to ${app}.`
-    : mode === 'core' ? (ok ? `Connected through Pocket Core${sourceText(source)}. Nothing to fill in; switch it off for yourself in Pocket Core → Settings → Apps acting for me.` : `Not connected: ${detail}.`)
-    : (ok ? `Direct connection with your own ${app} URL and token; use Test connection to check it.` : `Not connected: ${detail || 'add the URL and a token'}.`)
+    : mode === 'core' ? (ok ? `Connected through a Pocket Core app link, as you. Nothing to fill in; switch it off for yourself in Pocket Core → Settings → Apps acting for me.` : `Not connected: ${detail}.`)
+    : (ok ? `Direct connection with your own ${app} API token; use Test connection to check it.` : `Not connected: ${detail || 'add an API token'}.`)
   return (
     <div className="conn-block">
       <div className="segmented" role="radiogroup">
-        {([['core', 'Pocket Core', core ? 'Through Pocket Core: your own account there, nothing to paste' : 'There is no Pocket Core on this box'], ['direct', 'Direct', 'Your own URL and API token'], ['off', 'Off', '']] as const).filter(([v]) => v !== 'direct' || showDirect).map(([v, label, title]) =>
+        {([['core', 'Pocket Core', core ? 'Through Pocket Core: acts as you there, nothing to paste' : 'There is no Pocket Core on this box'], ['direct', 'Direct', 'A URL and your own API token'], ['off', 'Off', '']] as const).filter(([v]) => v !== 'direct' || showDirect).map(([v, label, title]) =>
           <button type="button" key={v} role="radio" aria-checked={mode === v} title={title} className={mode === v ? 'active' : ''} onClick={() => onMode(v)}>{label}</button>)}
       </div>
-      {!showDirect && <div><button type="button" className="link-btn small" onClick={() => setAdvanced(true)}>Advanced: connect directly with a URL and key</button></div>}
+      {!showDirect && <div><button type="button" className="link-btn small" onClick={() => setAdvanced(true)}>Advanced: connect directly with a URL and token</button></div>}
       <div className={`conn-status ${mode === 'off' ? '' : ok ? 'ok' : 'bad'}`}><span className="dot" />{line}</div>
       {mode === 'direct' && <>
         {direct}
@@ -654,21 +652,21 @@ function Connection({ app, mode, via, detail, source, core, onMode, onDisconnect
   )
 }
 
-function Paperless() {
+function PocketDocuments() {
   const { s, set, put, save, busy, setS } = useSettingsForm()
   const { refresh } = useApp()
   const toast = useToast()
   const [testing, setTesting] = useState(false)
-  const [result, setResult] = useState<{ ok: boolean; version?: string; document_count?: number; via?: string; source?: string } | null>(null)
+  const [result, setResult] = useState<{ ok: boolean; document_count?: number; via?: string; url?: string } | null>(null)
   if (!s) return <Loading />
-  const configured = !!s.paperless_via
-  const typed = s.paperless_mode === 'direct' && !!s.paperless_token
+  const configured = !!s.documents_via
+  const typed = s.documents_mode === 'direct' && !!s.documents_token
   const test = async () => {
     setTesting(true); setResult(null)
     try {
-      const r = await api.post<{ ok: boolean; version: string; document_count: number; via: string; source: string }>(`${V1}/settings/test-paperless`, typed ? { url: s.paperless_url, token: s.paperless_token } : {})
+      const r = await api.post<{ ok: boolean; document_count: number; via: string; url: string }>(`${V1}/settings/test-documents`, typed ? { url: s.documents_url, token: s.documents_token } : {})
       setResult(r)
-      toast(`Connected to Paperless-ngx ${r.version || ''} (${r.document_count} documents)${r.via === 'core' ? ' through Pocket Core' + sourceText(r.source) : ''}`, 'success')
+      toast(`Connected to Pocket Documents (${r.document_count} documents)${r.via === 'core' ? ' through Pocket Core' : ''}`, 'success')
     } catch (e) { toast((e as Error).message, 'error') } finally { setTesting(false) }
   }
   // the switch and Disconnect are saved right away, like in the other Pocket apps
@@ -677,39 +675,39 @@ function Paperless() {
   }
   return (
     <div className="grid" style={{ maxWidth: 820 }}>
-      <Card title="Connection" actions={connBadge(s.paperless_mode, s.paperless_via)}>
-        <p className="muted small">Optional. Connected, invoices and company documents can be archived in <a href="https://docs.paperless-ngx.com/" target="_blank" rel="noreferrer">Paperless-ngx</a> and your Paperless archive can be browsed under Documents. Everything goes into <b>your</b> Paperless account: through Pocket Core with your own account there, or directly with a URL and an API token of yours (Paperless → top right → My profile → API token).</p>
-        <Connection app="Paperless-ngx" mode={s.paperless_mode} via={s.paperless_via} detail={s.paperless_detail} source={s.paperless_source} core={!!s.core_configured}
-          hasToken={!!s.paperless_token_set || !!s.paperless_url}
-          onMode={m => saveNow({ paperless_mode: m }, m === 'off' ? 'Paperless switched off' : m === 'core' ? 'Paperless through Pocket Core' : 'Direct Paperless connection')}
-          onDisconnect={() => saveNow({ paperless_url: '', paperless_external_url: '', paperless_token: '', paperless_clear_token: true }, 'Paperless URL and token removed')}
-          test={<><button type="button" className="btn" disabled={testing || (s.paperless_mode === 'direct' && !s.paperless_url)} onClick={test}>{testing ? 'Testing…' : 'Test connection'}</button>
-            {result && <span className="muted small">Paperless-ngx {result.version} · {result.document_count} documents</span>}</>}
+      <Card title="Connection" actions={connBadge(s.documents_mode, s.documents_via)}>
+        <p className="muted small">Optional. Connected, issued invoices and company documents are filed in <b>your</b> Pocket Documents, under the client as correspondent; each client page lists that correspondent's documents and Documents gets a tab to search your archive. With Pocket Core on the box nothing needs to be pasted; without it, use the Pocket Documents URL and an API token of yours (Pocket Documents → Settings → API tokens).</p>
+        <Connection app="Pocket Documents" mode={s.documents_mode} via={s.documents_via} detail={s.documents_detail} core={!!s.core_configured}
+          hasToken={!!s.documents_token_set || !!s.documents_url}
+          onMode={m => saveNow({ documents_mode: m }, m === 'off' ? 'Pocket Documents switched off' : m === 'core' ? 'Pocket Documents through Pocket Core' : 'Direct Pocket Documents connection')}
+          onDisconnect={() => saveNow({ documents_url: '', documents_public_url: '', documents_token: '', documents_clear_token: true }, 'Pocket Documents URL and token removed')}
+          test={<><button type="button" className="btn" disabled={testing} onClick={test}>{testing ? 'Testing…' : 'Test connection'}</button>
+            {result && <span className="muted small">{result.document_count} documents · {result.url}</span>}</>}
           direct={<div className="form-grid">
-            <Field label="Paperless URL" help="As reached from this container, e.g. http://paperless-ngx:8000"><input value={s.paperless_url} onChange={set('paperless_url')} placeholder="http://paperless:8000" /></Field>
-            <Field label="Browser URL (optional)" help="Used for links you click, when different from the URL above"><input value={s.paperless_external_url} onChange={set('paperless_external_url')} placeholder="https://paperless.example.org" /></Field>
-            <Field label="API token" help={s.paperless_token_set ? 'A token is stored. Leave blank to keep it; Save changes below to store a new one.' : 'Paperless → profile → API token; Save changes below to store it'}><input type="password" value={s.paperless_token} onChange={set('paperless_token')} autoComplete="new-password" placeholder={s.paperless_token_set ? '••••••••' : ''} /></Field>
+            <Field label="Pocket Documents URL" help="As reached from this container, e.g. http://pocket-documents:8080; empty = ask Pocket Core or DOCUMENTS_URL"><input value={s.documents_url} onChange={set('documents_url')} placeholder="http://pocket-documents:8080" /></Field>
+            <Field label="Browser URL (optional)" help="Used for links you click, when different from the URL above"><input value={s.documents_public_url} onChange={set('documents_public_url')} placeholder="https://documents.example.org" /></Field>
+            <Field label="API token" help={s.documents_token_set ? 'A token is stored. Leave blank to keep it; Save changes below to store a new one.' : 'Pocket Documents → Settings → API tokens (pd_…); Save changes below to store it'}><input type="password" value={s.documents_token} onChange={set('documents_token')} autoComplete="new-password" placeholder={s.documents_token_set ? '••••••••' : 'pd_…'} /></Field>
           </div>} />
       </Card>
-      <Card title="What gets archived">
+      <Card title="What gets filed">
         <div className="form-grid">
-          <Field label="Archive invoices automatically" help="Uses the same files as email attachments (Settings → Invoicing → Email attachment): generated PDF, your uploaded files, or both">
-            <Select value={s.paperless_archive_invoices} onChange={put('paperless_archive_invoices')} options={[{ value: 'off', label: 'Never', hint: 'manual button only' }, { value: 'sent', label: 'When marked as sent', hint: 'or paid' }, { value: 'paid', label: 'When paid' }]} />
+          <Field label="File invoices automatically" help="Uses the same files as email attachments (Settings → Invoicing → Email attachment): generated PDF, your uploaded files, or both">
+            <Select value={s.documents_archive_invoices} onChange={put('documents_archive_invoices')} options={[{ value: 'off', label: 'Never', hint: 'manual button only' }, { value: 'sent', label: 'When marked as sent', hint: 'or paid' }, { value: 'paid', label: 'When paid' }]} />
           </Field>
-          <Field label="Document type for invoices" help="Created in Paperless if missing"><input value={s.paperless_invoice_type} onChange={set('paperless_invoice_type')} placeholder="Invoice" /></Field>
-          <Field label="Tags" help="Comma separated; added to everything sent from here"><input value={s.paperless_tags} onChange={set('paperless_tags')} placeholder="pocket-invoicing, invoices" /></Field>
+          <Field label="Document type for invoices" help="Created in Pocket Documents if missing"><input value={s.documents_invoice_type} onChange={set('documents_invoice_type')} placeholder="Invoice" /></Field>
+          <Field label="Tags" help="Comma separated; added to everything filed from here (created if missing)"><input value={s.documents_tags} onChange={set('documents_tags')} placeholder="pocket-invoicing, invoices" /></Field>
           <div className="grid" style={{ gap: 8 }}>
-            <label className="check"><input type="checkbox" checked={s.paperless_create_correspondents} onChange={set('paperless_create_correspondents')} /> Set the client as correspondent (created if missing)</label>
-            <label className="check"><input type="checkbox" checked={s.paperless_category_as_type} onChange={set('paperless_category_as_type')} /> Use the document category as Paperless document type</label>
+            <label className="check"><input type="checkbox" checked={s.documents_create_correspondents} onChange={set('documents_create_correspondents')} /> File under the client's name when the client has no correspondent (created if missing)</label>
+            <label className="check"><input type="checkbox" checked={s.documents_category_as_type} onChange={set('documents_category_as_type')} /> Use the company document's category as document type</label>
           </div>
         </div>
       </Card>
       {configured && <Card title="Clients ↔ correspondents">
-        <p className="muted small">Each client can be linked to a Paperless correspondent (Clients → edit). The client page then shows that correspondent's documents, and everything archived for the client is filed under it. This matches unlinked clients to existing correspondents by name; optionally creates the missing ones.</p>
+        <p className="muted small">Each client can be linked to a correspondent in Pocket Documents (Clients → edit), by name. The client page then shows that correspondent's documents, and everything filed for the client goes under it. This matches unlinked clients to existing correspondents by name; optionally creates the missing ones.</p>
         <SyncCorrespondents />
       </Card>}
       {configured && <Card title="Where it shows up">
-        <p className="muted small" style={{ marginTop: 0 }}>Each invoice page has an "Archive to Paperless" button and each uploaded file a ⇪ button; Documents has "Send to Paperless" and a Paperless tab to search and copy documents back. Links to Paperless are stored locally, so deleting a document here never deletes it there.</p>
+        <p className="muted small" style={{ marginTop: 0 }}>Each invoice page has a "File in Documents" button and each uploaded file a "To Documents" button; Company documents have "To Documents" and the Documents page a Pocket Documents tab to search and copy documents back. Filing the same record again finds the first copy (it carries the id invoicing:&lt;kind&gt;:&lt;id&gt;), and links are stored here, so deleting something here never deletes it there.</p>
       </Card>}
       <SaveBar onSave={save} busy={busy} />
     </div>
@@ -723,12 +721,12 @@ function SyncCorrespondents() {
   const [res, setRes] = useState<{ matched: string[]; created: string[]; unmatched: string[] } | null>(null)
   const run = async () => {
     setBusy(true)
-    try { const r = await api.post<{ matched: string[]; created: string[]; unmatched: string[] }>(`${V1}/paperless/correspondents/sync`, { create }); setRes(r); toast(`${r.matched.length} matched, ${r.created.length} created, ${r.unmatched.length} left`, 'success') } catch (e) { toast((e as Error).message, 'error') } finally { setBusy(false) }
+    try { const r = await api.post<{ matched: string[]; created: string[]; unmatched: string[] }>(`${V1}/pocket-documents/correspondents/sync`, { create }); setRes(r); toast(`${r.matched.length} matched, ${r.created.length} created, ${r.unmatched.length} left`, 'success') } catch (e) { toast((e as Error).message, 'error') } finally { setBusy(false) }
   }
   return <>
     <div className="row" style={{ gap: 14, flexWrap: 'wrap' }}>
       <button type="button" className="btn" disabled={busy} onClick={run}>{busy ? 'Linking…' : 'Link clients to correspondents'}</button>
-      <label className="check"><input type="checkbox" checked={create} onChange={e => setCreate(e.target.checked)} /> Create missing correspondents in Paperless</label>
+      <label className="check"><input type="checkbox" checked={create} onChange={e => setCreate(e.target.checked)} /> Create missing correspondents in Pocket Documents</label>
     </div>
     {res && <div className="muted small" style={{ marginTop: 10, whiteSpace: 'pre-wrap' }}>
       {res.matched.length > 0 && <>Matched: {res.matched.join('; ')}{'\n'}</>}

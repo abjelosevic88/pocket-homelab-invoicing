@@ -24,8 +24,8 @@ import (
 	"github.com/abjelosevic88/pocket-homelab-invoicing/internal/config"
 	"github.com/abjelosevic88/pocket-homelab-invoicing/internal/currency"
 	"github.com/abjelosevic88/pocket-homelab-invoicing/internal/docx"
-	"github.com/abjelosevic88/pocket-homelab-invoicing/internal/paperless"
 	"github.com/abjelosevic88/pocket-homelab-invoicing/internal/pdf"
+	"github.com/abjelosevic88/pocket-homelab-invoicing/internal/pocketdocs"
 	"github.com/abjelosevic88/pocket-homelab-invoicing/internal/store"
 	"github.com/abjelosevic88/pocket-homelab-invoicing/internal/webhook"
 )
@@ -45,10 +45,8 @@ type Server struct {
 	provName string
 	prov     currency.Provider
 	hooks    *webhook.Dispatcher
-	plMu     sync.Mutex
-	pl       map[string]*paperless.Client // per URL+token: each user may point at their own Paperless
-	sources  sourceMemo                   // whose key Core last handed out, per person and service
-	plSeeded atomic.Bool                  // PAPERLESS_URL/TOKEN copied into the owner's settings
+	pdMu     sync.Mutex
+	pdNames  map[string]*pocketdocs.Names // Pocket Documents names per person and instance
 	webFS    fs.FS
 	started  time.Time
 	requests atomic.Int64
@@ -67,8 +65,9 @@ type Server struct {
 }
 
 type resolvedURL struct {
-	url string
-	at  time.Time
+	url    string
+	public string
+	at     time.Time
 }
 
 // New creates a server.
@@ -93,8 +92,8 @@ func New(cfg *config.Config, st *store.Store, log *slog.Logger, webFS fs.FS) *Se
 
 // coreLoop registers with Core on start (retrying until it answers) and
 // re-registers every 30 minutes so version and last-seen stay fresh; each
-// successful registration is followed by a report of everyone's Paperless
-// connection mode.
+// successful registration is followed by a report of everyone's Pocket
+// Documents connection mode.
 func (s *Server) coreLoop(ctx context.Context) {
 	wait := 5 * time.Second
 	for {
@@ -109,7 +108,7 @@ func (s *Server) coreLoop(ctx context.Context) {
 			s.log.Warn("pocket core: registration failed, retrying", "err", err, "in", wait.String())
 		} else {
 			wait = 30 * time.Minute
-			s.reportModes(ctx, 0) // on start and every 30 minutes: how everyone reaches Paperless
+			s.reportModes(ctx, 0) // on start and every 30 minutes: how everyone reaches Pocket Documents
 		}
 		select {
 		case <-ctx.Done():
@@ -130,7 +129,7 @@ func (s *Server) registerWithCore(ctx context.Context) error {
 		URL: s.cfg.CoreAppURL, PublicURL: s.cfg.BaseURL, HealthPath: "/healthz", EnvPrefix: "INVOICING",
 		Publishes: []string{"invoicing.invoice_created", "invoicing.invoice_sent", "invoicing.invoice_paid"},
 		Offers:    linkOffers,
-		Services:  serviceUses,
+		Uses:      docsUses,
 	}
 	if s.cfg.BaseURL != "" {
 		// ask Core for a relying-party client so "Sign in with Pocket Core" needs no configuration
@@ -182,23 +181,33 @@ func (s *Server) publishInvoice(topic string, inv *store.Invoice) {
 // resolveSibling asks Core where a sibling app lives (cached a minute) so the
 // *_URL settings may stay empty on a box with Core.
 func (s *Server) resolveSibling(ctx context.Context, slug string) string {
+	return s.resolveCached(ctx, slug).url
+}
+
+// resolveSiblingPublic is the address a browser opens for a sibling app.
+func (s *Server) resolveSiblingPublic(ctx context.Context, slug string) string {
+	r := s.resolveCached(ctx, slug)
+	return firstNonEmpty(r.public, r.url)
+}
+
+func (s *Server) resolveCached(ctx context.Context, slug string) resolvedURL {
 	if !s.core.Configured() {
-		return ""
+		return resolvedURL{}
 	}
 	s.coreMu.Lock()
 	if r, ok := s.resolved[slug]; ok && time.Since(r.at) < time.Minute {
 		s.coreMu.Unlock()
-		return r.url
+		return r
 	}
 	s.coreMu.Unlock()
-	url := ""
+	r := resolvedURL{at: time.Now()}
 	if res, err := s.core.Resolve(ctx, slug); err == nil {
-		url = res.URL
+		r.url, r.public = res.URL, res.PublicURL
 	}
 	s.coreMu.Lock()
-	s.resolved[slug] = resolvedURL{url: url, at: time.Now()}
+	s.resolved[slug] = r
 	s.coreMu.Unlock()
-	return url
+	return r
 }
 
 // coreStatus summarises the Pocket Core link for the About page.
@@ -275,7 +284,7 @@ func (s *Server) Router() http.Handler {
 			r.Post("/settings/logo", s.handleUploadLogo)
 			r.Delete("/settings/logo", s.handleDeleteLogo)
 			r.Post("/settings/test-email", s.handleTestEmail)
-			r.Post("/settings/test-paperless", s.handleTestPaperless)
+			r.Post("/settings/test-documents", s.handleTestDocs)
 
 			// Currencies and exchange rates are box-wide reference data: everyone reads them,
 			// only admins change them (see the admin group below).
@@ -331,8 +340,8 @@ func (s *Server) Router() http.Handler {
 			r.Post("/invoices/{id}/attachments", s.handleUploadAttachment)
 			r.Get("/attachments/{aid}", s.handleDownloadAttachment)
 			r.Delete("/attachments/{aid}", s.handleDeleteAttachment)
-			r.Post("/attachments/{aid}/paperless", s.handleAttachmentToPaperless)
-			r.Post("/invoices/{id}/paperless", s.handleInvoiceToPaperless)
+			r.Post("/attachments/{aid}/pocket-documents", s.handleAttachmentToDocs)
+			r.Post("/invoices/{id}/pocket-documents", s.handleInvoiceToDocs)
 
 			r.Get("/documents", s.handleListDocuments)
 			r.Post("/documents", s.handleUploadDocuments)
@@ -342,18 +351,17 @@ func (s *Server) Router() http.Handler {
 			r.Delete("/documents/{id}", s.handleDeleteDocument)
 			r.Get("/documents/{id}/file", s.handleDocumentFile)
 			r.Post("/documents/{id}/file", s.handleReplaceDocumentFile)
-			r.Post("/documents/{id}/paperless", s.handleDocumentToPaperless)
+			r.Post("/documents/{id}/pocket-documents", s.handleDocumentToDocs)
 
-			r.Get("/paperless/status", s.handlePaperlessStatus)
-			r.Get("/paperless/documents", s.handlePaperlessSearch)
-			r.Get("/paperless/names", s.handlePaperlessNames)
-			r.Get("/paperless/correspondents", s.handlePaperlessCorrespondents)
-			r.Post("/paperless/correspondents", s.handleCreateCorrespondent)
-			r.Post("/paperless/correspondents/sync", s.handleSyncCorrespondents)
-			r.Get("/paperless/documents/{pid}/file", s.handlePaperlessFile)
-			r.Get("/paperless/documents/{pid}/thumb", s.handlePaperlessFile)
-			r.Post("/paperless/documents/{pid}/import", s.handlePaperlessImport)
-			r.Delete("/paperless/links/{id}", s.handleUnlinkPaperless)
+			r.Get("/pocket-documents/status", s.handleDocsStatus)
+			r.Get("/pocket-documents/documents", s.handleDocsSearch)
+			r.Get("/pocket-documents/correspondents", s.handleDocsCorrespondents)
+			r.Post("/pocket-documents/correspondents", s.handleCreateCorrespondent)
+			r.Post("/pocket-documents/correspondents/sync", s.handleSyncCorrespondents)
+			r.Get("/pocket-documents/documents/{pid}/file", s.handleDocsFile)
+			r.Get("/pocket-documents/documents/{pid}/thumb", s.handleDocsFile)
+			r.Post("/pocket-documents/documents/{pid}/import", s.handleDocsImport)
+			r.Delete("/pocket-documents/links/{id}", s.handleUnlinkDocs)
 
 			r.Get("/payments", s.handleListPayments)
 			r.Post("/payments", s.handleCreatePayment)

@@ -322,7 +322,7 @@ func (s *Server) runRecurring(ctx context.Context, uid int64, rec *store.Recurri
 }
 
 // RunScheduler executes all periodic jobs once. Safe to call concurrently with requests.
-// Content jobs run per user, each with that user's own settings (SMTP, reminders, Paperless)
+// Content jobs run per user, each with that user's own settings (SMTP, reminders, Pocket Documents)
 // and touching only that user's records; exchange rates are box-wide.
 func (s *Server) RunScheduler(ctx context.Context) map[string]any {
 	result := map[string]any{}
@@ -338,7 +338,7 @@ func (s *Server) RunScheduler(ctx context.Context) map[string]any {
 	result["recurring_generated"] = generated
 	result["marked_overdue"] = overdue
 	if resolved > 0 {
-		result["paperless_resolved"] = resolved
+		result["documents_links_adopted"] = resolved
 	}
 	result["reminders_sent"] = reminders
 
@@ -363,7 +363,7 @@ func (s *Server) RunScheduler(ctx context.Context) map[string]any {
 	return result
 }
 
-// runSchedulerFor runs one user's recurring invoices, overdue marking, Paperless
+// runSchedulerFor runs one user's recurring invoices, overdue marking, Pocket Documents
 // follow-ups and payment reminders.
 func (s *Server) runSchedulerFor(ctx context.Context, uid int64) (generated, overdue, resolved, reminders int) {
 	// 1. Recurring invoices (catch up if several periods were missed while the container was down)
@@ -395,8 +395,8 @@ func (s *Server) runSchedulerFor(ctx context.Context, uid int64) (generated, ove
 	}
 	overdue = len(ids)
 
-	// 2b. Finish pending Paperless consume tasks (no-op when the user has no Paperless)
-	resolved = s.resolvePendingPaperless(ctx, uid)
+	// 2b. Carry old Paperless links over to Pocket Documents (no-op once none are left)
+	resolved = s.adoptPaperlessLinks(ctx, uid)
 
 	// 3. Payment reminders with the user's own SMTP settings
 	st, _ := s.store.GetSettings(ctx, uid)

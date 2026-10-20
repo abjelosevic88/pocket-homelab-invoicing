@@ -2,9 +2,9 @@ import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api, V1 } from '../lib/api'
 import { BILLING_MODES, fileSize, fmtDate, hours, money } from '../lib/format'
-import type { Document, Client, Invoice, PaperlessDoc, PaperlessLink, Recurring } from '../lib/types'
+import type { Document, Client, DocsLink, DocsPage, Invoice, Recurring } from '../lib/types'
 import { Badge, Card, Confirm, Empty, Loading, Modal, PageHeader, useAsync, useToast } from '../components/ui'
-import { PaperlessBadge, usePaperless } from '../components/paperless'
+import { DocsBadge, usePocketDocs } from '../components/pocketdocs'
 import { DocForm, expiryState } from './Documents'
 import { ClientForm } from './Clients'
 
@@ -59,7 +59,7 @@ export default function ClientDetail() {
         </Card>
       </div>
       <ClientDocuments client={c} />
-      <ClientPaperless client={c} onEdit={() => setEditing(true)} />
+      <ClientPocketDocs client={c} onEdit={() => setEditing(true)} />
       {data.recurring?.length > 0 && <Card title="Recurring profiles" flush>
         <table className="table"><thead><tr><th>Name</th><th>Frequency</th><th>Next run</th><th>Status</th></tr></thead>
           <tbody>{data.recurring.map(r => <tr key={r.id} className="clickable" onClick={() => navigate('/recurring')}><td className="bold">{r.name}</td><td>{r.frequency}{r.interval > 1 ? ` ×${r.interval}` : ''}</td><td>{fmtDate(r.next_run)}</td><td><Badge status={r.status} /></td></tr>)}</tbody></table>
@@ -72,21 +72,21 @@ export default function ClientDetail() {
 
 function ClientDocuments({ client }: { client: Client }) {
   const toast = useToast()
-  const pl = usePaperless()
-  const paperlessOn = !!pl?.configured
+  const pd = usePocketDocs()
+  const docsOn = !!pd?.configured
   const { data, reload } = useAsync(() => api.get<Document[]>(`${V1}/documents?client_id=${client.id}`), [client.id])
   const { data: meta } = useAsync(() => api.get<{ categories: Record<string, number> }>(`${V1}/documents/categories`), [])
   const [modal, setModal] = useState<'new' | Document | null>(null)
   const [del, setDel] = useState<Document | null>(null)
   const send = async (d: Document) => {
-    try { const l = await api.post<PaperlessLink>(`${V1}/documents/${d.id}/paperless`); toast(l.paperless_id ? `Archived as Paperless #${l.paperless_id}` : 'Sent to Paperless, consuming…', 'success'); reload() } catch (e) { toast((e as Error).message, 'error') }
+    try { const l = await api.post<DocsLink>(`${V1}/documents/${d.id}/pocket-documents`); toast(`Filed in Pocket Documents as #${l.documents_id}`, 'success'); reload() } catch (e) { toast((e as Error).message, 'error') }
   }
   return <>
     <Card title={<>Documents{data?.length ? <span className="muted small"> · {data.length}</span> : null}</>} actions={<><Link className="btn ghost sm" to={`/documents?client_id=${client.id}`}>All documents</Link><button className="btn sm" onClick={() => setModal('new')}>+ Upload</button></>} flush className="mb">
       {!data?.length ? <div className="empty muted">No documents for this client yet. Upload contracts, NDAs, purchase orders or anything else you want to keep with {client.name}.</div> :
         <table className="table"><thead><tr><th>Title</th><th>Category</th><th>Date</th><th>Expires</th><th className="num">Size</th><th></th></tr></thead>
           <tbody>{data.map(d => { const ex = expiryState(d); return <tr key={d.id}>
-            <td><a className="bold" href={`${V1}/documents/${d.id}/file`} target="_blank" rel="noreferrer">{d.title}</a><div className="muted small">{d.filename}{d.notes ? ` · ${d.notes}` : ''} {paperlessOn && <PaperlessBadge link={d.paperless} />}</div></td>
+            <td><a className="bold" href={`${V1}/documents/${d.id}/file`} target="_blank" rel="noreferrer">{d.title}</a><div className="muted small">{d.filename}{d.notes ? ` · ${d.notes}` : ''} {docsOn && <DocsBadge link={d.pocket_documents} />}</div></td>
             <td>{d.category && <span className="badge">{d.category}</span>}</td>
             <td className="muted">{fmtDate(d.doc_date)}</td>
             <td>{d.expires_at && <span className={`badge ${ex === 'expired' ? 'overdue' : ex === 'soon' ? 'partial' : ''}`}>{fmtDate(d.expires_at)}</span>}</td>
@@ -94,36 +94,36 @@ function ClientDocuments({ client }: { client: Client }) {
             <td className="actions">
               <a className="btn ghost sm" href={`${V1}/documents/${d.id}/file?download=1`} title="Download the file">Download</a>
               <button className="btn ghost sm" onClick={() => setModal(d)} title="Edit title, category, dates">Edit</button>
-              {paperlessOn && !(d.paperless && d.paperless.paperless_id > 0) && <button className="btn ghost sm" onClick={() => send(d)} title="Send a copy to Paperless-ngx">To Paperless</button>}
+              {docsOn && !(d.pocket_documents && d.pocket_documents.documents_id > 0) && <button className="btn ghost sm" onClick={() => send(d)} title="File a copy in Pocket Documents">To Documents</button>}
               <button className="btn ghost sm danger" onClick={() => setDel(d)} title="Delete">Delete</button>
             </td>
           </tr> })}</tbody></table>}
     </Card>
     {modal && <Modal title={modal === 'new' ? `Upload documents for ${client.name}` : 'Edit document'} size="lg" onClose={() => setModal(null)}>
-      <DocForm initial={modal === 'new' ? undefined : modal} categories={Object.keys(meta?.categories || {}).sort()} clients={[client]} defaultClientId={client.id} paperlessOn={paperlessOn} onSaved={() => { setModal(null); reload() }} onClose={() => setModal(null)} />
+      <DocForm initial={modal === 'new' ? undefined : modal} categories={Object.keys(meta?.categories || {}).sort()} clients={[client]} defaultClientId={client.id} docsOn={docsOn} onSaved={() => { setModal(null); reload() }} onClose={() => setModal(null)} />
     </Modal>}
-    {del && <Confirm title="Delete document" message={<>Delete <b>{del.title}</b>?{del.paperless?.paperless_id ? ' It stays in Paperless.' : ''}</>} onCancel={() => setDel(null)} onConfirm={async () => { await api.del(`${V1}/documents/${del.id}`); setDel(null); toast('Deleted', 'success'); reload() }} />}
+    {del && <Confirm title="Delete document" message={<>Delete <b>{del.title}</b>?{del.pocket_documents?.documents_id ? ' It stays in Pocket Documents.' : ''}</>} onCancel={() => setDel(null)} onConfirm={async () => { await api.del(`${V1}/documents/${del.id}`); setDel(null); toast('Deleted', 'success'); reload() }} />}
   </>
 }
 
-function ClientPaperless({ client, onEdit }: { client: Client; onEdit: () => void }) {
-  const pl = usePaperless()
-  const cid = client.paperless_correspondent_id
-  const { data, loading, error } = useAsync(() => pl?.configured && cid ? api.get<{ count: number; results: PaperlessDoc[] }>(`${V1}/paperless/documents?correspondent__id=${cid}&page_size=15`) : Promise.resolve(null), [pl?.configured, cid])
-  if (!pl?.configured) return null
-  if (!cid) return <div className="callout mb">Paperless-ngx is connected but this client is not linked to a correspondent yet. <button className="link-btn" onClick={onEdit}>Edit the client</button> and pick one (or create it) to see their Paperless documents here.</div>
-  const plUrl = `${pl.url}/documents?correspondent__id=${cid}`
-  return <Card title={<>Paperless · {client.paperless_correspondent || `correspondent #${cid}`}{data ? <span className="muted small"> · {data.count} document{data.count === 1 ? '' : 's'}</span> : null}</>} actions={<a className="btn sm" href={plUrl} target="_blank" rel="noreferrer">Open in Paperless ↗</a>} flush className="mb">
-    {error ? <div className="empty muted">{String(error)}</div> : loading && !data ? <Loading /> : !data?.results.length ? <div className="empty muted">No documents for this correspondent in Paperless yet.</div> :
+function ClientPocketDocs({ client, onEdit }: { client: Client; onEdit: () => void }) {
+  const pd = usePocketDocs()
+  const { data, loading, error } = useAsync(() => pd?.configured ? api.get<DocsPage>(`${V1}/pocket-documents/documents?client_id=${client.id}&page_size=15`) : Promise.resolve(null), [pd?.configured, client.id, client.documents_correspondent])
+  if (!pd?.configured) return null
+  if (data && !data.correspondent) return <div className="callout mb">Pocket Documents is connected but this client has no correspondent there yet. <button className="link-btn" onClick={onEdit}>Edit the client</button> and pick one (or create it) to see their documents here.</div>
+  const name = data?.correspondent || client.documents_correspondent || client.name
+  const openAll = data?.url || pd.url
+  return <Card title={<>Pocket Documents · {name}{data ? <span className="muted small"> · {data.count} document{data.count === 1 ? '' : 's'}</span> : null}</>} actions={openAll ? <a className="btn sm" href={openAll} target="_blank" rel="noreferrer">Open in Pocket Documents ↗</a> : null} flush className="mb">
+    {error ? <div className="empty muted">{String(error)}</div> : loading && !data ? <Loading /> : !data?.correspondent_id ? <div className="empty muted">There is no correspondent "{name}" in Pocket Documents yet; it is created when the first invoice for {client.name} is filed.</div> : !data.results.length ? <div className="empty muted">No documents for this correspondent in Pocket Documents yet.</div> :
       <table className="table"><thead><tr><th></th><th>Title</th><th>Type</th><th>Tags</th><th>Created</th><th></th></tr></thead>
         <tbody>{data.results.map(d => <tr key={d.id}>
-          <td style={{ width: 48 }}><a href={`${V1}/paperless/documents/${d.id}/file`} target="_blank" rel="noreferrer"><img src={`${V1}/paperless/documents/${d.id}/thumb`} alt="" style={{ width: 36, height: 46, objectFit: 'cover', borderRadius: 4, border: '1px solid var(--border)', background: 'var(--surface-2)' }} loading="lazy" /></a></td>
-          <td><a className="bold" href={`${V1}/paperless/documents/${d.id}/file`} target="_blank" rel="noreferrer">{d.title}</a><div className="muted small">#{d.id}{d.original_file_name ? ` · ${d.original_file_name}` : ''}</div></td>
+          <td style={{ width: 48 }}><a href={`${V1}/pocket-documents/documents/${d.id}/file`} target="_blank" rel="noreferrer"><img src={`${V1}/pocket-documents/documents/${d.id}/thumb`} alt="" style={{ width: 36, height: 46, objectFit: 'cover', borderRadius: 4, border: '1px solid var(--border)', background: 'var(--surface-2)' }} loading="lazy" /></a></td>
+          <td><a className="bold" href={`${V1}/pocket-documents/documents/${d.id}/file`} target="_blank" rel="noreferrer">{d.title}</a><div className="muted small">#{d.id}{d.original_file_name ? ` · ${d.original_file_name}` : ''}</div></td>
           <td className="muted">{d.document_type}</td>
           <td>{d.tags.map(t => <span key={t} className="badge" style={{ marginRight: 4 }}>{t}</span>)}</td>
           <td className="muted">{fmtDate(d.created)}</td>
-          <td className="actions"><a className="btn ghost sm" href={d.url} target="_blank" rel="noreferrer" title="Open this document in Paperless-ngx (new tab)">Open ↗</a><a className="btn ghost sm" href={`${V1}/paperless/documents/${d.id}/file?download=1`} title="Download the file">Download</a></td>
+          <td className="actions"><a className="btn ghost sm" href={d.url} target="_blank" rel="noreferrer" title="Open this document in Pocket Documents (new tab)">Open ↗</a><a className="btn ghost sm" href={`${V1}/pocket-documents/documents/${d.id}/file?download=1`} title="Download the file">Download</a></td>
         </tr>)}</tbody></table>}
-    {data && data.count > data.results.length && <div className="muted small" style={{ padding: '8px 14px' }}>Showing {data.results.length} of {data.count}. <a href={plUrl} target="_blank" rel="noreferrer">See all in Paperless</a>.</div>}
+    {data && data.count > data.results.length && openAll && <div className="muted small" style={{ padding: '8px 14px' }}>Showing {data.results.length} of {data.count}. <a href={openAll} target="_blank" rel="noreferrer">See all in Pocket Documents</a>.</div>}
   </Card>
 }

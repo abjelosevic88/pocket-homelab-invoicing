@@ -4,18 +4,20 @@ export interface ExchangeRate { base: string; quote: string; rate: number; sourc
 export interface TaxRate { id: number; name: string; rate: number; is_default: boolean }
 export interface Client {
   id: number; name: string; contact_name: string; email: string; phone: string; address1: string; address2: string; city: string; state: string; postal_code: string; country: string; tax_id: string; registration_no: string; website: string;
-  currency: string; billing_mode: string; default_rate: number; payment_terms_days: number; template_id: number | null; email_subject: string; email_body: string; email_cc: string; paperless_correspondent_id: number; paperless_correspondent: string; notes: string; archived: boolean; created_at: string; updated_at: string;
+  currency: string; billing_mode: string; default_rate: number; payment_terms_days: number; template_id: number | null; email_subject: string; email_body: string; email_cc: string; documents_correspondent: string; notes: string; archived: boolean; created_at: string; updated_at: string;
   invoice_count?: number; outstanding: number; total_billed: number;
 }
 export interface Product { id: number; name: string; description: string; unit: string; unit_price: number; currency: string; tax_rate: number; archived: boolean }
 export interface TemplateOptions { hide_rate: boolean; hide_unit: boolean; show_quantity_total: boolean; signature_label: string; hide_logo: boolean }
 export interface InvoiceTemplate { id: number; name: string; layout: string; accent_color: string; labels: Record<string, string>; options: TemplateOptions; html: string; is_default: boolean; kind: 'design' | 'docx'; docx_path: string; docx_name: string }
-export interface PaperlessLink { kind: string; ref_id: number; paperless_id: number; task_id?: string; title: string; error?: string; url?: string; created_at: string; updated_at: string }
-export interface Attachment { id: number; invoice_id: number; filename: string; content_type: string; size: number; created_at: string; paperless?: PaperlessLink }
-export interface Document { id: number; title: string; category: string; client_id: number | null; client_name: string; doc_date: string; expires_at: string; notes: string; filename: string; content_type: string; size: number; created_at: string; updated_at: string; paperless?: PaperlessLink }
-export interface PaperlessDoc { id: number; title: string; created: string; added: string; modified: string; correspondent: string; document_type: string; tags: string[]; original_file_name: string; archived_file_name: string; archive_serial_number: number | null; url: string }
-export interface PaperlessEntry { id: number; name: string }
-export interface PaperlessStatus { configured: boolean; ok?: boolean; error?: string; version?: string; document_count?: number; url?: string; archive_mode?: string }
+/** A local record filed in Pocket Documents; documents_id 0 = the last attempt failed (error says why). */
+export interface DocsLink { kind: string; ref_id: number; documents_id: number; title: string; error?: string; url?: string; created_at: string; updated_at: string }
+export interface Attachment { id: number; invoice_id: number; filename: string; content_type: string; size: number; created_at: string; pocket_documents?: DocsLink }
+export interface Document { id: number; title: string; category: string; client_id: number | null; client_name: string; doc_date: string; expires_at: string; notes: string; filename: string; content_type: string; size: number; created_at: string; updated_at: string; pocket_documents?: DocsLink }
+export interface PocketDoc { id: number; title: string; created: string; added: string; modified: string; correspondent: string; correspondent_id: number; document_type: string; tags: string[]; original_file_name: string; asn: number | null; page_count: number; status: string; url: string }
+export interface DocsEntry { id: number; name: string }
+export interface DocsStatus { configured: boolean; mode?: ConnMode; via?: string; detail?: string; ok?: boolean; error?: string; document_count?: number; url?: string; archive_mode?: string }
+export interface DocsPage { count: number; page: number; pages: number; results: PocketDoc[]; linked: Record<number, DocsLink>; url?: string; correspondent?: string; correspondent_id?: number }
 export interface CustomFieldDef { key: string; label: string; show_on_pdf: boolean; fill?: '' | 'copy' | 'increment' }
 export interface InvoiceItem { id?: number; description: string; unit: string; quantity: number; unit_price: number; tax_rate: number; discount: number; line_total?: number }
 export interface Payment { id: number; invoice_id: number; invoice_number?: string; client_name?: string; date: string; amount: number; currency: string; exchange_rate: number; applied_amount: number; method: string; reference: string; notes: string; created_at: string }
@@ -25,7 +27,7 @@ export interface Invoice {
   worked_days: string[];
   notes: string; terms: string; footer: string; template_id: number | null; recurring_id: number | null; public_token: string; sent_at: string | null; viewed_at: string | null; paid_at: string | null; created_at: string; updated_at: string;
   custom_fields: Record<string, string>;
-  items?: InvoiceItem[]; payments?: Payment[]; attachments?: Attachment[]; paperless?: PaperlessLink;
+  items?: InvoiceItem[]; payments?: Payment[]; attachments?: Attachment[]; pocket_documents?: DocsLink;
 }
 export interface Holiday { date: string; name: string; yearly: boolean }
 export interface WorkingDays { from: string; to: string; working_days: number; week_days: number; holidays: { date: string; name: string; weekday: string }[]; all_holidays: { date: string; name: string; weekday: string }[]; hours_per_day: number; working_hours: number; work_week: string }
@@ -46,8 +48,8 @@ export interface Settings {
   income_tax_rate: number; income_tax_basis: string; income_tax_by_payment_date: boolean; income_tax_min_yearly: number; income_tax_deduction: number; contributions_monthly: number; income_tax_label: string;
   work_week: string; holidays: Holiday[] | null;
   smtp_host: string; smtp_port: number; smtp_user: string; smtp_password: string; smtp_password_set?: boolean; smtp_from: string; smtp_from_name: string; smtp_tls: string; smtp_bcc: string; email_subject: string; email_body: string; reminder_days: string; reminders_enabled: boolean; setup_complete: boolean;
-  paperless_url: string; paperless_external_url: string; paperless_token: string; paperless_token_set?: boolean; paperless_clear_token?: boolean; paperless_tags: string; paperless_invoice_type: string; paperless_create_correspondents: boolean; paperless_archive_invoices: string; paperless_category_as_type: boolean;
-  paperless_mode: ConnMode; paperless_via?: string; paperless_detail?: string; paperless_source?: string; core_configured?: boolean;
+  documents_url: string; documents_public_url: string; documents_token: string; documents_token_set?: boolean; documents_clear_token?: boolean; documents_tags: string; documents_invoice_type: string; documents_create_correspondents: boolean; documents_archive_invoices: string; documents_category_as_type: boolean;
+  documents_mode: ConnMode; documents_via?: string; documents_detail?: string; core_configured?: boolean;
 }
 export type ConnMode = 'core' | 'direct' | 'off'
 export interface DashboardStats { outstanding: number; outstanding_count: number; overdue: number; overdue_count: number; paid_this_month: number; paid_this_year: number; invoiced_this_year: number; draft_count: number; unbilled_minutes: number; unbilled_expenses: number; active_clients: number }

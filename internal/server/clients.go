@@ -71,7 +71,7 @@ func (s *Server) handleCreateClient(w http.ResponseWriter, r *http.Request) {
 		c.PaymentTermsDays = st.DefaultDueDays
 	}
 	c.TemplateID = s.ownTemplateID(r.Context(), uid, c.TemplateID)
-	s.fillCorrespondentName(r.Context(), uid, &c)
+	c.DocumentsCorrespondent = strings.TrimSpace(c.DocumentsCorrespondent)
 	if err := s.store.CreateClient(r.Context(), uid, &c); err != nil {
 		s.fail(w, err, "create client")
 		return
@@ -99,7 +99,7 @@ func (s *Server) handleUpdateClient(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	c.TemplateID = s.ownTemplateID(r.Context(), uid, c.TemplateID)
-	s.fillCorrespondentName(r.Context(), uid, &c)
+	c.DocumentsCorrespondent = strings.TrimSpace(c.DocumentsCorrespondent)
 	if err := s.store.UpdateClient(r.Context(), uid, &c); err != nil {
 		s.fail(w, err, "update client")
 		return
@@ -117,19 +117,6 @@ func (s *Server) handleDeleteClient(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "deleted": deleted, "archived": !deleted})
-}
-
-// fillCorrespondentName caches the Paperless correspondent name on the client record.
-func (s *Server) fillCorrespondentName(ctx context.Context, uid int64, c *store.Client) {
-	if c.PaperlessCorrespondentID <= 0 {
-		c.PaperlessCorrespondentID, c.PaperlessCorrespondent = 0, ""
-		return
-	}
-	if cl, _ := s.paperlessClient(ctx, uid); cl != nil {
-		if n := cl.Name(ctx, "correspondents", c.PaperlessCorrespondentID); n != "" {
-			c.PaperlessCorrespondent = n
-		}
-	}
 }
 
 // ownTemplateID keeps a template reference only when the template belongs to uid.
