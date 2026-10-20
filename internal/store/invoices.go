@@ -296,6 +296,26 @@ func (s *Store) MarkOverdue(ctx context.Context, uid int64) ([]int64, error) {
 	return ids, nil
 }
 
+// FollowDefaultText moves the user's drafts that still carry the old default
+// notes/terms/footer onto the new default, so a Settings edit reaches drafts
+// that were created before it. Drafts with their own text are left alone.
+func (s *Store) FollowDefaultText(ctx context.Context, uid int64, column, prev, next string) (int64, error) {
+	switch column {
+	case "notes", "terms", "footer":
+	default:
+		return 0, fmt.Errorf("unknown text column %q", column)
+	}
+	if strings.TrimSpace(prev) == "" || prev == next {
+		return 0, nil // empty drafts already follow the default when rendered
+	}
+	res, err := s.DB.ExecContext(ctx, `UPDATE invoices SET `+column+` = ?, updated_at = ? WHERE user_id = ? AND status = 'draft' AND trim(`+column+`) = ?`,
+		next, Now(), uid, strings.TrimSpace(prev))
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}
+
 // NumberExists checks whether one of the user's invoices (any client) already uses a number
 // (used by auto-numbering; each user has their own sequence).
 func (s *Store) NumberExists(ctx context.Context, uid int64, number string, excludeID int64) (bool, error) {

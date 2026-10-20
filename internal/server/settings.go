@@ -93,6 +93,7 @@ func (s *Server) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 	prevToken, prevMode := st.PaperlessToken, st.PaperlessMode
 	prevEffective := s.paperlessMode(st)
 	prevBase, prevProvider, prevSetup := st.BaseCurrency, st.ExchangeRateProvider, st.SetupComplete
+	prevText := map[string]string{"notes": st.DefaultNotes, "terms": st.DefaultTerms, "footer": st.DefaultFooter}
 	if err := decode(r, &st); err != nil {
 		writeErr(w, http.StatusBadRequest, "invalid json")
 		return
@@ -163,6 +164,12 @@ func (s *Server) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 	if err := s.store.SaveSettings(ctx, uid, st); err != nil {
 		s.fail(w, err, "save settings")
 		return
+	}
+	for col, next := range map[string]string{"notes": st.DefaultNotes, "terms": st.DefaultTerms, "footer": st.DefaultFooter} {
+		if _, err := s.store.FollowDefaultText(ctx, uid, col, prevText[col], next); err != nil {
+			s.fail(w, err, "update drafts")
+			return
+		}
 	}
 	if disconnect || st.PaperlessMode != prevMode || s.paperlessMode(st) != prevEffective {
 		go s.reportModes(context.Background(), uid) // Core's Links page follows the switch right away

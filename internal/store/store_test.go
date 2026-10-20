@@ -189,3 +189,43 @@ func TestInvoiceNumberUniquePerClient(t *testing.T) {
 		t.Fatalf("expected 2 invoices, got %d", len(inv))
 	}
 }
+
+func TestFollowDefaultText(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+	uid := testUser(t, s, "owner@example.com")
+	other := testUser(t, s, "other@example.com")
+	c := &Client{Name: "A", Currency: "EUR"}
+	oc := &Client{Name: "B", Currency: "EUR"}
+	_ = s.CreateClient(ctx, uid, c)
+	_ = s.CreateClient(ctx, other, oc)
+	mk := func(u, cid int64, n, status, notes string) *Invoice {
+		inv := &Invoice{Number: n, ClientID: cid, Status: status, IssueDate: "2026-01-01", DueDate: "2026-01-01", Currency: "EUR", ExchangeRate: 1, Notes: notes}
+		if err := s.CreateInvoice(ctx, u, inv); err != nil {
+			t.Fatal(err)
+		}
+		return inv
+	}
+	follows := mk(uid, c.ID, "1", StatusDraft, "Old default")
+	own := mk(uid, c.ID, "2", StatusDraft, "My own note")
+	sent := mk(uid, c.ID, "3", StatusSent, "Old default")
+	foreign := mk(other, oc.ID, "4", StatusDraft, "Old default")
+
+	n, err := s.FollowDefaultText(ctx, uid, "notes", "Old default", "New default")
+	if err != nil || n != 1 {
+		t.Fatalf("updated %d, %v", n, err)
+	}
+	want := map[*Invoice]string{follows: "New default", own: "My own note", sent: "Old default"}
+	for inv, w := range want {
+		got, _ := s.GetInvoice(ctx, uid, inv.ID)
+		if got.Notes != w {
+			t.Errorf("invoice %s: %q, want %q", inv.Number, got.Notes, w)
+		}
+	}
+	if got, _ := s.GetInvoice(ctx, other, foreign.ID); got.Notes != "Old default" {
+		t.Errorf("other user's draft changed: %q", got.Notes)
+	}
+	if _, err := s.FollowDefaultText(ctx, uid, "items; drop", "a", "b"); err == nil {
+		t.Error("unknown column accepted")
+	}
+}
