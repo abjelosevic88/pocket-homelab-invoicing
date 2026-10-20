@@ -484,7 +484,8 @@ func renderNative(d *Document, logo []byte, logoType string, k float64) ([]byte,
 		if p.GetY()+sigBlock > 297-28 { // only break when it really does not fit
 			newPage()
 		}
-		signature(p.GetY() + signRoom)
+		// As low as the footer allows (up to 30 mm under the text) for more room to sign.
+		signature(math.Max(p.GetY()+signRoom, math.Min(p.GetY()+30, 297-28-6)))
 	}
 
 	pages := p.PageNo()
