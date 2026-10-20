@@ -77,7 +77,8 @@ function Company() {
           <Field label="Email"><input value={s.company_email} onChange={set('company_email')} /></Field>
           <Field label="Phone"><input value={s.company_phone} onChange={set('company_phone')} /></Field>
           <Field label="Website"><input value={s.company_website} onChange={set('company_website')} /></Field>
-          <Field label="Tax / VAT ID"><input value={s.tax_id} onChange={set('tax_id')} /></Field>
+          <Field label="Tax ID" help="e.g. JIB; printed as the template's tax_id label"><input value={s.tax_id} onChange={set('tax_id')} /></Field>
+          <Field label="VAT ID" help="e.g. PDV broj; printed under the tax ID (label vat_id)"><input value={s.vat_id || ''} onChange={set('vat_id')} /></Field>
           <Field label="Address line 1" className="full"><input value={s.address1} onChange={set('address1')} /></Field>
           <Field label="Address line 2" className="full"><input value={s.address2} onChange={set('address2')} /></Field>
           <Field label="Postal code"><input value={s.postal_code} onChange={set('postal_code')} /></Field>
@@ -160,13 +161,13 @@ function Invoicing() {
       </Card>
       <WorkingDaysCard s={s} setS={setS} save={save} busy={busy} />
       <Card title="Custom invoice fields" className="full">
-        <p className="muted small">Extra fields per invoice (e.g. fiscal receipt number, local invoice number, project code). They appear in the invoice editor and, if enabled, in the PDF header block.</p>
+        <p className="muted small">Extra fields per invoice (e.g. fiscal receipt number, local invoice number, project code). They appear in the invoice editor and, if enabled, in the PDF header block. New invoices continue counters from the client's previous one (14/15ПП → 15/16ПП, …-15 → …-16).</p>
         <CustomFieldsEditor value={s.custom_fields || []} onChange={v => setS(x => x ? { ...x, custom_fields: v } : x)} />
         <SaveBar onSave={save} busy={busy} />
       </Card>
       <Card title="Default text" className="full" >
         <div className="form-grid cols-3">
-          <Field label="Notes"><textarea value={s.default_notes} onChange={set('default_notes')} /></Field>
+          <Field label="Notes" help="Also used by recurring profiles without their own notes"><textarea value={s.default_notes} onChange={set('default_notes')} /></Field>
           <Field label="Terms" help="{due_days} is replaced"><textarea value={s.default_terms} onChange={set('default_terms')} /></Field>
           <Field label="Footer"><textarea value={s.default_footer} onChange={set('default_footer')} /></Field>
         </div>
@@ -345,7 +346,7 @@ function Catalog() {
 }
 
 // ---------- Templates ----------
-const LABEL_KEYS = ['invoice', 'invoice_number', 'issue_date', 'due_date', 'period', 'po_number', 'bill_to', 'description', 'unit', 'quantity', 'unit_price', 'discount', 'tax', 'amount', 'subtotal', 'total', 'amount_paid', 'balance_due', 'notes', 'terms', 'payment_details', 'tax_id', 'page', 'paid_stamp', 'hour', 'hours', 'day', 'days', 'month', 'months']
+const LABEL_KEYS = ['invoice', 'invoice_number', 'issue_date', 'due_date', 'period', 'po_number', 'bill_to', 'description', 'unit', 'quantity', 'unit_price', 'discount', 'tax', 'amount', 'subtotal', 'total', 'amount_paid', 'balance_due', 'notes', 'terms', 'payment_details', 'tax_id', 'vat_id', 'page', 'paid_stamp', 'hour', 'hours', 'day', 'days', 'month', 'months']
 
 function WordUpload({ templateId, onDone, label = '+ Upload Word template' }: { templateId?: number; onDone: (t: InvoiceTemplate, ph: string[]) => void; label?: string }) {
   const toast = useToast()

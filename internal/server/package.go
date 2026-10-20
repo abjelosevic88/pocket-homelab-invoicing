@@ -229,6 +229,9 @@ func (s *Server) handleAccountantPackage(w http.ResponseWriter, r *http.Request)
 	if st.TaxID != "" {
 		fmt.Fprintf(&sb, "Tax ID: %s  \n", st.TaxID)
 	}
+	if st.VatID != "" {
+		fmt.Fprintf(&sb, "VAT ID: %s  \n", st.VatID)
+	}
 	addr := strings.Join(nonEmpty(st.Address1, st.Address2, strings.TrimSpace(st.PostalCode+" "+st.City), st.Country), ", ")
 	if addr != "" {
 		fmt.Fprintf(&sb, "Address: %s  \n", addr)

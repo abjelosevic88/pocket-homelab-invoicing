@@ -200,6 +200,19 @@ func (s *Server) handleNextNumber(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"number": numbering.Format(st.InvoiceNumberFmt, seq, t, "CLI")})
 }
 
+// handleNextCustomFields suggests custom field values (fiscal counters) for a client's next
+// invoice: "last" is the value on the latest issued invoice, "next" the bumped counter.
+func (s *Server) handleNextCustomFields(w http.ResponseWriter, r *http.Request) {
+	uid := uidOf(r)
+	st, err := s.store.GetSettings(r.Context(), uid)
+	if err != nil {
+		s.fail(w, err, "settings")
+		return
+	}
+	last, next := s.suggestCustomFields(r.Context(), uid, qInt64(r, "client_id"), st)
+	writeJSON(w, http.StatusOK, map[string]any{"last": last, "next": next})
+}
+
 func (s *Server) handleListInvoices(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	f := store.InvoiceFilter{Status: q.Get("status"), ClientID: qInt64(r, "client_id"), Search: q.Get("q"), From: q.Get("from"), To: q.Get("to"), Limit: qInt(r, "limit", 50), Offset: qInt(r, "offset", 0)}

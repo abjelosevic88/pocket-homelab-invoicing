@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { api, V1 } from '../lib/api'
 import { useApp } from '../lib/app-context'
@@ -68,6 +68,31 @@ export default function InvoiceEditor() {
       setItems([newItem(unitForBilling(settings.default_billing_mode || 'hourly'), settings.default_tax_rate, settings.default_hourly_rate)])
     }
   }, [id, settings, sp])
+
+  // Fiscal counters: fill empty custom fields of a new invoice or draft from the client's previous invoice
+  const [cfLast, setCfLast] = useState<Record<string, string>>({})
+  const cfAuto = useRef<Record<string, string>>({}) // values we filled in, replaced again when the client changes
+  const editable = !id || inv?.status === 'draft'
+  useEffect(() => {
+    if (!inv?.client_id || !editable || !settings?.custom_fields?.length) { setCfLast({}); return }
+    api.get<{ last: Record<string, string>; next: Record<string, string> }>(`${V1}/invoices/next-custom-fields?client_id=${inv.client_id}`)
+      .then(r => {
+        setCfLast(r.last)
+        setInv(i => {
+          if (!i) return i
+          const cf = { ...(i.custom_fields || {}) }
+          for (const f of settings.custom_fields || []) {
+            if (cf[f.key] && cf[f.key] !== cfAuto.current[f.key]) continue
+            if (r.next[f.key]) cf[f.key] = r.next[f.key]
+            else delete cf[f.key]
+          }
+          cfAuto.current = { ...r.next }
+          return { ...i, custom_fields: cf }
+        })
+      })
+      .catch(() => setCfLast({}))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inv?.client_id, editable, settings])
 
   // When client changes on a new invoice, pick up currency, billing mode, terms
   const client = useMemo(() => clients?.find(c => c.id === inv?.client_id), [clients, inv?.client_id])
@@ -150,7 +175,7 @@ export default function InvoiceEditor() {
             <Field label="Due date"><input type="date" value={inv.due_date} onChange={e => set('due_date', e.target.value)} /></Field>
             <Field label="Service period from" help="Optional; shown on the invoice"><input type="date" value={inv.period_start || ''} onChange={e => set('period_start', e.target.value)} /></Field>
             <Field label="Service period to"><input type="date" value={inv.period_end || ''} onChange={e => set('period_end', e.target.value)} /></Field>
-            {(settings.custom_fields || []).map(f => <Field key={f.key} label={f.label}><input value={inv.custom_fields?.[f.key] || ''} onChange={e => set('custom_fields', { ...(inv.custom_fields || {}), [f.key]: e.target.value })} /></Field>)}
+            {(settings.custom_fields || []).map(f => <Field key={f.key} label={f.label} help={cfLast[f.key] ? `previous: ${cfLast[f.key]}` : undefined}><input value={inv.custom_fields?.[f.key] || ''} onChange={e => set('custom_fields', { ...(inv.custom_fields || {}), [f.key]: e.target.value })} /></Field>)}
           </div>
         </Card>
         <Card title="Billing & currency">

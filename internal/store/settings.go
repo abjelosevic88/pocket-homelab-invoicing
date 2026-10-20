@@ -23,6 +23,7 @@ type Settings struct {
 	PostalCode     string `json:"postal_code"`
 	Country        string `json:"country"`
 	TaxID          string `json:"tax_id"`
+	VatID          string `json:"vat_id"` // VAT registration number, printed under the tax ID (e.g. PDV broj next to the JIB)
 	LogoPath       string `json:"logo_path"`
 
 	BaseCurrency         string  `json:"base_currency"`

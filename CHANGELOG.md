@@ -4,6 +4,19 @@ All notable changes to this project are documented here. Format follows [Keep a 
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-20
+
+### Added
+- Settings → Business details: **VAT ID** next to the tax ID (e.g. PDV broj next to the JIB). Printed under the tax ID in the PDF header with the template label `vat_id` (default "VAT ID"), available to Word templates as `company.vat_id` and listed in the accountant package.
+- Custom fields continue from the client's previous invoice: the invoice editor fills empty fields of a new invoice or draft with the next value (`14/15ПП` → `15/16ПП`, `ELJA9MLH-ELJA9MLH-15` → `ELJA9MLH-ELJA9MLH-16`) and shows the previous value under each field; recurring drafts get the same values (not auto-sent ones). `GET /api/v1/invoices/next-custom-fields?client_id=` returns `last` and `next`.
+
+### Changed
+- Counter suggestions now bump the last number of any value, not only `N`, `N/M` or `N/MПП`, so the month-end wizard also suggests the PFR number.
+- Recurring profiles and the month-end wizard fall back to the default notes and terms in Settings when the profile has none of its own.
+
+### Fixed
+- Native PDF: the signature line only moves to a new page when it really does not fit (it reserved 4 mm too much, so one line of notes pushed it alone onto page 2).
+
 ## [0.5.0] - 2026-10-20
 
 ### Changed

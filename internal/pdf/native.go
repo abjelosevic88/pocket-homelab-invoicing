@@ -117,6 +117,9 @@ func RenderNative(d *Document, logo []byte, logoType string) ([]byte, error) {
 		if d.From.TaxID != "" {
 			p.CellFormat(contentW/2, 4.5, d.Label("tax_id")+": "+d.From.TaxID, "", 1, "L", false, 0, "")
 		}
+		if d.From.VatID != "" {
+			p.CellFormat(contentW/2, 4.5, d.Label("vat_id")+": "+d.From.VatID, "", 1, "L", false, 0, "")
+		}
 		fromBottom := p.GetY()
 
 		// Right side: title + number
@@ -392,7 +395,7 @@ func RenderNative(d *Document, logo []byte, logoType string) ([]byte, error) {
 	section(d.Label("notes"), d.Notes)
 	section(d.Label("terms"), d.Terms)
 	if d.SignatureLabel != "" {
-		if p.GetY()+16 > 297-28 {
+		if p.GetY()+12 > 297-28 { // 6 gap + 1 + 5 label: only break when it really does not fit
 			p.AddPage()
 		}
 		p.Ln(6)

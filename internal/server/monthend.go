@@ -41,24 +41,50 @@ type monthEndRow struct {
 	Hint           string              `json:"hint"`
 }
 
-var counterRe = regexp.MustCompile(`^(\d+)(?:/(\d+))?(\D*)$`)
+var (
+	counterRe     = regexp.MustCompile(`^(\d+)(?:/(\d+))?(\D*)$`)
+	trailingNumRe = regexp.MustCompile(`^(.*?)(\d+)(\D*)$`)
+)
 
-// bumpCounter suggests the next value of a simple counter such as "14/15ПП" -> "15/16ПП"
-// or "0031" -> "0032". Anything else yields "" (no suggestion).
+// bumpCounter suggests the next value of a fiscal counter: "14/15ПП" -> "15/16ПП", "0031" -> "0032",
+// and otherwise the last number in the value, e.g. "ELJA9MLH-ELJA9MLH-15" -> "ELJA9MLH-ELJA9MLH-16".
+// A value without digits yields "" (no suggestion).
 func bumpCounter(v string) string {
-	m := counterRe.FindStringSubmatch(strings.TrimSpace(v))
-	if m == nil {
-		return ""
-	}
+	v = strings.TrimSpace(v)
 	inc := func(d string) string {
 		n, _ := strconv.Atoi(d)
 		return fmt.Sprintf("%0*d", len(d), n+1)
 	}
-	out := inc(m[1])
-	if m[2] != "" {
-		out += "/" + inc(m[2])
+	if m := counterRe.FindStringSubmatch(v); m != nil {
+		out := inc(m[1])
+		if m[2] != "" {
+			out += "/" + inc(m[2])
+		}
+		return out + m[3]
 	}
-	return out + m[3]
+	if m := trailingNumRe.FindStringSubmatch(v); m != nil {
+		return m[1] + inc(m[2]) + m[3]
+	}
+	return ""
+}
+
+// suggestCustomFields returns, per custom field, the value on the client's latest
+// issued invoice and the bumped counter suggested for the next one.
+func (s *Server) suggestCustomFields(ctx context.Context, uid, clientID int64, st store.Settings) (last, next map[string]string) {
+	last, next = map[string]string{}, map[string]string{}
+	prev, err := s.store.LatestCustomFields(ctx, uid, clientID, true)
+	if err != nil {
+		return last, next
+	}
+	for _, f := range st.CustomFields {
+		if v, ok := prev[f.Key]; ok {
+			last[f.Key] = v
+			if n := bumpCounter(v); n != "" {
+				next[f.Key] = n
+			}
+		}
+	}
+	return last, next
 }
 
 // monthEndPlan builds the proposal for a month.
@@ -125,7 +151,8 @@ func (s *Server) monthEndPlan(ctx context.Context, uid int64, month string) (map
 			if rec.DueDays > 0 {
 				dueDays = rec.DueDays
 			}
-			row.Notes, row.Terms = rec.Notes, rec.Terms
+			// An empty profile note/terms falls back to the defaults (e.g. a VAT exemption sentence in Settings).
+			row.Notes, row.Terms = firstNonEmpty(rec.Notes, row.Notes), firstNonEmpty(rec.Terms, row.Terms)
 			row.Items, row.QuantitySource = recurringItems(rec, st, ps, pe)
 		} else {
 			unit := unitForBilling(row.BillingMode)
@@ -164,17 +191,8 @@ func (s *Server) monthEndPlan(ctx context.Context, uid int64, month string) (map
 		if t, err := time.Parse("2006-01-02", issue); err == nil {
 			row.DueDate = t.AddDate(0, 0, dueDays).Format("2006-01-02")
 		}
-		// Fiscal counters: suggest the next value of simple numeric fields.
-		if last, err := s.store.LatestCustomFields(ctx, uid, c.ID, true); err == nil {
-			for _, f := range st.CustomFields {
-				if v, ok := last[f.Key]; ok {
-					row.CustomLast[f.Key] = v
-					if next := bumpCounter(v); next != "" {
-						row.CustomFields[f.Key] = next
-					}
-				}
-			}
-		}
+		// Fiscal counters: suggest the next value from the client's previous invoice.
+		row.CustomLast, row.CustomFields = s.suggestCustomFields(ctx, uid, c.ID, st)
 		open := 0
 		for _, e := range row.Existing {
 			if e.Status != store.StatusCancelled {

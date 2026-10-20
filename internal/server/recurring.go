@@ -258,8 +258,16 @@ func (s *Server) runRecurring(ctx context.Context, uid int64, rec *store.Recurri
 	ps, pe := periodFor(runDate, rec.Frequency, rec.Interval, rec.PeriodMode)
 	in := invoiceInput{
 		ClientID: rec.ClientID, Currency: rec.Currency, BillingMode: rec.BillingMode, IssueDate: runDate,
-		DiscountType: rec.DiscountType, DiscountValue: rec.DiscountValue, Notes: rec.Notes, Terms: rec.Terms, Footer: st.DefaultFooter, TemplateID: rec.TemplateID,
+		DiscountType: rec.DiscountType, DiscountValue: rec.DiscountValue, Footer: st.DefaultFooter, TemplateID: rec.TemplateID,
 		PeriodStart: &ps, PeriodEnd: &pe,
+		// An empty profile note/terms falls back to the defaults in Settings.
+		Notes: firstNonEmpty(rec.Notes, st.DefaultNotes),
+		Terms: firstNonEmpty(rec.Terms, strings.ReplaceAll(st.DefaultTerms, "{due_days}", fmt.Sprint(rec.DueDays))),
+	}
+	// Fiscal counters continue from the client's previous invoice; only on drafts, since the
+	// guess is checked before sending (an auto-sent invoice would carry it unseen).
+	if !rec.AutoSend {
+		_, in.CustomFields = s.suggestCustomFields(ctx, uid, rec.ClientID, st)
 	}
 	t, _ := time.Parse("2006-01-02", runDate)
 	in.DueDate = t.AddDate(0, 0, rec.DueDays).Format("2006-01-02")

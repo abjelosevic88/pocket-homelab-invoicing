@@ -32,7 +32,7 @@ line breaks. Values are inserted as text, never as markup.
 
 **Invoice:** `number` `title` `status` `issue_date` `due_date` `period` `period_start` `period_end` `po_number` `currency` `currency_name` `currency_symbol` `base_currency` `exchange_rate` `billing_mode` `public_url`
 
-**You:** `company.name` `company.address` (one line) `company.address1` `company.address2` `company.city` `company.postal_code` `company.state` `company.country` `company.email` `company.phone` `company.website` `company.tax_id`
+**You:** `company.name` `company.address` (one line) `company.address1` `company.address2` `company.city` `company.postal_code` `company.state` `company.country` `company.email` `company.phone` `company.website` `company.tax_id` `company.vat_id`
 
 **Client:** `client.name` `client.contact` `client.address` `client.address1` `client.address2` `client.city` `client.postal_code` `client.state` `client.country` `client.email` `client.phone` `client.website` `client.tax_id`
 
