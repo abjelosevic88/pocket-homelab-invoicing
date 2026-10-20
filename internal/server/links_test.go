@@ -25,6 +25,9 @@ func TestCoreLinkScopes(t *testing.T) {
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	st := openTestStore(t, cfg)
 	s := New(cfg, st, log, nil)
+	if err := s.core.Start(t.Context()); err != nil {
+		t.Fatal(err)
+	}
 	ctx := context.Background()
 	owner := &store.User{Email: "owner@example.com", Name: "Owner", Role: roleAdmin, PasswordHash: "x"}
 	if err := st.CreateUser(ctx, owner); err != nil {

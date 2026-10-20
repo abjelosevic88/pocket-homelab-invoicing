@@ -13,6 +13,9 @@ import (
 
 // Bootstrap seeds currencies, each user's default templates and (optionally) an admin user / demo data.
 func (s *Server) Bootstrap(ctx context.Context) error {
+	if err := s.core.Start(ctx); err != nil {
+		return err
+	}
 	st, err := s.store.GetGlobalSettings(ctx)
 	if err != nil {
 		return err
