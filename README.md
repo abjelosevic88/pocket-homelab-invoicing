@@ -42,6 +42,8 @@ On the go, **[Pocket Homelab](https://pockethomelab.com/)** is its companion app
 | **Automation** | REST API with personal access tokens, outgoing webhooks (HMAC-signed), Prometheus `/metrics`, `/healthz` + `/readyz`. With **Pocket Core** on the box: registers itself, publishes `invoicing.invoice_created`, `invoicing.invoice_sent` and `invoicing.invoice_paid`, accepts paired-phone tokens, and offers “Sign in with Pocket Core” on the login page with no configuration (any other OpenID Connect provider via `OIDC_*`). |
 | **Ops-friendly** | Single static binary, embedded SPA, SQLite with WAL, `VACUUM INTO` backups from the UI/CLI/API, JSON export, structured logs, graceful shutdown, non-root container, dark mode. |
 
+**Offers app links** (Pocket Core 0.5+): another Pocket app the person allowed in Core can read their invoices and the payments received (`invoices:read`: `GET /api/v1/invoices`, `/api/v1/invoices/{id}`, `/api/v1/payments`) with a five-minute `pcx_` token; every other route answers 403. Pocket Day uses it for the journal.
+
 ## Quick start
 
 ```bash

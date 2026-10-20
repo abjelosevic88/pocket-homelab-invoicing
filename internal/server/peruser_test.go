@@ -36,6 +36,11 @@ func fakeCore(t *testing.T) *httptest.Server {
 		}
 		_ = json.NewDecoder(r.Body).Decode(&in)
 		w.Header().Set("Content-Type", "application/json")
+		if scope, ok := map[string]string{"pcx_member_read": "invoices:read", "pcx_member_other": "something:else"}[in.Token]; ok { // a linked app acting for the member
+			_ = json.NewEncoder(w).Encode(map[string]any{"active": true, "kind": "delegated", "scope": scope, "audience": "invoicing",
+				"user": people["pcd_member-phone"], "app": map[string]any{"id": 4, "slug": "day", "name": "Pocket Day"}})
+			return
+		}
 		if u, ok := people[in.Token]; ok {
 			_ = json.NewEncoder(w).Encode(map[string]any{"active": true, "kind": "device", "user": u})
 			return

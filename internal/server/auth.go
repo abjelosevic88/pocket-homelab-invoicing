@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -56,6 +57,10 @@ func (s *Server) requireAdmin(next http.Handler) http.Handler {
 func (s *Server) requireAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		u, err := s.resolveUser(r)
+		if errors.Is(err, errLinkScope) {
+			writeErr(w, http.StatusForbidden, "this Pocket Core link does not cover "+r.Method+" "+r.URL.Path)
+			return
+		}
 		if err != nil || u == nil {
 			writeErr(w, http.StatusUnauthorized, "unauthorized")
 			return
@@ -66,7 +71,8 @@ func (s *Server) requireAuth(next http.Handler) http.Handler {
 
 func (s *Server) resolveUser(r *http.Request) (*store.User, error) {
 	ctx := r.Context()
-	// 1. API token (Core-issued pcd_/pcu_/pco_ tokens go to Core's introspection)
+	// 1. API token (Core-issued pcd_/pcu_/pco_ tokens go to Core's introspection,
+	// pcx_ link tokens too, limited to the routes their scopes cover)
 	tok := ""
 	if h := r.Header.Get("Authorization"); strings.HasPrefix(strings.ToLower(h), "bearer ") {
 		tok = strings.TrimSpace(h[7:])
@@ -74,6 +80,9 @@ func (s *Server) resolveUser(r *http.Request) (*store.User, error) {
 		tok = t
 	}
 	if tok != "" {
+		if s.core.Configured() && core.IsLinkToken(tok) {
+			return s.linkUser(ctx, tok, r)
+		}
 		if s.core.Configured() && core.IsCoreToken(tok) {
 			return s.coreUser(ctx, tok)
 		}

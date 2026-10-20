@@ -123,6 +123,7 @@ func (s *Server) registerWithCore(ctx context.Context) error {
 		Icon:        "/favicon.svg", Version: Version,
 		URL: s.cfg.CoreAppURL, PublicURL: s.cfg.BaseURL, HealthPath: "/healthz", EnvPrefix: "INVOICING",
 		Publishes: []string{"invoicing.invoice_created", "invoicing.invoice_sent", "invoicing.invoice_paid"},
+		Offers:    linkOffers,
 	}
 	if s.cfg.BaseURL != "" {
 		// ask Core for a relying-party client so "Sign in with Pocket Core" needs no configuration
