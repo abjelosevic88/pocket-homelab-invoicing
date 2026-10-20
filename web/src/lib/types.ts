@@ -16,7 +16,7 @@ export interface Document { id: number; title: string; category: string; client_
 export interface PaperlessDoc { id: number; title: string; created: string; added: string; modified: string; correspondent: string; document_type: string; tags: string[]; original_file_name: string; archived_file_name: string; archive_serial_number: number | null; url: string }
 export interface PaperlessEntry { id: number; name: string }
 export interface PaperlessStatus { configured: boolean; ok?: boolean; error?: string; version?: string; document_count?: number; url?: string; archive_mode?: string }
-export interface CustomFieldDef { key: string; label: string; show_on_pdf: boolean }
+export interface CustomFieldDef { key: string; label: string; show_on_pdf: boolean; fill?: '' | 'copy' | 'increment' }
 export interface InvoiceItem { id?: number; description: string; unit: string; quantity: number; unit_price: number; tax_rate: number; discount: number; line_total?: number }
 export interface Payment { id: number; invoice_id: number; invoice_number?: string; client_name?: string; date: string; amount: number; currency: string; exchange_rate: number; applied_amount: number; method: string; reference: string; notes: string; created_at: string }
 export interface Invoice {

@@ -236,6 +236,20 @@ func Build(in BuildInput) *Document {
 			d.LogoPath, d.LogoDataURL = "", ""
 		}
 	}
+	// Drafts follow the current default text, so editing Settings shows up
+	// without re-saving every open draft. Sent/paid invoices keep what they
+	// went out with.
+	if inv.Status == "draft" {
+		if strings.TrimSpace(d.Notes) == "" {
+			d.Notes = st.DefaultNotes
+		}
+		if strings.TrimSpace(d.Terms) == "" {
+			d.Terms = st.DefaultTerms
+		}
+		if strings.TrimSpace(d.Footer) == "" {
+			d.Footer = st.DefaultFooter
+		}
+	}
 	if pd, ok := st.PaymentDetailsByCurrency[inv.Currency]; ok && strings.TrimSpace(pd) != "" {
 		d.PaymentDetails = pd
 	}

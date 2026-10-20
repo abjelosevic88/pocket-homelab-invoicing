@@ -154,6 +154,9 @@ func (s *Server) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 		if f.Key == "" {
 			f.Key = slugify(f.Label)
 		}
+		if f.Fill != store.FillCopy && f.Fill != store.FillIncrement {
+			f.Fill = store.FillNone
+		}
 		cleaned = append(cleaned, f)
 	}
 	st.CustomFields = cleaned

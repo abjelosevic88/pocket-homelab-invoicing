@@ -141,7 +141,15 @@ type CustomFieldDef struct {
 	Key       string `json:"key"`
 	Label     string `json:"label"`
 	ShowOnPDF bool   `json:"show_on_pdf"`
+	Fill      string `json:"fill,omitempty"` // value for the next invoice: "" none | copy (previous value) | increment (previous value, last number +1)
 }
+
+// Custom field fill modes.
+const (
+	FillNone      = ""
+	FillCopy      = "copy"
+	FillIncrement = "increment"
+)
 
 // InvoiceItem is a single invoice line.
 type InvoiceItem struct {

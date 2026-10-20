@@ -113,11 +113,17 @@ function CustomFieldsEditor({ value, onChange }: { value: CustomFieldDef[]; onCh
   const upd = (i: number, p: Partial<CustomFieldDef>) => onChange(value.map((f, j) => j === i ? { ...f, ...p } : f))
   return (
     <div className="grid" style={{ gap: 8 }}>
-      {value.map((f, i) => <div key={i} className="row">
-        <input value={f.label} onChange={e => upd(i, { label: e.target.value })} placeholder="Label (e.g. PFR broj računa)" style={{ width: 260 }} />
-        <input value={f.key} onChange={e => upd(i, { key: e.target.value })} placeholder="key (auto)" className="mono" style={{ width: 160 }} />
-        <label className="check"><input type="checkbox" checked={f.show_on_pdf} onChange={e => upd(i, { show_on_pdf: e.target.checked })} /> show on PDF</label>
-        <button className="btn ghost sm" onClick={() => onChange(value.filter((_, j) => j !== i))}>✕</button>
+      {value.map((f, i) => <div key={i} className="cf-item">
+        <div className="cf-line">
+          <input value={f.label} onChange={e => upd(i, { label: e.target.value })} placeholder="Label (e.g. PFR broj računa)" aria-label="Label" className="grow" />
+          <input value={f.key} onChange={e => upd(i, { key: e.target.value })} placeholder="key (auto)" aria-label="Key" className="mono" style={{ width: 170 }} />
+        </div>
+        <div className="cf-line">
+          <div style={{ width: 200 }}><Select value={f.fill || ''} onChange={v => upd(i, { fill: v as CustomFieldDef['fill'] })} ariaLabel="Auto-fill"
+            options={[{ value: '', label: 'No auto-fill' }, { value: 'copy', label: 'Copy previous' }, { value: 'increment', label: 'Increment previous' }]} /></div>
+          <label className="check"><input type="checkbox" checked={f.show_on_pdf} onChange={e => upd(i, { show_on_pdf: e.target.checked })} /> show on PDF</label>
+          <button className="btn ghost sm danger" style={{ marginLeft: 'auto' }} onClick={() => onChange(value.filter((_, j) => j !== i))}>Remove</button>
+        </div>
       </div>)}
       <div><button className="btn sm" onClick={() => onChange([...value, { key: '', label: '', show_on_pdf: true }])}>+ Add field</button></div>
     </div>
@@ -144,7 +150,7 @@ function Invoicing() {
             </div>
           </Card>
           <Card title="Custom invoice fields">
-            <p className="muted small" style={{ marginTop: 0 }}>Extra fields per invoice (fiscal receipt number, local invoice number, project code…), shown in the editor and, if enabled, in the PDF header. New invoices continue counters from the client's previous one (14/15ПП → 15/16ПП, …-15 → …-16).</p>
+            <p className="muted small" style={{ marginTop: 0 }}>Extra fields per invoice (fiscal receipt number, local invoice number, project code…), shown in the editor and, if enabled, in the PDF header. Auto-fill takes the value from the client's previous sent or paid invoice: <b>Copy</b> reuses it, <b>Increment</b> adds 1 to its last number (14/15ПП → 15/16ПП adds 1 to both, ELJA9MLH-…-15 → …-16).</p>
             <CustomFieldsEditor value={s.custom_fields || []} onChange={v => setS(x => x ? { ...x, custom_fields: v } : x)} />
           </Card>
         </div>

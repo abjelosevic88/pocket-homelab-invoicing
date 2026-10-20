@@ -69,16 +69,28 @@ func bumpCounter(v string) string {
 }
 
 // suggestCustomFields returns, per custom field, the value on the client's latest
-// issued invoice and the bumped counter suggested for the next one.
+// issued invoice ("last", for hints) and the value proposed for the next one ("next",
+// only for fields set to copy or increment).
 func (s *Server) suggestCustomFields(ctx context.Context, uid, clientID int64, st store.Settings) (last, next map[string]string) {
-	last, next = map[string]string{}, map[string]string{}
 	prev, err := s.store.LatestCustomFields(ctx, uid, clientID, true)
 	if err != nil {
-		return last, next
+		return map[string]string{}, map[string]string{}
 	}
-	for _, f := range st.CustomFields {
-		if v, ok := prev[f.Key]; ok {
-			last[f.Key] = v
+	return suggestFrom(st.CustomFields, prev)
+}
+
+func suggestFrom(defs []store.CustomFieldDef, prev map[string]string) (last, next map[string]string) {
+	last, next = map[string]string{}, map[string]string{}
+	for _, f := range defs {
+		v, ok := prev[f.Key]
+		if !ok {
+			continue
+		}
+		last[f.Key] = v
+		switch f.Fill {
+		case store.FillCopy:
+			next[f.Key] = v
+		case store.FillIncrement:
 			if n := bumpCounter(v); n != "" {
 				next[f.Key] = n
 			}
