@@ -30,6 +30,7 @@ All notable changes to this project are documented here. Format follows [Keep a 
 - Settings → Invoicing reorganised: Numbering and Custom invoice fields stacked beside Defaults; one full-width "Text printed on invoices" card (sentence under the totals, notes, terms, footer, in PDF order); Working days & holidays full width (cards marked full width now really span both columns); a single sticky Save button that shows when there are unsaved changes.
 - Changing the default Notes, Terms or Footer in Settings also updates drafts that still carry the previous default text; drafts with their own text and sent/paid invoices are untouched.
 - Draft PDFs (and Word output) use the current default Notes, Terms and Footer from Settings when the draft's own field is empty, so Settings edits show up on open drafts without re-saving them. Sent and paid invoices keep their stored text.
+- Native PDF: the signature gets its own row below the last text block with room to sign by hand. When the page is too full for that, spacing is tightened (same steps as the one-page fit) before falling back to placing it beside the last block.
 - Native PDF: the signature line only moves to a new page when it really does not fit (it reserved 4 mm too much, so one line of notes pushed it alone onto page 2).
 
 ## [0.5.0] - 2026-10-20

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	_ "embed"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 
@@ -47,24 +48,31 @@ func firstLabel(d *Document, keys ...string) string {
 	return "Total"
 }
 
-// RenderNative renders the document with the pure-Go engine.
-// RenderNative renders the invoice. When it would spill onto a second page by a little,
-// it is rendered again with tighter vertical spacing (two steps) so it stays on one page.
+// RenderNative renders the invoice. When it would spill onto a second page by a little, or
+// the signature would have to squeeze in beside the last text block, it is rendered again
+// with tighter vertical spacing (two steps). The first one-page result with the signature
+// on its own row wins; failing that, the first one-page result; failing that, the first.
 func RenderNative(d *Document, logo []byte, logoType string) ([]byte, error) {
-	var out []byte
+	var first, onePage []byte
 	for _, k := range []float64{1, 0.88, 0.76} {
-		b, pages, err := renderNative(d, logo, logoType, k)
+		b, pages, sigBeside, err := renderNative(d, logo, logoType, k)
 		if err != nil {
 			return nil, err
 		}
-		if out == nil || pages == 1 {
-			out = b
+		if first == nil {
+			first = b
 		}
-		if pages == 1 {
-			break
+		if pages == 1 && !sigBeside {
+			return b, nil
+		}
+		if pages == 1 && onePage == nil {
+			onePage = b
 		}
 	}
-	return out, nil
+	if onePage != nil {
+		return onePage, nil
+	}
+	return first, nil
 }
 
 // pageLine is the footer's "number · Page 1 of 2"; it is left out on one-page invoices.
@@ -73,7 +81,7 @@ func pageLine(d *Document, page int, total string) string {
 }
 
 // renderNative draws the document; k scales the vertical gaps and line heights (1 = normal).
-func renderNative(d *Document, logo []byte, logoType string, k float64) ([]byte, int, error) {
+func renderNative(d *Document, logo []byte, logoType string, k float64) ([]byte, int, bool, error) {
 	lh := 4.5 * k // body text line height
 	if lh < 4 {
 		lh = 4
@@ -434,12 +442,21 @@ func renderNative(d *Document, logo []byte, logoType string, k float64) ([]byte,
 			sections = append(sections, sec)
 		}
 	}
+	sigPlaced := false
+	signRoom := math.Max(12, 16*k) // room to sign by hand above the line
+	sigBlock := signRoom + 1 + 5   // + the line and the label
 	for i, sec := range sections {
 		if p.GetY()+5+lh*2 > 297-28 { // title + two lines; longer blocks continue on the next page
 			newPage()
 		}
-		// The signature sits to the right of the last text block instead of on its own row below it.
-		withSig := d.SignatureLabel != "" && i == len(sections)-1
+		// The signature gets its own row below the last text block, with room to sign. Only when
+		// that would push it onto a new page does it sit to the right of the block instead.
+		withSig := false
+		if d.SignatureLabel != "" && i == len(sections)-1 {
+			p.SetFont("DejaVu", "", 9)
+			h := 5 + float64(len(p.SplitLines([]byte(sec.body), contentW)))*lh + 3*k
+			withSig = p.GetY()+h+sigBlock > 297-28
+		}
 		w := contentW
 		if withSig {
 			w = contentW - 70
@@ -452,26 +469,28 @@ func renderNative(d *Document, logo []byte, logoType string, k float64) ([]byte,
 		p.SetTextColor(dark.r, dark.g, dark.b)
 		p.MultiCell(w, lh, sec.body, "", "L", false)
 		if withSig {
+			sigPlaced = true
 			bottom := p.GetY()
-			signature(top + 12)
+			// Line well below the block's top so there is room beside the text to sign,
+			// but never into the footer.
+			signature(math.Min(math.Max(top+18, bottom+4), 297-28-6))
 			if p.GetY() < bottom {
 				p.SetY(bottom)
 			}
 		}
 		p.Ln(3 * k)
 	}
-	if d.SignatureLabel != "" && len(sections) == 0 {
-		if p.GetY()+12 > 297-28 { // 6 gap + 1 + 5 label: only break when it really does not fit
+	if d.SignatureLabel != "" && !sigPlaced {
+		if p.GetY()+sigBlock > 297-28 { // only break when it really does not fit
 			newPage()
 		}
-		p.Ln(6 * k)
-		signature(p.GetY())
+		signature(p.GetY() + signRoom)
 	}
 
 	pages := p.PageNo()
 	var buf bytes.Buffer
 	if err := p.Output(&buf); err != nil {
-		return nil, 0, err
+		return nil, 0, false, err
 	}
-	return buf.Bytes(), pages, nil
+	return buf.Bytes(), pages, sigPlaced, nil
 }
