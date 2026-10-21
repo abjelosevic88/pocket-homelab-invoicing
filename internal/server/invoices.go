@@ -374,7 +374,7 @@ func (s *Server) handleInvoiceStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	var payment *store.Payment
 	if in.Status == store.StatusPaid && inv.Total-inv.AmountPaid > 0 {
-		payment = &store.Payment{InvoiceID: inv.ID, Date: store.Today(), Amount: inv.Total - inv.AmountPaid, Currency: inv.Currency, ExchangeRate: 1, AppliedAmount: inv.Total - inv.AmountPaid, Method: "other", Notes: "Marked as paid"}
+		payment = &store.Payment{InvoiceID: inv.ID, Date: store.Today(), Amount: inv.Total - inv.AmountPaid, Currency: inv.Currency, ExchangeRate: 1, AppliedAmount: inv.Total - inv.AmountPaid, Method: "bank_transfer", Notes: "Marked as paid"}
 	}
 	full, err := s.store.CommitInvoice(ctx, uid, inv.ID, payment, in.Status, s.invoiceEvent(ctx, uid, "status", inv))
 	if err != nil {
