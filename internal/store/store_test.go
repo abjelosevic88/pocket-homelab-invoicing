@@ -251,3 +251,36 @@ func TestOverdueClearsWhenDueDateMovesOut(t *testing.T) {
 		t.Fatalf("future due: %s", got.Status)
 	}
 }
+
+func TestPaymentMethodFor(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+	uid := testUser(t, s, "pay@example.com")
+	st, _ := s.GetSettings(ctx, uid)
+	if st.DefaultPaymentMethod != PaymentBankTransfer {
+		t.Fatalf("default method %q", st.DefaultPaymentMethod)
+	}
+	c := &Client{Name: "Acme", Currency: "EUR", BillingMode: "hourly"}
+	if err := s.CreateClient(ctx, uid, c); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := s.GetClient(ctx, uid, c.ID)
+	if m := PaymentMethodFor(got, st); m != PaymentBankTransfer {
+		t.Errorf("no override: %q", m)
+	}
+	st.DefaultPaymentMethod = "cash"
+	if m := PaymentMethodFor(got, st); m != "cash" {
+		t.Errorf("settings default: %q", m)
+	}
+	got.PaymentMethod = "paypal"
+	if err := s.UpdateClient(ctx, uid, got); err != nil {
+		t.Fatal(err)
+	}
+	got, _ = s.GetClient(ctx, uid, c.ID)
+	if m := PaymentMethodFor(got, st); m != "paypal" {
+		t.Errorf("client override: %q", m)
+	}
+	if m := PaymentMethodFor(&Client{PaymentMethod: "bogus"}, Settings{DefaultPaymentMethod: ""}); m != PaymentBankTransfer {
+		t.Errorf("fallback: %q", m)
+	}
+}

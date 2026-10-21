@@ -5,6 +5,34 @@ import (
 	"database/sql"
 )
 
+// PaymentBankTransfer is the payment method used when nothing else is set.
+const PaymentBankTransfer = "bank_transfer"
+
+// PaymentMethods are the methods a payment can be recorded with (same list as the web UI).
+var PaymentMethods = []string{PaymentBankTransfer, "card", "paypal", "cash", "crypto", "stripe", "other"}
+
+// ValidPaymentMethod reports whether m is one of PaymentMethods.
+func ValidPaymentMethod(m string) bool {
+	for _, x := range PaymentMethods {
+		if m == x {
+			return true
+		}
+	}
+	return false
+}
+
+// PaymentMethodFor returns how a client's payments are recorded by default: the
+// client's own method, else the Settings default, else bank transfer.
+func PaymentMethodFor(c *Client, st Settings) string {
+	if c != nil && ValidPaymentMethod(c.PaymentMethod) {
+		return c.PaymentMethod
+	}
+	if ValidPaymentMethod(st.DefaultPaymentMethod) {
+		return st.DefaultPaymentMethod
+	}
+	return PaymentBankTransfer
+}
+
 // PaymentFilter narrows ListPayments.
 type PaymentFilter struct {
 	InvoiceID int64

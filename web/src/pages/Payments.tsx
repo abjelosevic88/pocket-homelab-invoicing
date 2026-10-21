@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom'
 import { api, V1 } from '../lib/api'
-import { fmtDate, money } from '../lib/format'
+import { fmtDate, money, methodLabel } from '../lib/format'
 import type { Payment } from '../lib/types'
 import { Card, Empty, Loading, PageHeader, useAsync } from '../components/ui'
 
@@ -14,7 +14,7 @@ export default function Payments() {
       <Card flush>
         {loading ? <Loading /> : !data?.length ? <Empty title="No payments yet">Record payments from an invoice page.</Empty> : <div className="table-wrap"><table className="table">
           <thead><tr><th>Date</th><th>Invoice</th><th>Client</th><th>Method</th><th>Reference</th><th className="num">Amount</th></tr></thead>
-          <tbody>{data.map(p => <tr key={p.id} className="clickable" onClick={() => navigate(`/invoices/${p.invoice_id}`)}><td className="muted">{fmtDate(p.date)}</td><td className="bold">{p.invoice_number}</td><td>{p.client_name}</td><td className="muted">{p.method.replace('_', ' ')}</td><td className="muted">{p.reference}</td><td className="num">{money(p.amount, p.currency)}</td></tr>)}</tbody>
+          <tbody>{data.map(p => <tr key={p.id} className="clickable" onClick={() => navigate(`/invoices/${p.invoice_id}`)}><td className="muted">{fmtDate(p.date)}</td><td className="bold">{p.invoice_number}</td><td>{p.client_name}</td><td className="muted">{methodLabel(p.method)}</td><td className="muted">{p.reference}</td><td className="num">{money(p.amount, p.currency)}</td></tr>)}</tbody>
           <tfoot><tr><td colSpan={5}>Total received</td><td className="num">{Object.entries(totals).map(([c, v]) => money(v, c)).join(' + ')}</td></tr></tfoot>
         </table></div>}
       </Card>

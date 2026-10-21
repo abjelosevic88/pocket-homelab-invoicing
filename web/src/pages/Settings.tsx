@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { api, V1 } from '../lib/api'
 import { useApp } from '../lib/app-context'
-import { BILLING_MODES, UNITS, fmtDate, fmtDateTime, money, today } from '../lib/format'
+import { BILLING_MODES, PAYMENT_METHODS, UNITS, methodLabel, fmtDate, fmtDateTime, money, today } from '../lib/format'
 import type { APIToken, ConnMode, Currency, CustomFieldDef, ExchangeRate, Holiday, InvoiceTemplate, Product, Settings as S, TaxRate, User, Webhook, WorkingDays } from '../lib/types'
 import { Card, Confirm, Empty, Field, Loading, Modal, Tabs, useAsync, useToast } from '../components/ui'
 import { Select } from '../components/Select'
@@ -158,6 +158,7 @@ function Invoicing() {
         <Card title="Defaults for new invoices">
           <div className="form-grid">
             <Field label="Payment terms (days)"><input type="number" value={s.default_due_days} onChange={set('default_due_days')} /></Field>
+            <Field label="Payment method" help="Used when recording a payment and by Mark fully paid; clients can override it"><Select value={s.default_payment_method || 'bank_transfer'} onChange={put('default_payment_method')} options={PAYMENT_METHODS.map(m => ({ value: m, label: methodLabel(m) }))} /></Field>
             <Field label="Default billing mode"><Select value={s.default_billing_mode} onChange={put('default_billing_mode')} options={BILLING_MODES.map(b => ({ value: b.value, label: b.label }))} /></Field>
             <Field label="Default hourly rate"><input type="number" step="0.01" value={s.default_hourly_rate} onChange={set('default_hourly_rate')} /></Field>
             <Field label="Default daily rate"><input type="number" step="0.01" value={s.default_daily_rate} onChange={set('default_daily_rate')} /></Field>

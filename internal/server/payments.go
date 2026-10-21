@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"net/http"
 	"strings"
 
@@ -43,7 +44,7 @@ func (s *Server) handleCreatePayment(w http.ResponseWriter, r *http.Request) {
 		p.Currency = inv.Currency
 	}
 	if p.Method == "" {
-		p.Method = "bank_transfer"
+		p.Method = s.paymentMethodFor(ctx, uid, inv.ClientID)
 	}
 	// Applied amount is in the invoice currency.
 	cur := s.store.GetCurrency(ctx, inv.Currency)
@@ -90,4 +91,11 @@ func (s *Server) handleDeletePayment(w http.ResponseWriter, r *http.Request) {
 	}
 	s.store.LogActivity(r.Context(), uid, "invoice", invoiceID, "payment", "Payment deleted")
 	writeJSON(w, http.StatusOK, inv)
+}
+
+// paymentMethodFor is the method a payment for this client is recorded with when none is given.
+func (s *Server) paymentMethodFor(ctx context.Context, uid, clientID int64) string {
+	st, _ := s.store.GetSettings(ctx, uid)
+	c, _ := s.store.GetClient(ctx, uid, clientID)
+	return store.PaymentMethodFor(c, st)
 }

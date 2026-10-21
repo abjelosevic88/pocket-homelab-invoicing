@@ -4,7 +4,7 @@ export interface ExchangeRate { base: string; quote: string; rate: number; sourc
 export interface TaxRate { id: number; name: string; rate: number; is_default: boolean }
 export interface Client {
   id: number; name: string; contact_name: string; email: string; phone: string; address1: string; address2: string; city: string; state: string; postal_code: string; country: string; tax_id: string; registration_no: string; website: string;
-  currency: string; billing_mode: string; default_rate: number; payment_terms_days: number; template_id: number | null; email_subject: string; email_body: string; email_cc: string; documents_correspondent: string; notes: string; archived: boolean; created_at: string; updated_at: string;
+  currency: string; billing_mode: string; default_rate: number; payment_terms_days: number; payment_method?: string; template_id: number | null; email_subject: string; email_body: string; email_cc: string; documents_correspondent: string; notes: string; archived: boolean; created_at: string; updated_at: string;
   invoice_count?: number; outstanding: number; total_billed: number;
 }
 export interface Product { id: number; name: string; description: string; unit: string; unit_price: number; currency: string; tax_rate: number; archived: boolean }
@@ -41,7 +41,7 @@ export interface Webhook { id: number; url: string; events: string; secret: stri
 export interface APIToken { id: number; name: string; prefix: string; last_used_at: string | null; created_at: string }
 export interface Activity { id: number; entity_type: string; entity_id: number; action: string; message: string; created_at: string }
 export interface Settings {
-  company_name: string; brand_name: string; company_email: string; company_phone: string; company_website: string; address1: string; address2: string; city: string; state: string; postal_code: string; country: string; tax_id: string; vat_id: string; issue_place: string; logo_path: string;
+  company_name: string; brand_name: string; company_email: string; company_phone: string; company_website: string; address1: string; address2: string; city: string; state: string; postal_code: string; country: string; tax_id: string; vat_id: string; issue_place: string; default_payment_method: string; logo_path: string;
   base_currency: string; exchange_rate_provider: string; locale: string; date_format: string; timezone: string; invoice_number_format: string; invoice_next_seq: number; invoice_seq_reset_yearly: boolean; invoice_seq_year: number; default_due_days: number; default_notes: string; default_terms: string; default_footer: string; default_billing_mode: string;
   default_hourly_rate: number; default_daily_rate: number; default_monthly_rate: number; default_tax_rate: number; hours_per_day: number; time_rounding_minutes: number; show_tax_column: boolean; always_show_tax: boolean; payment_details: string;
   payment_details_by_currency: Record<string, string> | null; number_format: string; custom_fields: CustomFieldDef[] | null; show_base_total: boolean; base_total_note: string; email_attachment_mode: string;

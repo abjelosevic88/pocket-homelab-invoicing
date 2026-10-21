@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api, V1 } from '../lib/api'
-import { BILLING_MODES, fileSize, fmtDate, hours, money } from '../lib/format'
+import { BILLING_MODES, fileSize, fmtDate, hours, methodLabel, money } from '../lib/format'
 import type { Document, Client, DocsLink, DocsPage, Invoice, Recurring } from '../lib/types'
 import { Badge, Card, Confirm, Empty, Loading, Modal, PageHeader, useAsync, useToast } from '../components/ui'
 import { DocsBadge, usePocketDocs } from '../components/pocketdocs'
@@ -46,6 +46,7 @@ export default function ClientDetail() {
             {c.website && <><dt>Website</dt><dd><a href={c.website} target="_blank" rel="noreferrer">{c.website}</a></dd></>}
             {c.tax_id && <><dt>VAT ID</dt><dd>{c.tax_id}</dd></>}
             {c.registration_no && <><dt>Reg. no.</dt><dd>{c.registration_no}</dd></>}
+            {c.payment_method && <><dt>Pays by</dt><dd>{methodLabel(c.payment_method)}</dd></>}
             {c.notes && <><dt>Notes</dt><dd style={{ whiteSpace: 'pre-wrap' }}>{c.notes}</dd></>}
           </dl>
         </Card>

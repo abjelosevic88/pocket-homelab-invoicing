@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [0.7.1] - 2026-10-21
+
+### Added
+- **Payment method default.** Settings → Invoicing → Defaults for new invoices → *Payment method* (default *bank transfer*), and a per-client *Payment method* on the client form (*Default* = the Settings one). Record payment pre-selects it, a payment posted without `method` gets it, and **Mark fully paid** records with it. Settings `default_payment_method`, clients `payment_method` (`""` = default).
+
+### Fixed
+- **Mark fully paid** recorded its payment as *other*; it now uses the client's or the default payment method.
+
+### Migration
+- `0014_client_payment_method`: `clients.payment_method`, empty for existing clients.
+
 ## [0.7.0] - 2026-10-20
 
 ### Changed

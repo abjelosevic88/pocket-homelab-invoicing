@@ -72,6 +72,10 @@ func (s *Server) handleCreateClient(w http.ResponseWriter, r *http.Request) {
 	}
 	c.TemplateID = s.ownTemplateID(r.Context(), uid, c.TemplateID)
 	c.DocumentsCorrespondent = strings.TrimSpace(c.DocumentsCorrespondent)
+	if c.PaymentMethod != "" && !store.ValidPaymentMethod(c.PaymentMethod) {
+		writeErr(w, http.StatusBadRequest, "unknown payment method")
+		return
+	}
 	if err := s.store.CreateClient(r.Context(), uid, &c); err != nil {
 		s.fail(w, err, "create client")
 		return
@@ -100,6 +104,10 @@ func (s *Server) handleUpdateClient(w http.ResponseWriter, r *http.Request) {
 	}
 	c.TemplateID = s.ownTemplateID(r.Context(), uid, c.TemplateID)
 	c.DocumentsCorrespondent = strings.TrimSpace(c.DocumentsCorrespondent)
+	if c.PaymentMethod != "" && !store.ValidPaymentMethod(c.PaymentMethod) {
+		writeErr(w, http.StatusBadRequest, "unknown payment method")
+		return
+	}
 	if err := s.store.UpdateClient(r.Context(), uid, &c); err != nil {
 		s.fail(w, err, "update client")
 		return

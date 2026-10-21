@@ -2,13 +2,13 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api, V1 } from '../lib/api'
 import { useApp } from '../lib/app-context'
-import { BILLING_MODES, money } from '../lib/format'
+import { BILLING_MODES, PAYMENT_METHODS, methodLabel, money } from '../lib/format'
 import type { Client, DocsEntry, InvoiceTemplate } from '../lib/types'
 import { usePocketDocs } from '../components/pocketdocs'
 import { Card, Empty, Field, Loading, Modal, PageHeader, useAsync, useDebounce, useToast } from '../components/ui'
 import { Select } from '../components/Select'
 
-const blank = (currency: string, terms: number): Partial<Client> => ({ name: '', contact_name: '', email: '', phone: '', address1: '', address2: '', city: '', state: '', postal_code: '', country: '', tax_id: '', registration_no: '', website: '', currency, billing_mode: 'hourly', default_rate: 0, payment_terms_days: terms, notes: '', email_subject: '', email_body: '', email_cc: '' })
+const blank = (currency: string, terms: number): Partial<Client> => ({ name: '', contact_name: '', email: '', phone: '', address1: '', address2: '', city: '', state: '', postal_code: '', country: '', tax_id: '', registration_no: '', website: '', currency, billing_mode: 'hourly', default_rate: 0, payment_terms_days: terms, payment_method: '', notes: '', email_subject: '', email_body: '', email_cc: '' })
 
 export function ClientForm({ initial, onSaved, onClose }: { initial?: Client; onSaved: (c: Client) => void; onClose: () => void }) {
   const { settings, currencies } = useApp()
@@ -52,6 +52,7 @@ export function ClientForm({ initial, onSaved, onClose }: { initial?: Client; on
         <Field label="Default billing mode"><Select value={c.billing_mode || ''} onChange={v => setC(x => ({ ...x, billing_mode: v as Client['billing_mode'] }))} options={BILLING_MODES.map(b => ({ value: b.value, label: b.label }))} /></Field>
         <Field label="Default rate" help="Per hour / day / month depending on billing mode"><input type="number" step="0.01" value={c.default_rate} onChange={set('default_rate')} /></Field>
         <Field label="Payment terms (days)" help="0 = due on receipt"><input type="number" value={c.payment_terms_days} onChange={set('payment_terms_days')} /></Field>
+        <Field label="Payment method" help="Pre-selected when recording a payment and used by Mark fully paid"><Select value={c.payment_method || ''} onChange={v => setC(x => ({ ...x, payment_method: v }))} options={[{ value: '', label: 'Default', hint: methodLabel(settings?.default_payment_method || 'bank_transfer') }, ...PAYMENT_METHODS.map(m => ({ value: m, label: methodLabel(m) }))]} /></Field>
         {docs?.configured && <Field label="Pocket Documents correspondent" help="Documents of this correspondent show on the client page; everything filed for this client goes under it (linked by name)">
           <Select value={createCorr ? '__create__' : c.documents_correspondent || ''} placeholder="— not linked —" onChange={v => { if (v === '__create__') { setCreateCorr(true) } else { setCreateCorr(false); setC(x => ({ ...x, documents_correspondent: v })) } }}
             options={[

@@ -50,6 +50,7 @@ type Settings struct {
 	ShowTaxColumn        bool    `json:"show_tax_column"`
 	AlwaysShowTax        bool    `json:"always_show_tax"` // print the tax line in the totals even at 0% (VAT rate and amount must appear on the invoice)
 
+	DefaultPaymentMethod     string            `json:"default_payment_method"`      // method for recorded payments and "Mark fully paid" (clients can override)
 	PaymentDetails           string            `json:"payment_details"`             // bank account, IBAN, PayPal etc. shown on invoice
 	PaymentDetailsByCurrency map[string]string `json:"payment_details_by_currency"` // optional per-currency override (e.g. USD IBAN)
 	NumberFormat             string            `json:"number_format"`               // "1,234.56" | "1.234,56" | "1 234,56" | "1'234.56"
@@ -116,6 +117,7 @@ func DefaultSettings() Settings {
 		DefaultTerms:                  "Payment is due within {due_days} days of the invoice date.",
 		DefaultFooter:                 "Thank you for your business.",
 		DefaultBilling:                "hourly",
+		DefaultPaymentMethod:          PaymentBankTransfer,
 		HoursPerDay:                   8,
 		TimeRoundingMin:               15,
 		ShowTaxColumn:                 true,

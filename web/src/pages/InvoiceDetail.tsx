@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { api, V1 } from '../lib/api'
 import { useApp } from '../lib/app-context'
-import { fileSize, fmtDate, fmtDateTime, money, PAYMENT_METHODS, today } from '../lib/format'
+import { fileSize, fmtDate, fmtDateTime, methodLabel, money, paymentMethodFor, PAYMENT_METHODS, today } from '../lib/format'
 import type { Activity, Client, Invoice, Payment } from '../lib/types'
 import { Badge, Card, Confirm, Field, Loading, Modal, PageHeader, useAsync, useToast } from '../components/ui'
 import { DocsBadge, usePocketDocs } from '../components/pocketdocs'
@@ -10,12 +10,14 @@ import { Select } from '../components/Select'
 
 function PaymentForm({ inv, onDone }: { inv: Invoice; onDone: () => void }) {
   const toast = useToast()
-  const { currencies } = useApp()
-  const [p, setP] = useState({ invoice_id: inv.id, date: today(), amount: inv.balance, currency: inv.currency, exchange_rate: 0, method: 'bank_transfer', reference: '', notes: '' })
+  const { currencies, settings } = useApp()
+  const { data: clientInfo } = useAsync(() => api.get<{ client: Client }>(`${V1}/clients/${inv.client_id}`), [inv.client_id])
+  const [p, setP] = useState({ invoice_id: inv.id, date: today(), amount: inv.balance, currency: inv.currency, exchange_rate: 0, method: '', reference: '', notes: '' })
+  const method = p.method || paymentMethodFor(clientInfo?.client, settings)
   const [busy, setBusy] = useState(false)
   const submit = async (e: React.FormEvent) => {
     e.preventDefault(); setBusy(true)
-    try { await api.post(`${V1}/payments`, p); toast('Payment recorded', 'success'); onDone() } catch (e) { toast((e as Error).message, 'error') } finally { setBusy(false) }
+    try { await api.post(`${V1}/payments`, { ...p, method }); toast('Payment recorded', 'success'); onDone() } catch (e) { toast((e as Error).message, 'error') } finally { setBusy(false) }
   }
   return (
     <form onSubmit={submit}>
@@ -24,7 +26,7 @@ function PaymentForm({ inv, onDone }: { inv: Invoice; onDone: () => void }) {
         <Field label="Currency" help={p.currency !== inv.currency ? `Converted to ${inv.currency} using the rate below` : undefined}><Select value={p.currency} onChange={v => setP({ ...p, currency: v })} options={currencies.filter(c => c.enabled || c.code === inv.currency).map(c => ({ value: c.code, label: c.code, hint: c.name }))} /></Field>
         {p.currency !== inv.currency && <Field label={`Rate: 1 ${p.currency} = ? ${inv.currency}`} help="Leave 0 to use the stored rate" className="full"><input type="number" step="0.000001" value={p.exchange_rate || ''} onChange={e => setP({ ...p, exchange_rate: parseFloat(e.target.value) || 0 })} /></Field>}
         <Field label="Date"><input type="date" value={p.date} onChange={e => setP({ ...p, date: e.target.value })} /></Field>
-        <Field label="Method"><Select value={p.method} onChange={v => setP({ ...p, method: v })} options={PAYMENT_METHODS.map(m => ({ value: m, label: m.replace('_', ' ') }))} /></Field>
+        <Field label="Method"><Select value={method} onChange={v => setP({ ...p, method: v })} options={PAYMENT_METHODS.map(m => ({ value: m, label: methodLabel(m) }))} /></Field>
         <Field label="Reference"><input value={p.reference} onChange={e => setP({ ...p, reference: e.target.value })} placeholder="Transaction id, cheque #…" /></Field>
         <Field label="Notes"><input value={p.notes} onChange={e => setP({ ...p, notes: e.target.value })} /></Field>
       </div>

@@ -94,6 +94,10 @@ export const BILLING_MODES = [
 ]
 
 export const PAYMENT_METHODS = ['bank_transfer', 'card', 'paypal', 'cash', 'crypto', 'stripe', 'other']
+export const methodLabel = (m: string) => m.replace('_', ' ')
+
+// How a payment for this client is recorded unless chosen otherwise: the client's own method, else the Settings default.
+export const paymentMethodFor = (client?: { payment_method?: string } | null, settings?: { default_payment_method?: string } | null) => client?.payment_method || settings?.default_payment_method || 'bank_transfer'
 
 export function monthLabel(ym: string): string {
   const [y, m] = ym.split('-').map(Number)

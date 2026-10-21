@@ -104,6 +104,9 @@ func (s *Server) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 	if st.BaseCurrency == "" {
 		st.BaseCurrency = "EUR"
 	}
+	if !store.ValidPaymentMethod(st.DefaultPaymentMethod) {
+		st.DefaultPaymentMethod = store.PaymentBankTransfer
+	}
 	if st.InvoiceNumberFmt == "" {
 		st.InvoiceNumberFmt = "INV-{YYYY}-{SEQ:4}"
 	}
