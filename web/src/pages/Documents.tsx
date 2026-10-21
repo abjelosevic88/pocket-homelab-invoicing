@@ -4,6 +4,7 @@ import { api, V1 } from '../lib/api'
 import { fileSize, fmtDate, today } from '../lib/format'
 import type { Client, Document, DocsLink, DocsPage, PocketDoc } from '../lib/types'
 import { Card, Confirm, DropZone, Empty, Field, Loading, Modal, PageHeader, Tabs, useAsync, useDebounce, useToast } from '../components/ui'
+import { Icon } from '../components/icons'
 import { DocsBadge, DocsOffNote, usePocketDocs } from '../components/pocketdocs'
 import { Select } from '../components/Select'
 
@@ -57,7 +58,7 @@ export function DocForm({ initial, categories, clients, onSaved, onClose, docsOn
         <Field label="Notes" className="full"><textarea rows={3} value={f.notes} onChange={set('notes')} /></Field>
         {!initial && docsOn && <label className="check full"><input type="checkbox" checked={fileInDocs} onChange={e => setFileInDocs(e.target.checked)} /> Also file in Pocket Documents</label>}
       </div>
-      <div className="form-actions"><button type="button" className="btn" onClick={onClose}>Cancel</button><button className="btn primary" disabled={busy}>{initial ? 'Save' : 'Upload'}</button></div>
+      <div className="form-actions"><button type="button" className="btn" onClick={onClose}>Cancel</button><button type="submit" className="btn primary" disabled={busy}>{initial ? 'Save' : 'Upload'}</button></div>
     </form>
   )
 }
@@ -83,13 +84,13 @@ function LocalDocuments({ docsOn }: { docsOn: boolean }) {
   const expiring = meta.data?.expiring || []
   return (
     <>
-      {expiring.length > 0 && <div className="callout warn mb"><b>Expiring soon:</b> {expiring.map((d, i) => <span key={d.id}>{i > 0 && ', '}<button className="link-btn" onClick={() => setModal(d)}>{d.title}</button> ({fmtDate(d.expires_at)})</span>)}</div>}
+      {expiring.length > 0 && <div className="callout warn mb"><b>Expiring soon:</b> {expiring.map((d, i) => <span key={d.id}>{i > 0 && ', '}<button type="button" className="link-btn" onClick={() => setModal(d)}>{d.title}</button> ({fmtDate(d.expires_at)})</span>)}</div>}
       <div className="filters">
         <input className="search" placeholder="Search title, file, notes…" value={q} onChange={e => setQ(e.target.value)} />
         <Select value={cat} onChange={setCat} ariaLabel="Category" placeholder="All categories" options={[{ value: '', label: 'All categories' }, ...Object.entries(meta.data?.categories || {}).filter(([, n]) => n > 0).sort().map(([c, n]) => ({ value: c, label: c, hint: String(n) }))]} />
         <Select value={String(clientId)} onChange={v => setClientId(Number(v))} ariaLabel="Client" placeholder="All clients" options={[{ value: '0', label: 'All clients' }, ...clients.map(c => ({ value: String(c.id), label: c.name }))]} />
         <span className="spacer" />
-        <button className="btn primary" onClick={() => setModal('new')}>+ Upload</button>
+        <button type="button" className="btn primary" onClick={() => setModal('new')}><Icon name="upload" size={15} />Upload</button>
       </div>
       {list.loading && !list.data ? <Loading /> : !list.data?.length ? <Empty title={q || cat || clientId ? 'No documents match' : 'No documents yet'}>Keep contracts, registration papers, tax decisions, bank letters and certificates in one place. Upload your first file to get started.</Empty> :
         <Card flush><div className="table-wrap"><table className="table">
@@ -105,10 +106,10 @@ function LocalDocuments({ docsOn }: { docsOn: boolean }) {
               <td className="num muted">{fileSize(d.size)}</td>
               <td className="actions">
                 <a className="btn ghost sm" href={`${V1}/documents/${d.id}/file?download=1`} title="Download the file">Download</a>
-                <button className="btn ghost sm" onClick={() => setModal(d)} title="Edit title, category, dates">Edit</button>
+                <button type="button" className="btn ghost sm" onClick={() => setModal(d)} title="Edit title, category, dates">Edit</button>
                 <label className="btn ghost sm" title="Upload a new version of the file">Replace<input type="file" style={{ display: 'none' }} onChange={async e => { const f = e.target.files?.[0]; if (!f) return; const fd = new FormData(); fd.append('file', f); try { await api.post(`${V1}/documents/${d.id}/file`, fd); toast('File replaced', 'success'); reload() } catch (err) { toast((err as Error).message, 'error') } }} /></label>
-                {docsOn && !(d.pocket_documents && d.pocket_documents.documents_id > 0) && <button className="btn ghost sm" onClick={() => send(d)} title="File a copy in Pocket Documents">To Documents</button>}
-                <button className="btn ghost sm danger" onClick={() => setDel(d)} title="Delete">Delete</button>
+                {docsOn && !(d.pocket_documents && d.pocket_documents.documents_id > 0) && <button type="button" className="btn ghost sm" onClick={() => send(d)} title="File a copy in Pocket Documents">To Documents</button>}
+                <button type="button" className="btn ghost sm danger" onClick={() => setDel(d)} title="Delete">Delete</button>
               </td>
             </tr>
           })}</tbody>
@@ -139,7 +140,7 @@ function DocsBrowser() {
         <input className="search" placeholder="Search in Pocket Documents (from:client tag:x created:2026 …)" value={q} onChange={e => setQ(e.target.value)} />
         <span className="muted small">{res.data ? `${res.data.count} document${res.data.count === 1 ? '' : 's'}` : ''}</span>
         <span className="spacer" />
-        {res.data && res.data.pages > 1 && <span className="row"><button className="btn sm" disabled={page <= 1} onClick={() => setPage(p => p - 1)}>‹</button><span className="muted small">{page} / {res.data.pages}</span><button className="btn sm" disabled={page >= res.data.pages} onClick={() => setPage(p => p + 1)}>›</button></span>}
+        {res.data && res.data.pages > 1 && <span className="row"><button type="button" className="btn sm" disabled={page <= 1} onClick={() => setPage(p => p - 1)}>‹</button><span className="muted small">{page} / {res.data.pages}</span><button type="button" className="btn sm" disabled={page >= res.data.pages} onClick={() => setPage(p => p + 1)}>›</button></span>}
       </div>
       {res.error ? <div className="callout warn">{String(res.error)}</div> : res.loading && !res.data ? <Loading /> : !res.data?.results.length ? <Empty title="Nothing found in Pocket Documents" /> :
         <Card flush><div className="table-wrap"><table className="table">
@@ -154,9 +155,9 @@ function DocsBrowser() {
               <td>{d.tags.map(t => <span key={t} className="badge" style={{ marginRight: 4 }}>{t}</span>)}</td>
               <td className="muted">{fmtDate(d.created)}</td>
               <td className="actions">
-                <a className="btn ghost sm" href={d.url} target="_blank" rel="noreferrer" title="Open this document in Pocket Documents (new tab)">Open ↗</a>
+                <a className="btn ghost sm" href={d.url} target="_blank" rel="noreferrer" title="Open this document in Pocket Documents (new tab)">Open<Icon name="external" size={13} /></a>
                 <a className="btn ghost sm" href={`${V1}/pocket-documents/documents/${d.id}/file?download=1`} title="Download the file">Download</a>
-                {linked?.kind === 'document' ? <span className="muted small">already in Company documents</span> : linked?.kind === 'invoice' || linked?.kind === 'attachment' ? <Link className="btn ghost sm" to={linked.kind === 'invoice' ? `/invoices/${linked.ref_id}` : '/invoices'} title="Open the invoice this file belongs to">Open invoice</Link> : <button className="btn ghost sm" disabled={importing === d.id} onClick={() => importDoc(d)} title="Copy this file into Pocket Invoicing's Company documents">{importing === d.id ? 'Importing…' : 'Import'}</button>}
+                {linked?.kind === 'document' ? <span className="muted small">already in Company documents</span> : linked?.kind === 'invoice' || linked?.kind === 'attachment' ? <Link className="btn ghost sm" to={linked.kind === 'invoice' ? `/invoices/${linked.ref_id}` : '/invoices'} title="Open the invoice this file belongs to">Open invoice</Link> : <button type="button" className="btn ghost sm" disabled={importing === d.id} onClick={() => importDoc(d)} title="Copy this file into Pocket Invoicing's Company documents">{importing === d.id ? 'Importing…' : 'Import'}</button>}
               </td>
             </tr>
           })}</tbody>

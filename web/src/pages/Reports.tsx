@@ -31,7 +31,7 @@ export default function Reports() {
       <div className="filters">
         <Select value={year} onChange={v => { setYear(v); setFrom(`${v}-01-01`); setTo(`${v}-12-31`) }} ariaLabel="Year" options={yearOptions.map(y => ({ value: y, label: y }))} />
         <input type="date" value={from} onChange={e => setFrom(e.target.value)} /><span className="muted">to</span><input type="date" value={to} onChange={e => setTo(e.target.value)} />
-        {presets.map(([l, f]) => <button key={l} className="btn sm" onClick={() => { const [a, b] = f(); setFrom(a); setTo(b) }}>{l}</button>)}
+        {presets.map(([l, f]) => <button type="button" key={l} className="btn sm" onClick={() => { const [a, b] = f(); setFrom(a); setTo(b) }}>{l}</button>)}
       </div>
       <Tabs tabs={TABS} value={tab} onChange={setTab} />
       {tab === 'revenue' && <Revenue q={q} base={base} />}

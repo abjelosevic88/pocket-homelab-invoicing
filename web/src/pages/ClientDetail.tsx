@@ -4,6 +4,8 @@ import { api, V1 } from '../lib/api'
 import { BILLING_MODES, fileSize, fmtDate, hours, methodLabel, money } from '../lib/format'
 import type { Document, Client, DocsLink, DocsPage, Invoice, Recurring } from '../lib/types'
 import { Badge, Card, Confirm, Empty, Loading, Modal, PageHeader, useAsync, useToast } from '../components/ui'
+import { useCrumb } from '../components/shell'
+import { Icon } from '../components/icons'
 import { DocsBadge, usePocketDocs } from '../components/pocketdocs'
 import { DocForm, expiryState } from './Documents'
 import { ClientForm } from './Clients'
@@ -17,6 +19,7 @@ export default function ClientDetail() {
   const { data, loading, reload } = useAsync(() => api.get<Detail>(`${V1}/clients/${id}`), [id])
   const [editing, setEditing] = useState(false)
   const [confirmDel, setConfirmDel] = useState(false)
+  useCrumb(data?.client.name)
   if (loading || !data) return <Loading />
   const c = data.client
   const del = async () => {
@@ -27,8 +30,8 @@ export default function ClientDetail() {
   return (
     <>
       <PageHeader title={c.name} sub={<>{c.contact_name}{c.contact_name && c.email ? ' · ' : ''}{c.email}</>} actions={<>
-        <button className="btn" onClick={() => setEditing(true)}>Edit</button>
-        <button className="btn danger" onClick={() => setConfirmDel(true)}>{c.invoice_count ? 'Archive' : 'Delete'}</button>
+        <button type="button" className="btn" onClick={() => setEditing(true)}>Edit</button>
+        <button type="button" className="btn danger" onClick={() => setConfirmDel(true)}>{c.invoice_count ? 'Archive' : 'Delete'}</button>
         <Link className="btn" to={`/time?client_id=${c.id}`}>Time entries</Link>
         <Link className="btn primary" to={`/invoices/new?client_id=${c.id}`}>New invoice</Link>
       </>} />
@@ -83,7 +86,7 @@ function ClientDocuments({ client }: { client: Client }) {
     try { const l = await api.post<DocsLink>(`${V1}/documents/${d.id}/pocket-documents`); toast(`Filed in Pocket Documents as #${l.documents_id}`, 'success'); reload() } catch (e) { toast((e as Error).message, 'error') }
   }
   return <>
-    <Card title={<>Documents{data?.length ? <span className="muted small"> · {data.length}</span> : null}</>} actions={<><Link className="btn ghost sm" to={`/documents?client_id=${client.id}`}>All documents</Link><button className="btn sm" onClick={() => setModal('new')}>+ Upload</button></>} flush className="mb">
+    <Card title={<>Documents{data?.length ? <span className="muted small"> · {data.length}</span> : null}</>} actions={<><Link className="btn ghost sm" to={`/documents?client_id=${client.id}`}>All documents</Link><button type="button" className="btn sm" onClick={() => setModal('new')}><Icon name="upload" size={15} />Upload</button></>} flush className="mb">
       {!data?.length ? <div className="empty muted">No documents for this client yet. Upload contracts, NDAs, purchase orders or anything else you want to keep with {client.name}.</div> :
         <table className="table"><thead><tr><th>Title</th><th>Category</th><th>Date</th><th>Expires</th><th className="num">Size</th><th></th></tr></thead>
           <tbody>{data.map(d => { const ex = expiryState(d); return <tr key={d.id}>
@@ -94,9 +97,9 @@ function ClientDocuments({ client }: { client: Client }) {
             <td className="num muted">{fileSize(d.size)}</td>
             <td className="actions">
               <a className="btn ghost sm" href={`${V1}/documents/${d.id}/file?download=1`} title="Download the file">Download</a>
-              <button className="btn ghost sm" onClick={() => setModal(d)} title="Edit title, category, dates">Edit</button>
-              {docsOn && !(d.pocket_documents && d.pocket_documents.documents_id > 0) && <button className="btn ghost sm" onClick={() => send(d)} title="File a copy in Pocket Documents">To Documents</button>}
-              <button className="btn ghost sm danger" onClick={() => setDel(d)} title="Delete">Delete</button>
+              <button type="button" className="btn ghost sm" onClick={() => setModal(d)} title="Edit title, category, dates">Edit</button>
+              {docsOn && !(d.pocket_documents && d.pocket_documents.documents_id > 0) && <button type="button" className="btn ghost sm" onClick={() => send(d)} title="File a copy in Pocket Documents">To Documents</button>}
+              <button type="button" className="btn ghost sm danger" onClick={() => setDel(d)} title="Delete">Delete</button>
             </td>
           </tr> })}</tbody></table>}
     </Card>
@@ -111,10 +114,10 @@ function ClientPocketDocs({ client, onEdit }: { client: Client; onEdit: () => vo
   const pd = usePocketDocs()
   const { data, loading, error } = useAsync(() => pd?.configured ? api.get<DocsPage>(`${V1}/pocket-documents/documents?client_id=${client.id}&page_size=15`) : Promise.resolve(null), [pd?.configured, client.id, client.documents_correspondent])
   if (!pd?.configured) return null
-  if (data && !data.correspondent) return <div className="callout mb">Pocket Documents is connected but this client has no correspondent there yet. <button className="link-btn" onClick={onEdit}>Edit the client</button> and pick one (or create it) to see their documents here.</div>
+  if (data && !data.correspondent) return <div className="callout mb">Pocket Documents is connected but this client has no correspondent there yet. <button type="button" className="link-btn" onClick={onEdit}>Edit the client</button> and pick one (or create it) to see their documents here.</div>
   const name = data?.correspondent || client.documents_correspondent || client.name
   const openAll = data?.url || pd.url
-  return <Card title={<>Pocket Documents · {name}{data ? <span className="muted small"> · {data.count} document{data.count === 1 ? '' : 's'}</span> : null}</>} actions={openAll ? <a className="btn sm" href={openAll} target="_blank" rel="noreferrer">Open in Pocket Documents ↗</a> : null} flush className="mb">
+  return <Card title={<>Pocket Documents · {name}{data ? <span className="muted small"> · {data.count} document{data.count === 1 ? '' : 's'}</span> : null}</>} actions={openAll ? <a className="btn sm" href={openAll} target="_blank" rel="noreferrer">Open in Pocket Documents<Icon name="external" size={13} /></a> : null} flush className="mb">
     {error ? <div className="empty muted">{String(error)}</div> : loading && !data ? <Loading /> : !data?.correspondent_id ? <div className="empty muted">There is no correspondent "{name}" in Pocket Documents yet; it is created when the first invoice for {client.name} is filed.</div> : !data.results.length ? <div className="empty muted">No documents for this correspondent in Pocket Documents yet.</div> :
       <table className="table"><thead><tr><th></th><th>Title</th><th>Type</th><th>Tags</th><th>Created</th><th></th></tr></thead>
         <tbody>{data.results.map(d => <tr key={d.id}>
@@ -123,7 +126,7 @@ function ClientPocketDocs({ client, onEdit }: { client: Client; onEdit: () => vo
           <td className="muted">{d.document_type}</td>
           <td>{d.tags.map(t => <span key={t} className="badge" style={{ marginRight: 4 }}>{t}</span>)}</td>
           <td className="muted">{fmtDate(d.created)}</td>
-          <td className="actions"><a className="btn ghost sm" href={d.url} target="_blank" rel="noreferrer" title="Open this document in Pocket Documents (new tab)">Open ↗</a><a className="btn ghost sm" href={`${V1}/pocket-documents/documents/${d.id}/file?download=1`} title="Download the file">Download</a></td>
+          <td className="actions"><a className="btn ghost sm" href={d.url} target="_blank" rel="noreferrer" title="Open this document in Pocket Documents (new tab)">Open<Icon name="external" size={13} /></a><a className="btn ghost sm" href={`${V1}/pocket-documents/documents/${d.id}/file?download=1`} title="Download the file">Download</a></td>
         </tr>)}</tbody></table>}
     {data && data.count > data.results.length && openAll && <div className="muted small" style={{ padding: '8px 14px' }}>Showing {data.results.length} of {data.count}. <a href={openAll} target="_blank" rel="noreferrer">See all in Pocket Documents</a>.</div>}
   </Card>

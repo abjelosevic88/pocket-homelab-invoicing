@@ -5,6 +5,7 @@ import { useApp } from '../lib/app-context'
 import { fmtDate, money } from '../lib/format'
 import type { Client, Invoice } from '../lib/types'
 import { Badge, Card, Empty, Loading, PageHeader, useAsync, useDebounce } from '../components/ui'
+import { Icon } from '../components/icons'
 import { Select } from '../components/Select'
 
 const STATUSES = ['all', 'draft', 'open', 'sent', 'viewed', 'partial', 'overdue', 'paid', 'cancelled']
@@ -28,7 +29,7 @@ export default function Invoices() {
     <>
       <PageHeader title="Invoices" sub={data ? `${data.total} invoice${data.total === 1 ? '' : 's'}` : ''} actions={<>
         <a className="btn" href={`${V1}/reports/export.csv?type=invoices&status=${status === 'all' || status === 'open' ? '' : status}`}>Export CSV</a>
-        <Link className="btn primary" to="/invoices/new">+ New invoice</Link>
+        <Link className="btn primary" to="/invoices/new"><Icon name="plus" size={15} />New invoice</Link>
       </>} />
       <div className="filters">
         <input className="search" placeholder="Search number, client, PO…" value={q} onChange={e => setQ(e.target.value)} />
@@ -54,9 +55,9 @@ export default function Invoices() {
         )}
       </Card>
       {data && data.total > limit && <div className="row mt" style={{ justifyContent: 'center' }}>
-        <button className="btn sm" disabled={page === 0} onClick={() => setPage(p => p - 1)}>← Prev</button>
+        <button type="button" className="btn sm" disabled={page === 0} onClick={() => setPage(p => p - 1)}>← Prev</button>
         <span className="muted small">Page {page + 1} of {Math.ceil(data.total / limit)}</span>
-        <button className="btn sm" disabled={(page + 1) * limit >= data.total} onClick={() => setPage(p => p + 1)}>Next →</button>
+        <button type="button" className="btn sm" disabled={(page + 1) * limit >= data.total} onClick={() => setPage(p => p + 1)}>Next →</button>
       </div>}
     </>
   )

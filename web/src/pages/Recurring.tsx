@@ -5,6 +5,7 @@ import { useApp } from '../lib/app-context'
 import { BILLING_MODES, fmtDate, money, taxRateOptions, today, UNITS, unitForBilling } from '../lib/format'
 import type { Client, InvoiceTemplate, Recurring, RecurringItem, TaxRate } from '../lib/types'
 import { Badge, Card, Confirm, Empty, Field, Loading, Modal, PageHeader, useAsync, useToast } from '../components/ui'
+import { Icon } from '../components/icons'
 import { computeTotals } from './InvoiceEditor'
 import { Select } from '../components/Select'
 
@@ -60,18 +61,18 @@ function RecurringForm({ initial, clients, onSaved, onClose }: { initial?: Recur
           <td><input type="number" step="0.01" value={it.unit_price} onChange={e => setItem(i, { unit_price: parseFloat(e.target.value) || 0 })} /></td>
           <td><Select floating className="cell" ariaLabel="Tax" value={String(it.tax_rate)} onChange={v => setItem(i, { tax_rate: parseFloat(v) })} options={taxRateOptions(taxRates, it.tax_rate)} /></td>
           <td className="num">{money(totals.lines[i], r.currency!)}</td>
-          <td><button type="button" className="btn ghost sm" onClick={() => set('items', items.filter((_, j) => j !== i))}>✕</button></td>
+          <td><button type="button" className="btn ghost icon-only sm" aria-label="Delete" title="Delete" onClick={() => set('items', items.filter((_, j) => j !== i))}><Icon name="trash" size={14} /></button></td>
         </tr>)}</tbody>
       </table></div>
       <div className="row between mt">
-        <button type="button" className="btn" onClick={() => set('items', [...items, { description: '', unit: unitForBilling(r.billing_mode || 'monthly'), quantity: 1, unit_price: 0, tax_rate: settings?.default_tax_rate || 0, discount: 0 }])}>+ Add line</button>
+        <button type="button" className="btn" onClick={() => set('items', [...items, { description: '', unit: unitForBilling(r.billing_mode || 'monthly'), quantity: 1, unit_price: 0, tax_rate: settings?.default_tax_rate || 0, discount: 0 }])}><Icon name="plus" size={15} />Add line</button>
         <div className="bold">Total per invoice: {money(totals.total, r.currency!)}</div>
       </div>
       <div className="form-grid mt">
         <Field label="Notes"><textarea value={r.notes} onChange={e => set('notes', e.target.value)} /></Field>
         <Field label="Terms"><textarea value={r.terms} onChange={e => set('terms', e.target.value)} /></Field>
       </div>
-      <div className="form-actions"><button type="button" className="btn" onClick={onClose}>Cancel</button><button className="btn primary" disabled={busy}>{initial ? 'Save' : 'Create profile'}</button></div>
+      <div className="form-actions"><button type="button" className="btn" onClick={onClose}>Cancel</button><button type="submit" className="btn primary" disabled={busy}>{initial ? 'Save' : 'Create profile'}</button></div>
     </form>
   )
 }
@@ -87,7 +88,7 @@ export default function RecurringPage() {
   const toggle = async (r: Recurring) => { await api.put(`${V1}/recurring/${r.id}`, { ...r, status: r.status === 'active' ? 'paused' : 'active' }); reload() }
   return (
     <>
-      <PageHeader title="Recurring invoices" sub="Retainers and subscriptions, generated automatically on schedule." actions={<button className="btn primary" disabled={!clients?.length} onClick={() => setEditing('new')}>+ New profile</button>} />
+      <PageHeader title="Recurring invoices" sub="Retainers and subscriptions, generated automatically on schedule." actions={<button type="button" className="btn primary" disabled={!clients?.length} onClick={() => setEditing('new')}><Icon name="plus" size={15} />New profile</button>} />
       <Card flush>
         {loading ? <Loading /> : !data?.length ? <Empty title="No recurring profiles">Monthly retainer? Set it up once and let the scheduler do the rest.</Empty> : <div className="table-wrap"><table className="table">
           <thead><tr><th>Name</th><th>Client</th><th>Schedule</th><th>Next run</th><th>Last run</th><th className="num">Amount</th><th>Status</th><th></th></tr></thead>
@@ -98,7 +99,7 @@ export default function RecurringPage() {
             <td>{fmtDate(r.next_run)}</td><td className="muted">{fmtDate(r.last_run)}</td>
             <td className="num">{money(t.total, r.currency)}</td>
             <td><Badge status={r.status} /></td>
-            <td className="actions"><button className="btn sm" onClick={() => run(r)}>Run now</button> <button className="btn sm" onClick={() => toggle(r)}>{r.status === 'active' ? 'Pause' : 'Resume'}</button> <button className="btn sm" onClick={() => setEditing(r)}>Edit</button> <button className="btn ghost sm" onClick={() => setDel(r)}>✕</button></td>
+            <td className="actions"><button type="button" className="btn sm" onClick={() => run(r)}>Run now</button> <button type="button" className="btn sm" onClick={() => toggle(r)}>{r.status === 'active' ? 'Pause' : 'Resume'}</button> <button type="button" className="btn sm" onClick={() => setEditing(r)}>Edit</button> <button type="button" className="btn ghost icon-only sm" aria-label="Delete" title="Delete" onClick={() => setDel(r)}><Icon name="trash" size={14} /></button></td>
           </tr> })}</tbody>
         </table></div>}
       </Card>

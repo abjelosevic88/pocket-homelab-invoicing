@@ -133,7 +133,7 @@ export default function MonthEnd() {
           })}
           <div className="row between wrap">
             <div className="muted small">Drafts get the next invoice number, the service period {fmtDate(plan.period_start)} – {fmtDate(plan.period_end)}, the exchange rate of the issue date, and the client's or profile's template. Recurring profiles are advanced so the scheduler does not create the same month again.</div>
-            <button className="btn primary" disabled={busy || !selected.length} onClick={create}>{busy ? 'Creating…' : `Create ${selected.length} draft invoice${selected.length === 1 ? '' : 's'}`}</button>
+            <button type="button" className="btn primary" disabled={busy || !selected.length} onClick={create}>{busy ? 'Creating…' : `Create ${selected.length} draft invoice${selected.length === 1 ? '' : 's'}`}</button>
           </div>
         </div>}
 
@@ -150,8 +150,8 @@ export default function MonthEnd() {
               <td className="actions">
                 <a className="btn sm" href={`${V1}/invoices/${inv.id}/pdf`} target="_blank" rel="noreferrer">PDF</a>
                 <label className="btn sm">Upload PDF<input type="file" multiple style={{ display: 'none' }} onChange={e => upload(inv, e.target.files)} /></label>
-                {inv.status !== 'paid' && inv.status !== 'cancelled' && <button className="btn sm primary" onClick={() => setSend(inv)} disabled={!plan.smtp_configured} title={plan.smtp_configured ? '' : 'Configure SMTP under Settings → Email'}>Email</button>}
-                {inv.status === 'draft' && <button className="btn sm" onClick={() => markSent(inv)}>Mark sent</button>}
+                {inv.status !== 'paid' && inv.status !== 'cancelled' && <button type="button" className="btn sm primary" onClick={() => setSend(inv)} disabled={!plan.smtp_configured} title={plan.smtp_configured ? '' : 'Configure SMTP under Settings → Email'}>Email</button>}
+                {inv.status === 'draft' && <button type="button" className="btn sm" onClick={() => markSent(inv)}>Mark sent</button>}
               </td>
             </tr>)}</tbody>
           </table></div>}

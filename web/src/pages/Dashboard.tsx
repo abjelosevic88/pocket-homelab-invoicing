@@ -63,7 +63,7 @@ export default function Dashboard() {
         <div className="card stat"><div className="label">Best year</div><div className="value">{bestYear ? money(bestYear.paid, code) : '—'}</div><div className="hint">{bestYear ? `${bestYear.year} · ${bestYear.count} invoices` : ''}</div></div>
       </div>
       <div className="grid split-2-1 mb">
-        <Card title={`Revenue (last ${months} months)`} actions={<div className="btn-group">{[12, 24, 36].map(m => <button key={m} className={`btn sm ${months === m ? 'primary' : ''}`} onClick={() => setMonths(m)}>{m}m</button>)}</div>}><RevenueChart months={data.revenue} code={code} /></Card>
+        <Card title={`Revenue (last ${months} months)`} actions={<div className="btn-group">{[12, 24, 36].map(m => <button type="button" key={m} className={`btn sm ${months === m ? 'primary' : ''}`} onClick={() => setMonths(m)}>{m}m</button>)}</div>}><RevenueChart months={data.revenue} code={code} /></Card>
         <Card title="Needs attention" flush>
           {data.overdue.length === 0 && data.stats.draft_count === 0 ? <Empty title="All clear">No overdue invoices.</Empty> : (
             <table className="table">

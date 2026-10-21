@@ -5,6 +5,7 @@ import { useApp } from '../lib/app-context'
 import { fmtDateTime, hours, hoursDecimal, money, today } from '../lib/format'
 import type { Client, TimeEntry } from '../lib/types'
 import { Card, Empty, Field, Loading, Modal, PageHeader, useAsync, useToast } from '../components/ui'
+import { Icon } from '../components/icons'
 import { Select } from '../components/Select'
 
 function toLocalInput(iso: string) { const d = new Date(iso); const p = (n: number) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}` }
@@ -32,7 +33,7 @@ function EntryForm({ initial, clients, onDone }: { initial?: TimeEntry; clients:
         <Field label="Rate override" help="Blank = client default"><input type="number" step="0.01" value={e.rate ?? ''} onChange={ev => setE({ ...e, rate: ev.target.value === '' ? null : parseFloat(ev.target.value) })} /></Field>
         <Field label=" "><label className="check" style={{ marginTop: 8 }}><input type="checkbox" checked={e.billable} onChange={ev => setE({ ...e, billable: ev.target.checked })} /> Billable</label></Field>
       </div>
-      <div className="form-actions"><button className="btn primary" disabled={busy}>Save</button></div>
+      <div className="form-actions"><button type="submit" className="btn primary" disabled={busy}>Save</button></div>
     </form>
   )
 }
@@ -61,7 +62,7 @@ function InvoiceFromTime({ clientId, clients, entries, onDone }: { clientId: num
         <thead><tr><th><input type="checkbox" checked={selected.size === entries.length} onChange={e => setSelected(e.target.checked ? new Set(entries.map(x => x.id)) : new Set())} /></th><th>Date</th><th>Description</th><th className="num">Time</th></tr></thead>
         <tbody>{entries.map(e => <tr key={e.id}><td><input type="checkbox" checked={selected.has(e.id)} onChange={ev => { const n = new Set(selected); ev.target.checked ? n.add(e.id) : n.delete(e.id); setSelected(n) }} /></td><td className="muted">{fmtDateTime(e.started_at)}</td><td>{e.project && <span className="muted">{e.project}: </span>}{e.description}</td><td className="num">{hours(e.duration_minutes)}</td></tr>)}</tbody>
       </table></div>
-      <div className="row between mt"><span className="bold">{selected.size} entries · {hours(mins)} ({hoursDecimal(mins)} h)</span><button className="btn primary" disabled={busy || !selected.size} onClick={submit}>Create draft invoice</button></div>
+      <div className="row between mt"><span className="bold">{selected.size} entries · {hours(mins)} ({hoursDecimal(mins)} h)</span><button type="button" className="btn primary" disabled={busy || !selected.size} onClick={submit}>Create draft invoice</button></div>
     </div>
   )
 }
@@ -98,21 +99,21 @@ export default function TimeTracking() {
     <>
       <PageHeader title="Time tracking" sub={`Rounded to ${settings?.time_rounding_minutes || 15} min blocks when the timer stops (Settings → Invoicing).`} actions={<>
         <a className="btn" href={`${V1}/reports/export.csv?type=time`}>Export CSV</a>
-        <button className="btn" onClick={() => setEditing('new')}>+ Manual entry</button>
-        <button className="btn primary" disabled={!unbilledEntries.length} onClick={() => setInvoicing(true)}>Invoice unbilled time</button>
+        <button type="button" className="btn" onClick={() => setEditing('new')}><Icon name="plus" size={15} />Manual entry</button>
+        <button type="button" className="btn primary" disabled={!unbilledEntries.length} onClick={() => setInvoicing(true)}>Invoice unbilled time</button>
       </>} />
       <Card className="mb">
         {running ? (
           <div className="row between">
             <div className="row"><span className="timer-pill"><span className="dot" /> {String(Math.floor(elapsed / 3600)).padStart(2, '0')}:{String(Math.floor((elapsed % 3600) / 60)).padStart(2, '0')}:{String(elapsed % 60).padStart(2, '0')}</span><span><strong>{running.client_name}</strong>{running.project && <span className="muted"> · {running.project}</span>}<div className="muted small">{running.description}</div></span></div>
-            <button className="btn danger" onClick={stop}>■ Stop</button>
+            <button type="button" className="btn danger" onClick={stop}><Icon name="stop" size={14} />Stop</button>
           </div>
         ) : (
           <div className="row" style={{ gap: 10 }}>
             <Select className="timer-client" ariaLabel="Client" placeholder="Choose a client…" value={String(timer.client_id)} onChange={v => setTimer({ ...timer, client_id: Number(v) })} options={(clients || []).map(c => ({ value: String(c.id), label: c.name }))} />
             <input value={timer.project} onChange={e => setTimer({ ...timer, project: e.target.value })} placeholder="Project (optional)" style={{ width: 180 }} />
             <input value={timer.description} onChange={e => setTimer({ ...timer, description: e.target.value })} placeholder="What are you working on?" style={{ flex: 1, minWidth: 200 }} onKeyDown={e => e.key === 'Enter' && start()} />
-            <button className="btn primary" onClick={start} disabled={!timer.client_id}>▶ Start timer</button>
+            <button type="button" className="btn primary" onClick={start} disabled={!timer.client_id}><Icon name="play" size={14} />Start timer</button>
           </div>
         )}
       </Card>
@@ -130,13 +131,13 @@ export default function TimeTracking() {
             <td>{e.project && <span className="muted">{e.project}: </span>}{e.description}{e.rate != null && <span className="muted small"> · {money(e.rate, clients?.find(c => c.id === e.client_id)?.currency || '')}/h</span>}</td>
             <td className="num">{e.ended_at ? hours(e.duration_minutes) : <span className="timer-pill">running</span>}</td>
             <td>{!e.billable ? <span className="badge">non-billable</span> : e.invoice_id ? <span className="badge paid" onClick={() => navigate(`/invoices/${e.invoice_id}`)} style={{ cursor: 'pointer' }}>invoiced</span> : <span className="badge sent">unbilled</span>}</td>
-            <td className="actions">{!e.invoice_id && <><button className="btn ghost sm" onClick={() => setEditing(e)}>Edit</button><button className="btn ghost sm" onClick={() => del(e)}>✕</button></>}</td>
+            <td className="actions">{!e.invoice_id && <><button type="button" className="btn ghost sm" onClick={() => setEditing(e)}>Edit</button><button type="button" className="btn ghost icon-only sm" aria-label="Delete" title="Delete" onClick={() => del(e)}><Icon name="trash" size={14} /></button></>}</td>
           </tr>)}</tbody>
         </table></div>}
       </Card>
       {editing && clients && <Modal title={editing === 'new' ? 'Manual time entry' : 'Edit entry'} onClose={() => setEditing(null)}><EntryForm initial={editing === 'new' ? undefined : editing} clients={clients} onDone={() => { setEditing(null); reload() }} /></Modal>}
       {invoicing && clients && <Modal title="Create invoice from unbilled time" size="lg" onClose={() => setInvoicing(false)}>
-        {!clientId && Object.keys(unbilledByClient).length > 1 && <div className="callout mb">Multiple clients have unbilled time. Choose one: {Object.keys(unbilledByClient).map(id => <button key={id} className="link-btn" style={{ marginLeft: 8 }} onClick={() => setParam('client_id', id)}>{clients.find(c => c.id === Number(id))?.name} ({hours(unbilledByClient[Number(id)])})</button>)}</div>}
+        {!clientId && Object.keys(unbilledByClient).length > 1 && <div className="callout mb">Multiple clients have unbilled time. Choose one: {Object.keys(unbilledByClient).map(id => <button type="button" key={id} className="link-btn" style={{ marginLeft: 8 }} onClick={() => setParam('client_id', id)}>{clients.find(c => c.id === Number(id))?.name} ({hours(unbilledByClient[Number(id)])})</button>)}</div>}
         {invoiceClient > 0 && <InvoiceFromTime clientId={invoiceClient} clients={clients} entries={unbilledEntries.filter(e => e.client_id === invoiceClient)} onDone={id => { setInvoicing(false); navigate(`/invoices/${id}`) }} />}
       </Modal>}
     </>

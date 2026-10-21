@@ -5,6 +5,8 @@ import { useApp } from '../lib/app-context'
 import { addDays, BILLING_MODES, money, taxRateOptions, today, UNITS, unitForBilling } from '../lib/format'
 import type { Client, Invoice, InvoiceItem, InvoiceTemplate, Product, TaxRate, WorkingDays } from '../lib/types'
 import { Card, Field, Loading, PageHeader, useAsync, useDebounce, useToast } from '../components/ui'
+import { useCrumb } from '../components/shell'
+import { Icon } from '../components/icons'
 import { DayPicker, defaultDays } from '../components/DayPicker'
 import { Select } from '../components/Select'
 
@@ -44,6 +46,7 @@ export default function InvoiceEditor() {
   const { data: taxRates } = useAsync(() => api.get<TaxRate[]>(`${V1}/tax-rates`))
   const { data: templates } = useAsync(() => api.get<InvoiceTemplate[]>(`${V1}/templates`))
   const [inv, setInv] = useState<Partial<Invoice> | null>(null)
+  useCrumb(id ? inv?.number : undefined)
   const [items, setItems] = useState<Item[]>([])
   const [busy, setBusy] = useState(false)
   const [rateHint, setRateHint] = useState<string>('')
@@ -158,9 +161,9 @@ export default function InvoiceEditor() {
   return (
     <>
       <PageHeader title={id ? `Edit ${inv.number}` : 'New invoice'} sub={id ? undefined : 'Pick a client, add lines, save as draft or send.'} actions={<>
-        <button className="btn" onClick={() => navigate(-1)}>Cancel</button>
-        <button className="btn" disabled={busy} onClick={() => save()}>{id ? 'Save' : 'Save as draft'}</button>
-        {(!id || inv.status === 'draft') && <button className="btn primary" disabled={busy} onClick={() => save('sent')}>Save & mark sent</button>}
+        <button type="button" className="btn" onClick={() => navigate(-1)}>Cancel</button>
+        <button type="button" className="btn" disabled={busy} onClick={() => save()}>{id ? 'Save' : 'Save as draft'}</button>
+        {(!id || inv.status === 'draft') && <button type="button" className="btn primary" disabled={busy} onClick={() => save('sent')}>Save & mark sent</button>}
       </>} />
       <div className="grid split-3-2 mb">
         <Card title="Client & dates">
@@ -194,7 +197,7 @@ export default function InvoiceEditor() {
         </Card>
       </div>
 
-      <Card title="Line items" actions={products?.length ? <Select className="catalog-pick" value="" ariaLabel="Add from catalog" placeholder="+ Add from catalog…" onChange={v => { const p = products.find(x => x.id === Number(v)); if (p) addProduct(p) }} options={products.map(p => ({ value: String(p.id), label: p.name, hint: `${money(p.unit_price, p.currency || inv.currency!)}/${p.unit}` }))} /> : undefined} flush>
+      <Card title="Line items" actions={products?.length ? <Select className="catalog-pick" value="" ariaLabel="Add from catalog" placeholder="Add from catalog…" onChange={v => { const p = products.find(x => x.id === Number(v)); if (p) addProduct(p) }} options={products.map(p => ({ value: String(p.id), label: p.name, hint: `${money(p.unit_price, p.currency || inv.currency!)}/${p.unit}` }))} /> : undefined} flush>
         <div className="table-wrap"><table className="table items-table">
           <thead><tr><th style={{ width: '40%' }}>Description</th><th style={{ width: 90 }}>Unit</th><th style={{ width: 90 }} className="num">Qty</th><th style={{ width: 120 }} className="num">Rate</th><th style={{ width: 80 }} className="num">Disc %</th><th style={{ width: 110 }} className="num">Tax</th><th className="num">Amount</th><th style={{ width: 90 }}></th></tr></thead>
           <tbody>{items.map((it, idx) => <tr key={it.key}>
@@ -205,11 +208,11 @@ export default function InvoiceEditor() {
             <td><input type="number" step="0.01" className="right" value={it.discount || ''} onChange={e => setItem(it.key, { discount: parseFloat(e.target.value) || 0 })} placeholder="0" /></td>
             <td><Select floating className="cell" ariaLabel="Tax" value={String(it.tax_rate)} onChange={v => setItem(it.key, { tax_rate: parseFloat(v) })} options={taxRateOptions(taxRates, it.tax_rate)} /></td>
             <td className="num bold">{money(totals.lines[idx], inv.currency!)}</td>
-            <td className="actions"><button className="btn ghost sm" onClick={() => move(idx, -1)} title="Move up">↑</button><button className="btn ghost sm" onClick={() => move(idx, 1)} title="Move down">↓</button><button className="btn ghost sm" onClick={() => setItems(its => its.filter(x => x.key !== it.key))} title="Remove">✕</button></td>
+            <td className="actions"><button type="button" className="btn ghost icon-only sm" aria-label="Move up" onClick={() => move(idx, -1)} title="Move up"><Icon name="chevron-up" size={14} /></button><button type="button" className="btn ghost icon-only sm" aria-label="Move down" onClick={() => move(idx, 1)} title="Move down"><Icon name="chevron-down" size={14} /></button><button type="button" className="btn ghost icon-only sm" aria-label="Delete" onClick={() => setItems(its => its.filter(x => x.key !== it.key))} title="Remove"><Icon name="trash" size={14} /></button></td>
           </tr>)}</tbody>
         </table></div>
         <div className="row between" style={{ padding: 14 }}>
-          <button className="btn" onClick={() => setItems(its => [...its, newItem(unitForBilling(mode), settings.default_tax_rate, client?.default_rate || 0)])}>+ Add line</button>
+          <button type="button" className="btn" onClick={() => setItems(its => [...its, newItem(unitForBilling(mode), settings.default_tax_rate, client?.default_rate || 0)])}><Icon name="plus" size={15} />Add line</button>
           <div className="totals-box">
             <div className="line"><span className="muted">Subtotal</span><span>{money(totals.subtotal, inv.currency!)}</span></div>
             {totals.discount > 0 && <div className="line"><span className="muted">Discount</span><span>-{money(totals.discount, inv.currency!)}</span></div>}
@@ -236,9 +239,9 @@ export default function InvoiceEditor() {
         <Field label="Footer"><textarea value={inv.footer || ''} onChange={e => set('footer', e.target.value)} /></Field>
       </div>
       <div className="form-actions">
-        <button className="btn" onClick={() => navigate(-1)}>Cancel</button>
-        <button className="btn" disabled={busy} onClick={() => save()}>{id ? 'Save' : 'Save as draft'}</button>
-        {(!id || inv.status === 'draft') && <button className="btn primary" disabled={busy} onClick={() => save('sent')}>Save & mark sent</button>}
+        <button type="button" className="btn" onClick={() => navigate(-1)}>Cancel</button>
+        <button type="button" className="btn" disabled={busy} onClick={() => save()}>{id ? 'Save' : 'Save as draft'}</button>
+        {(!id || inv.status === 'draft') && <button type="button" className="btn primary" disabled={busy} onClick={() => save('sent')}>Save & mark sent</button>}
       </div>
     </>
   )

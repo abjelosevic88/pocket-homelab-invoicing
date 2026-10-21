@@ -6,6 +6,7 @@ import { BILLING_MODES, PAYMENT_METHODS, methodLabel, money } from '../lib/forma
 import type { Client, DocsEntry, InvoiceTemplate } from '../lib/types'
 import { usePocketDocs } from '../components/pocketdocs'
 import { Card, Empty, Field, Loading, Modal, PageHeader, useAsync, useDebounce, useToast } from '../components/ui'
+import { Icon } from '../components/icons'
 import { Select } from '../components/Select'
 
 const blank = (currency: string, terms: number): Partial<Client> => ({ name: '', contact_name: '', email: '', phone: '', address1: '', address2: '', city: '', state: '', postal_code: '', country: '', tax_id: '', registration_no: '', website: '', currency, billing_mode: 'hourly', default_rate: 0, payment_terms_days: terms, payment_method: '', notes: '', email_subject: '', email_body: '', email_cc: '' })
@@ -72,7 +73,7 @@ export function ClientForm({ initial, onSaved, onClose }: { initial?: Client; on
           </div>
         </details>
       </div>
-      <div className="form-actions"><button type="button" className="btn" onClick={onClose}>Cancel</button><button className="btn primary" disabled={busy}>{initial ? 'Save changes' : 'Create client'}</button></div>
+      <div className="form-actions"><button type="button" className="btn" onClick={onClose}>Cancel</button><button type="submit" className="btn primary" disabled={busy}>{initial ? 'Save changes' : 'Create client'}</button></div>
     </form>
   )
 }
@@ -86,7 +87,7 @@ export default function Clients() {
   const navigate = useNavigate()
   return (
     <>
-      <PageHeader title="Clients" sub="Who you bill, in which currency, and how." actions={<button className="btn primary" onClick={() => setCreating(true)}>+ New client</button>} />
+      <PageHeader title="Clients" sub="Who you bill, in which currency, and how." actions={<button type="button" className="btn primary" onClick={() => setCreating(true)}><Icon name="plus" size={15} />New client</button>} />
       <div className="filters">
         <input className="search" placeholder="Search clients…" value={q} onChange={e => setQ(e.target.value)} />
         <label className="check"><input type="checkbox" checked={archived} onChange={e => setArchived(e.target.checked)} /> Show archived</label>

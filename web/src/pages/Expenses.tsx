@@ -5,6 +5,7 @@ import { useApp } from '../lib/app-context'
 import { fmtDate, money, today } from '../lib/format'
 import type { Client, Expense } from '../lib/types'
 import { Card, Empty, Field, Loading, Modal, PageHeader, useAsync, useToast } from '../components/ui'
+import { Icon } from '../components/icons'
 import { Select } from '../components/Select'
 
 const CATEGORIES = ['Software', 'Hardware', 'Hosting', 'Travel', 'Office', 'Subcontractor', 'Other']
@@ -29,7 +30,7 @@ function ExpenseForm({ initial, clients, onDone }: { initial?: Expense; clients:
         <Field label="Client (optional)"><Select value={String(e.client_id ?? 0)} onChange={v => setE({ ...e, client_id: Number(v) })} placeholder="— none —" options={[{ value: '0', label: '— none —' }, ...clients.map(c => ({ value: String(c.id), label: c.name }))]} /></Field>
         <Field label=" "><label className="check" style={{ marginTop: 8 }}><input type="checkbox" checked={e.billable} onChange={ev => setE({ ...e, billable: ev.target.checked })} /> Re-bill to client</label></Field>
       </div>
-      <div className="form-actions"><button className="btn primary" disabled={busy}>Save</button></div>
+      <div className="form-actions"><button type="submit" className="btn primary" disabled={busy}>Save</button></div>
     </form>
   )
 }
@@ -44,13 +45,13 @@ export default function Expenses() {
   const total = (data || []).reduce((a, e) => a + e.amount * e.exchange_rate, 0)
   return (
     <>
-      <PageHeader title="Expenses" sub="Track costs; billable ones can be added to the next invoice." actions={<><a className="btn" href={`${V1}/reports/export.csv?type=expenses`}>Export CSV</a><button className="btn primary" onClick={() => setEditing('new')}>+ Add expense</button></>} />
+      <PageHeader title="Expenses" sub="Track costs; billable ones can be added to the next invoice." actions={<><a className="btn" href={`${V1}/reports/export.csv?type=expenses`}>Export CSV</a><button type="button" className="btn primary" onClick={() => setEditing('new')}><Icon name="plus" size={15} />Add expense</button></>} />
       <Card flush>
         {loading ? <Loading /> : !data?.length ? <Empty title="No expenses recorded" /> : <div className="table-wrap"><table className="table">
           <thead><tr><th>Date</th><th>Description</th><th>Category</th><th>Client</th><th className="num">Amount</th><th>Status</th><th></th></tr></thead>
           <tbody>{data.map(e => <tr key={e.id}><td className="muted">{fmtDate(e.date)}</td><td>{e.description}</td><td className="muted">{e.category}</td><td>{e.client_name || <span className="muted">—</span>}</td><td className="num">{money(e.amount, e.currency)}{e.currency !== base && <div className="muted small">≈ {money(e.amount * e.exchange_rate, base)}</div>}</td>
             <td>{e.invoice_id ? <span className="badge paid" style={{ cursor: 'pointer' }} onClick={() => navigate(`/invoices/${e.invoice_id}`)}>invoiced</span> : e.billable ? <span className="badge sent">billable</span> : <span className="badge">cost</span>}</td>
-            <td className="actions">{!e.invoice_id && <><button className="btn ghost sm" onClick={() => setEditing(e)}>Edit</button><button className="btn ghost sm" onClick={async () => { if (confirm('Delete?')) { await api.del(`${V1}/expenses/${e.id}`); reload() } }}>✕</button></>}</td></tr>)}</tbody>
+            <td className="actions">{!e.invoice_id && <><button type="button" className="btn ghost sm" onClick={() => setEditing(e)}>Edit</button><button type="button" className="btn ghost icon-only sm" aria-label="Delete" title="Delete" onClick={async () => { if (confirm('Delete?')) { await api.del(`${V1}/expenses/${e.id}`); reload() } }}><Icon name="trash" size={14} /></button></>}</td></tr>)}</tbody>
           <tfoot><tr><td colSpan={4}>Total</td><td className="num">{money(total, base)}</td><td colSpan={2}></td></tr></tfoot>
         </table></div>}
       </Card>

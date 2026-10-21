@@ -5,6 +5,8 @@ import { useApp } from '../lib/app-context'
 import { fileSize, fmtDate, fmtDateTime, methodLabel, money, paymentMethodFor, PAYMENT_METHODS, today } from '../lib/format'
 import type { Activity, Client, Invoice, Payment } from '../lib/types'
 import { Badge, Card, Confirm, Field, Loading, Modal, PageHeader, useAsync, useToast } from '../components/ui'
+import { useCrumb } from '../components/shell'
+import { Icon } from '../components/icons'
 import { DocsBadge, usePocketDocs } from '../components/pocketdocs'
 import { Select } from '../components/Select'
 
@@ -30,7 +32,7 @@ function PaymentForm({ inv, onDone }: { inv: Invoice; onDone: () => void }) {
         <Field label="Reference"><input value={p.reference} onChange={e => setP({ ...p, reference: e.target.value })} placeholder="Transaction id, cheque #…" /></Field>
         <Field label="Notes"><input value={p.notes} onChange={e => setP({ ...p, notes: e.target.value })} /></Field>
       </div>
-      <div className="form-actions"><button className="btn primary" disabled={busy}>Record payment</button></div>
+      <div className="form-actions"><button type="submit" className="btn primary" disabled={busy}>Record payment</button></div>
     </form>
   )
 }
@@ -66,7 +68,7 @@ export function SendForm({ inv, onDone }: { inv: Invoice; onDone: () => void }) 
         <Field label="Subject"><input value={subject} onChange={e => setSubject(e.target.value)} /></Field>
         <Field label="Message" help="Placeholders: {number} {number_short} {client} {contact} {first_name} {company} {total} {balance} {due_date} {issue_date} {month} {year} {period} {link}"><textarea rows={8} value={body} onChange={e => setBody(e.target.value)} /></Field>
       </div>
-      <div className="form-actions"><button className="btn primary" disabled={busy || !settings?.smtp_host}>Send with PDF attached</button></div>
+      <div className="form-actions"><button type="submit" className="btn primary" disabled={busy || !settings?.smtp_host}>Send with PDF attached</button></div>
     </form>
   )
 }
@@ -82,6 +84,7 @@ export default function InvoiceDetail() {
   const [archiving, setArchiving] = useState(false)
   const pocketDocs = usePocketDocs()
   const docsOn = !!pocketDocs?.configured
+  useCrumb(inv?.number)
   if (loading || !inv) return <Loading />
   const publicUrl = `${window.location.origin}/i/${inv.public_token}`
   const setStatus = async (status: string) => {
@@ -104,10 +107,10 @@ export default function InvoiceDetail() {
       <PageHeader title={<span className="row">{inv.number} <Badge status={inv.status} /></span>} sub={<><Link to={`/clients/${inv.client_id}`}>{inv.client_name}</Link> · issued {fmtDate(inv.issue_date)} · due {fmtDate(inv.due_date)}</>} actions={<>
         <a className="btn" href={`${V1}/invoices/${inv.id}/pdf`} target="_blank" rel="noreferrer">View PDF</a>
         <a className="btn" href={`${V1}/invoices/${inv.id}/pdf?download=1`}>Download</a>
-        {docsOn && (archived ? <a className="btn" href={filedLink?.url} target="_blank" rel="noreferrer" title={`Open in Pocket Documents (#${filedLink?.documents_id})`}>In Documents ↗</a> : <button className="btn" disabled={archiving} onClick={() => archive()} title={inv.pocket_documents?.error ? `Last attempt: ${inv.pocket_documents.error}` : 'File the PDF / uploaded files in Pocket Documents, under the client'}>{archiving ? 'Filing…' : 'File in Documents'}</button>)}
-        {inv.status !== 'paid' && inv.status !== 'cancelled' && <button className="btn" onClick={() => setModal('send')}>Email</button>}
-        {inv.status === 'draft' && <button className="btn primary" onClick={() => setStatus('sent')}>Mark as sent</button>}
-        {['sent', 'viewed', 'partial', 'overdue'].includes(inv.status) && <button className="btn primary" onClick={() => setModal('payment')}>Record payment</button>}
+        {docsOn && (archived ? <a className="btn" href={filedLink?.url} target="_blank" rel="noreferrer" title={`Open in Pocket Documents (#${filedLink?.documents_id})`}>In Documents<Icon name="external" size={13} /></a> : <button type="button" className="btn" disabled={archiving} onClick={() => archive()} title={inv.pocket_documents?.error ? `Last attempt: ${inv.pocket_documents.error}` : 'File the PDF / uploaded files in Pocket Documents, under the client'}>{archiving ? 'Filing…' : 'File in Documents'}</button>)}
+        {inv.status !== 'paid' && inv.status !== 'cancelled' && <button type="button" className="btn" onClick={() => setModal('send')}>Email</button>}
+        {inv.status === 'draft' && <button type="button" className="btn primary" onClick={() => setStatus('sent')}>Mark as sent</button>}
+        {['sent', 'viewed', 'partial', 'overdue'].includes(inv.status) && <button type="button" className="btn primary" onClick={() => setModal('payment')}>Record payment</button>}
       </>} />
       <div className="grid split-2-1 mb">
         <div className="grid">
@@ -136,13 +139,13 @@ export default function InvoiceDetail() {
             </div>
           </Card>
           {(inv.notes || inv.terms) && <Card><div className="grid cols-2">{inv.notes && <div><div className="muted small bold">NOTES</div><p style={{ whiteSpace: 'pre-wrap' }}>{inv.notes}</p></div>}{inv.terms && <div><div className="muted small bold">TERMS</div><p style={{ whiteSpace: 'pre-wrap' }}>{inv.terms}</p></div>}</div></Card>}
-          <Card title="Attachments" actions={<label className="btn sm">+ Upload<input type="file" multiple style={{ display: 'none' }} onChange={async e => { if (!e.target.files?.length) return; const fd = new FormData(); for (const f of Array.from(e.target.files)) fd.append('file', f); try { await api.post(`${V1}/invoices/${inv.id}/attachments`, fd); toast('Uploaded', 'success'); reload(); reloadAct() } catch (err) { toast((err as Error).message, 'error') } }} /></label>} flush>
-            {!inv.attachments?.length ? <div className="empty muted">No files attached. Upload your own PDF (e.g. a signed or fiscalised version); emails can send it instead of the generated PDF (Settings → Invoicing).</div> : <table className="table"><tbody>{inv.attachments.map(a => <tr key={a.id}><td><a href={`${V1}/attachments/${a.id}`} target="_blank" rel="noreferrer">{a.filename}</a><div className="muted small">{fileSize(a.size)} · {fmtDateTime(a.created_at)} {docsOn && <DocsBadge link={a.pocket_documents} />}</div></td><td className="actions">{docsOn && !(a.pocket_documents && a.pocket_documents.documents_id > 0) && <button className="btn ghost sm" title="File a copy in Pocket Documents" onClick={async () => { try { await api.post(`${V1}/attachments/${a.id}/pocket-documents`); toast('Filed in Pocket Documents', 'success'); reload(); reloadAct() } catch (e) { toast((e as Error).message, 'error') } }}>To Documents</button>}<a className="btn ghost sm" href={`${V1}/attachments/${a.id}?download=1`} title="Download the file">Download</a><button className="btn ghost sm danger" title="Remove this file from the invoice" onClick={async () => { if (!confirm(`Remove ${a.filename}?`)) return; await api.del(`${V1}/attachments/${a.id}`); reload() }}>Remove</button></td></tr>)}</tbody></table>}
+          <Card title="Attachments" actions={<label className="btn sm"><Icon name="upload" size={15} />Upload<input type="file" multiple style={{ display: 'none' }} onChange={async e => { if (!e.target.files?.length) return; const fd = new FormData(); for (const f of Array.from(e.target.files)) fd.append('file', f); try { await api.post(`${V1}/invoices/${inv.id}/attachments`, fd); toast('Uploaded', 'success'); reload(); reloadAct() } catch (err) { toast((err as Error).message, 'error') } }} /></label>} flush>
+            {!inv.attachments?.length ? <div className="empty muted">No files attached. Upload your own PDF (e.g. a signed or fiscalised version); emails can send it instead of the generated PDF (Settings → Invoicing).</div> : <table className="table"><tbody>{inv.attachments.map(a => <tr key={a.id}><td><a href={`${V1}/attachments/${a.id}`} target="_blank" rel="noreferrer">{a.filename}</a><div className="muted small">{fileSize(a.size)} · {fmtDateTime(a.created_at)} {docsOn && <DocsBadge link={a.pocket_documents} />}</div></td><td className="actions">{docsOn && !(a.pocket_documents && a.pocket_documents.documents_id > 0) && <button type="button" className="btn ghost sm" title="File a copy in Pocket Documents" onClick={async () => { try { await api.post(`${V1}/attachments/${a.id}/pocket-documents`); toast('Filed in Pocket Documents', 'success'); reload(); reloadAct() } catch (e) { toast((e as Error).message, 'error') } }}>To Documents</button>}<a className="btn ghost sm" href={`${V1}/attachments/${a.id}?download=1`} title="Download the file">Download</a><button type="button" className="btn ghost sm danger" title="Remove this file from the invoice" onClick={async () => { if (!confirm(`Remove ${a.filename}?`)) return; await api.del(`${V1}/attachments/${a.id}`); reload() }}>Remove</button></td></tr>)}</tbody></table>}
           </Card>
-          <Card title="Payments" actions={['sent', 'viewed', 'partial', 'overdue'].includes(inv.status) ? <button className="btn sm" onClick={() => setModal('payment')}>+ Add</button> : undefined} flush>
+          <Card title="Payments" actions={['sent', 'viewed', 'partial', 'overdue'].includes(inv.status) ? <button type="button" className="btn sm" onClick={() => setModal('payment')}><Icon name="plus" size={15} />Add</button> : undefined} flush>
             {inv.amount_paid > 0 && <div style={{ padding: '12px 16px 0' }}><div className="progress"><div style={{ width: `${paidPct}%` }} /></div><div className="muted small mt" style={{ marginTop: 6 }}>{paidPct.toFixed(0)}% paid</div></div>}
             {!inv.payments?.length ? <div className="empty muted">No payments recorded.</div> : <table className="table"><thead><tr><th>Date</th><th>Method</th><th>Reference</th><th className="num">Amount</th><th></th></tr></thead>
-              <tbody>{inv.payments.map(p => <tr key={p.id}><td>{fmtDate(p.date)}</td><td className="muted">{p.method.replace('_', ' ')}</td><td className="muted">{p.reference}{p.notes ? ` · ${p.notes}` : ''}</td><td className="num">{money(p.amount, p.currency)}{p.currency !== inv.currency && <div className="muted small">= {money(p.applied_amount, inv.currency)}</div>}</td><td className="actions"><button className="btn ghost sm danger" title="Delete this payment" onClick={() => delPayment(p)}>Delete</button></td></tr>)}</tbody></table>}
+              <tbody>{inv.payments.map(p => <tr key={p.id}><td>{fmtDate(p.date)}</td><td className="muted">{p.method.replace('_', ' ')}</td><td className="muted">{p.reference}{p.notes ? ` · ${p.notes}` : ''}</td><td className="num">{money(p.amount, p.currency)}{p.currency !== inv.currency && <div className="muted small">= {money(p.applied_amount, inv.currency)}</div>}</td><td className="actions"><button type="button" className="btn ghost sm danger" title="Delete this payment" onClick={() => delPayment(p)}>Delete</button></td></tr>)}</tbody></table>}
           </Card>
         </div>
         <div className="grid">
@@ -151,14 +154,14 @@ export default function InvoiceDetail() {
               {inv.status === 'draft' && <Link className="btn" to={`/invoices/${inv.id}/edit`}>Edit invoice</Link>}
               {inv.status !== 'draft' && inv.status !== 'cancelled' && <Link className="btn" to={`/invoices/${inv.id}/edit`}>Edit (keeps status)</Link>}
               <a className="btn" href={`${V1}/invoices/${inv.id}/docx`} title="Only works when the invoice (or its client) uses a Word template">Download as Word (.docx)</a>
-              <button className="btn" onClick={copyLink}>Copy public link</button>
+              <button type="button" className="btn" onClick={copyLink}>Copy public link</button>
               <a className="btn" href={publicUrl} target="_blank" rel="noreferrer">Open public page</a>
-              <button className="btn" onClick={dup}>Duplicate</button>
-              {['sent', 'viewed', 'partial', 'overdue'].includes(inv.status) && <button className="btn" onClick={() => setStatus('paid')}>Mark fully paid</button>}
-              {inv.status !== 'draft' && inv.status !== 'paid' && <button className="btn" onClick={() => setStatus('draft')}>Back to draft</button>}
-              {inv.status === 'paid' && <button className="btn" onClick={() => setStatus('sent')}>Reopen (unpaid)</button>}
-              {inv.status !== 'cancelled' && inv.status !== 'paid' && <button className="btn" onClick={() => setModal('cancel')}>Cancel invoice</button>}
-              <button className="btn danger" onClick={() => setModal('delete')}>Delete</button>
+              <button type="button" className="btn" onClick={dup}>Duplicate</button>
+              {['sent', 'viewed', 'partial', 'overdue'].includes(inv.status) && <button type="button" className="btn" onClick={() => setStatus('paid')}>Mark fully paid</button>}
+              {inv.status !== 'draft' && inv.status !== 'paid' && <button type="button" className="btn" onClick={() => setStatus('draft')}>Back to draft</button>}
+              {inv.status === 'paid' && <button type="button" className="btn" onClick={() => setStatus('sent')}>Reopen (unpaid)</button>}
+              {inv.status !== 'cancelled' && inv.status !== 'paid' && <button type="button" className="btn" onClick={() => setModal('cancel')}>Cancel invoice</button>}
+              <button type="button" className="btn danger" onClick={() => setModal('delete')}>Delete</button>
             </div>
           </Card>
           <Card title="Timeline">
