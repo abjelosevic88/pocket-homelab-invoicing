@@ -305,7 +305,7 @@ func TestDocumentsWithoutCore(t *testing.T) {
 	ctx := context.Background()
 	u := mkUser(t, st, "owner@example.com", roleAdmin)
 	set, _ := st.GetSettings(ctx, u.ID)
-	if m := s.publicSettings(ctx, u, set); m["documents_mode"] != modeDirect || m["core_configured"] != false || m["documents_detail"] != "add an API token" {
+	if m := s.publicSettings(ctx, u, set); m["documents_mode"] != modeDirect || m["core_configured"] != false || m["core_registered"] != false || m["documents_detail"] != "add an API token" {
 		t.Fatalf("no core: %v", m)
 	}
 	set.DocumentsToken = "pd_owner"

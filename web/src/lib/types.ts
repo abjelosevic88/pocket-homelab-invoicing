@@ -49,7 +49,7 @@ export interface Settings {
   work_week: string; holidays: Holiday[] | null;
   smtp_host: string; smtp_port: number; smtp_user: string; smtp_password: string; smtp_password_set?: boolean; smtp_from: string; smtp_from_name: string; smtp_tls: string; smtp_bcc: string; email_subject: string; email_body: string; reminder_days: string; reminders_enabled: boolean; setup_complete: boolean;
   documents_url: string; documents_public_url: string; documents_token: string; documents_token_set?: boolean; documents_clear_token?: boolean; documents_tags: string; documents_invoice_type: string; documents_create_correspondents: boolean; documents_archive_invoices: string; documents_category_as_type: boolean;
-  documents_mode: ConnMode; documents_via?: string; documents_detail?: string; core_configured?: boolean;
+  documents_mode: ConnMode; documents_via?: string; documents_detail?: string; core_configured?: boolean; core_registered?: boolean;
 }
 export type ConnMode = 'core' | 'direct' | 'off'
 export interface DashboardStats { outstanding: number; outstanding_count: number; overdue: number; overdue_count: number; paid_this_month: number; paid_this_year: number; invoiced_this_year: number; draft_count: number; unbilled_minutes: number; unbilled_expenses: number; active_clients: number }

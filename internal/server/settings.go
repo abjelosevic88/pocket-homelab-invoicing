@@ -38,6 +38,7 @@ func (s *Server) publicSettings(ctx context.Context, u *store.User, st store.Set
 	mode, via, detail := s.docsStatus(ctx, u, st)
 	m["documents_mode"], m["documents_via"], m["documents_detail"] = mode, via, detail
 	m["core_configured"] = s.core.Configured()
+	m["core_registered"] = s.coreStatus()["registered"]
 	return m
 }
 

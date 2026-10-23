@@ -5,7 +5,7 @@ import { api, V1 } from '../lib/api'
 import { useApp } from '../lib/app-context'
 import { BILLING_MODES, PAYMENT_METHODS, UNITS, methodLabel, fmtDate, fmtDateTime, money, today } from '../lib/format'
 import type { APIToken, ConnMode, Currency, CustomFieldDef, ExchangeRate, Holiday, InvoiceTemplate, Product, Settings as S, TaxRate, User, Webhook, WorkingDays } from '../lib/types'
-import { Card, Confirm, Empty, Field, Loading, Modal, SettingRow, Switch, Tabs, useAsync, useIsMobile, useToast } from '../components/ui'
+import { Card, Confirm, CoreHint, Empty, Field, Loading, Modal, SettingRow, Switch, Tabs, useAsync, useIsMobile, useToast } from '../components/ui'
 import { Icon } from '../components/icons'
 import { Select } from '../components/Select'
 
@@ -707,22 +707,28 @@ const connBadge = (mode: ConnMode, via?: string) => mode === 'off' ? <span class
 /** Pocket Core | Off for one sibling app, with Direct as an advanced option
  * when the box has a Pocket Core (always shown while it is the current mode, and
  * shown normally without a Core); the switch saves at once. */
-function Connection({ app, mode, via, detail, core, onMode, onDisconnect, hasToken, test, direct }: {
+function Connection({ app, mode: saved, via, detail, core, onMode, onDisconnect, hasToken, test, direct }: {
   app: string; mode: ConnMode; via?: string; detail?: string; core: boolean; onMode: (m: ConnMode) => void; onDisconnect: () => void
   hasToken: boolean; test: React.ReactNode; direct: React.ReactNode
 }) {
   const [advanced, setAdvanced] = useState(false)
+  // without a Core a saved "core" does nothing: show it as off (it comes back
+  // once Core is connected) and Pocket Core greyed out with the reason
+  const mode: ConnMode = !core && saved === 'core' ? 'off' : saved
   const showDirect = !core || mode === 'direct' || advanced
-  const ok = !!via
+  const ok = !!via && mode !== 'off'
   const line = mode === 'off' ? `Off: Pocket Invoicing does not talk to ${app}.`
     : mode === 'core' ? (ok ? `Connected through a Pocket Core app link, as you. Nothing to fill in; switch it off for yourself in Pocket Core → Settings → Apps acting for me.` : `Not connected: ${detail}.`)
     : (ok ? `Direct connection with your own ${app} API token; use Test connection to check it.` : `Not connected: ${detail || 'add an API token'}.`)
   return (
     <div className="conn-block">
       <div className="segmented" role="radiogroup">
-        {([['core', 'Pocket Core', core ? 'Through Pocket Core: acts as you there, nothing to paste' : 'There is no Pocket Core on this box'], ['direct', 'Direct', 'A URL and your own API token'], ['off', 'Off', '']] as const).filter(([v]) => v !== 'direct' || showDirect).map(([v, label, title]) =>
-          <button type="button" key={v} role="radio" aria-checked={mode === v} title={title} className={mode === v ? 'active' : ''} onClick={() => onMode(v)}>{label}</button>)}
+        {([['core', 'Pocket Core', core ? 'Through Pocket Core: acts as you there, nothing to paste' : 'Needs Pocket Core: there is none on this box'], ['direct', 'Direct', 'A URL and your own API token'], ['off', 'Off', '']] as const).filter(([v]) => v !== 'direct' || showDirect).map(([v, label, title]) => {
+          const off = v === 'core' && !core
+          return <button type="button" key={v} role="radio" aria-checked={mode === v} title={title} disabled={off} aria-disabled={off || undefined} className={mode === v ? 'active' : ''} onClick={() => { if (!off) onMode(v) }}>{label}</button>
+        })}
       </div>
+      {!core && <CoreHint />}
       {!showDirect && <div><button type="button" className="link-btn small" onClick={() => setAdvanced(true)}>Advanced: connect directly with a URL and token</button></div>}
       <div className={`conn-status ${mode === 'off' ? '' : ok ? 'ok' : 'bad'}`}><span className="dot" />{line}</div>
       {mode === 'direct' && <>
@@ -742,6 +748,7 @@ function PocketDocuments() {
   const [result, setResult] = useState<{ ok: boolean; document_count?: number; via?: string; url?: string } | null>(null)
   if (!s) return <Loading />
   const configured = !!s.documents_via
+  const coreOn = !!s.core_configured && s.core_registered !== false
   const typed = s.documents_mode === 'direct' && !!s.documents_token
   const test = async () => {
     setTesting(true); setResult(null)
@@ -757,9 +764,9 @@ function PocketDocuments() {
   }
   return (
     <div className="stack loose">
-      <Section title="Connection" actions={connBadge(s.documents_mode, s.documents_via)}>
+      <Section title="Connection" actions={connBadge(!coreOn && s.documents_mode === 'core' ? 'off' : s.documents_mode, s.documents_via)}>
         <p className="muted small">Optional. Connected, issued invoices and company documents are filed in <b>your</b> Pocket Documents, under the client as correspondent; each client page lists that correspondent's documents and Documents gets a tab to search your archive. With Pocket Core on the box nothing needs to be pasted; without it, use the Pocket Documents URL and an API token of yours (Pocket Documents → Settings → API tokens).</p>
-        <Connection app="Pocket Documents" mode={s.documents_mode} via={s.documents_via} detail={s.documents_detail} core={!!s.core_configured}
+        <Connection app="Pocket Documents" mode={s.documents_mode} via={s.documents_via} detail={s.documents_detail} core={coreOn}
           hasToken={!!s.documents_token_set || !!s.documents_url}
           onMode={m => saveNow({ documents_mode: m }, m === 'off' ? 'Pocket Documents switched off' : m === 'core' ? 'Pocket Documents through Pocket Core' : 'Direct Pocket Documents connection')}
           onDisconnect={() => saveNow({ documents_url: '', documents_public_url: '', documents_token: '', documents_clear_token: true }, 'Pocket Documents URL and token removed')}
