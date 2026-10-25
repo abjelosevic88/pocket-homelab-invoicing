@@ -38,6 +38,8 @@ type monthEndRow struct {
 	DueDate        string              `json:"due_date"`
 	Notes          string              `json:"notes"`
 	Terms          string              `json:"terms"`
+	DiscountType   string              `json:"discount_type"` // from the recurring profile; none | percent | fixed
+	DiscountValue  float64             `json:"discount_value"`
 	Hint           string              `json:"hint"`
 }
 
@@ -166,6 +168,7 @@ func (s *Server) monthEndPlan(ctx context.Context, uid int64, month string) (map
 			// An empty profile note/terms falls back to the defaults (e.g. a VAT exemption sentence in Settings).
 			row.Notes, row.Terms = firstNonEmpty(rec.Notes, row.Notes), firstNonEmpty(rec.Terms, row.Terms)
 			row.Items, row.QuantitySource = recurringItems(rec, st, ps, pe)
+			row.DiscountType, row.DiscountValue = rec.DiscountType, rec.DiscountValue
 		} else {
 			unit := unitForBilling(row.BillingMode)
 			qty := 1.0
@@ -276,6 +279,8 @@ type monthEndCreateRow struct {
 	DueDate      string              `json:"due_date"`
 	Notes        string              `json:"notes"`
 	Terms        string              `json:"terms"`
+	DiscountType string              `json:"discount_type"`
+	DiscountVal  float64             `json:"discount_value"`
 	WorkedDays   []string            `json:"worked_days"` // dates picked in the calendar (YYYY-MM-DD)
 }
 
@@ -330,7 +335,7 @@ func (s *Server) handleMonthEndCreate(w http.ResponseWriter, r *http.Request) {
 		}
 		inp := invoiceInput{
 			ClientID: row.ClientID, Currency: row.Currency, BillingMode: row.BillingMode, IssueDate: in.IssueDate, DueDate: row.DueDate,
-			DiscountType: "none", Notes: row.Notes, Terms: row.Terms, Footer: st.DefaultFooter, TemplateID: row.TemplateID,
+			DiscountType: firstNonEmpty(row.DiscountType, "none"), DiscountValue: row.DiscountVal, Notes: row.Notes, Terms: row.Terms, Footer: st.DefaultFooter, TemplateID: row.TemplateID,
 			PeriodStart: &ps, PeriodEnd: &pe, Items: items, CustomFields: row.CustomFields, WorkedDays: row.WorkedDays,
 		}
 		inv := &store.Invoice{Status: store.StatusDraft}

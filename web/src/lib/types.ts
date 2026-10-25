@@ -61,7 +61,7 @@ export interface ClientRevenue { client_id: number; client_name: string; currenc
 export interface MonthEndRow {
   client_id: number; client_name: string; client_email: string; currency: string; billing_mode: string; recurring_id: number | null; recurring_name: string; template_id: number | null;
   include: boolean; items: InvoiceItem[]; quantity_source: string; unbilled_minutes: number; time_entry_ids: number[]; existing: Invoice[];
-  custom_fields: Record<string, string>; custom_fields_last: Record<string, string>; due_date: string; notes: string; terms: string; hint: string
+  custom_fields: Record<string, string>; custom_fields_last: Record<string, string>; due_date: string; notes: string; terms: string; discount_type: string; discount_value: number; hint: string
 }
 export interface MonthEndPlan {
   month: string; month_label: string; period_start: string; period_end: string; issue_date: string; hours_per_day: number; smtp_configured: boolean;

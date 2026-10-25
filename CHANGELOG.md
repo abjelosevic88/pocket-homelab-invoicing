@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [0.10.0] - 2026-10-25
+
+### Added
+- **Discount on recurring profiles.** The profile form has a *Discount* field (*None | Fixed amount | Percent*), e.g. a fixed 20 off every invoice. Generated invoices and the month-end wizard carry it (the wizard used to drop it), the PDF shows the usual *Discount* line, and the form shows subtotal, discount and total.
+
+### Removed
+- 0.9.0's *Days off* on working-days profiles (a fixed amount was wanted, not fewer days), including `POST /recurring/preview`.
+
+### Migration
+- `0015_recurring_days_off` (0.9.0) added `recurring_invoices.days_off`; `0016_drop_recurring_days_off` drops it again.
+
 ## [0.7.1] - 2026-10-21
 
 ### Added

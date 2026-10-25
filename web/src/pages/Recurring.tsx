@@ -49,6 +49,12 @@ function RecurringForm({ initial, clients, onSaved, onClose }: { initial?: Recur
         <Field label="Template"><Select value={String(r.template_id || '')} onChange={v => set('template_id', Number(v) || null)} placeholder="Default" options={[{ value: '', label: 'Default' }, ...(templates || []).map(t => ({ value: String(t.id), label: t.name, hint: t.kind === 'docx' ? 'Word' : undefined }))]} /></Field>
         <Field label="Service period" help={r.period_mode === 'arrears' ? 'Run on Nov 1 bills October (previous period)' : 'Run on Nov 1 bills November (period starts on the run date)'}><Select value={r.period_mode || 'forward'} onChange={v => set('period_mode', v)} options={[{ value: 'forward', label: 'Period starts on run date' }, { value: 'arrears', label: 'Previous period', hint: 'in arrears' }]} /></Field>
         <Field label="Quantity" help={r.quantity_mode === 'working_days' ? <>Day lines get the working days of the period, hour lines working days × {settings?.hours_per_day || 8} h (<Link to="/settings/invoicing">calendar</Link>)</> : 'Quantities are taken as entered below'}><Select value={r.quantity_mode || 'fixed'} onChange={v => set('quantity_mode', v)} options={[{ value: 'fixed', label: 'Fixed', hint: 'as entered' }, { value: 'working_days', label: 'Working days of the period' }]} /></Field>
+        <Field label="Discount" help={r.discount_type === 'fixed' ? `${r.discount_value || 0} ${r.currency} off every invoice` : r.discount_type === 'percent' ? `${r.discount_value || 0}% off every invoice` : 'Subtracted from each generated invoice'}>
+          <div className="input-group">
+            <Select className="discount-type" ariaLabel="Discount type" value={r.discount_type || 'none'} onChange={v => setR(x => ({ ...x, discount_type: v, discount_value: v === 'none' ? 0 : x.discount_value }))} options={[{ value: 'none', label: 'None' }, { value: 'fixed', label: 'Fixed amount' }, { value: 'percent', label: 'Percent' }]} />
+            <input type="number" step="0.01" min={0} disabled={(r.discount_type || 'none') === 'none'} value={r.discount_value || ''} onChange={e => set('discount_value', Math.max(parseFloat(e.target.value) || 0, 0))} placeholder="e.g. 20" />
+          </div>
+        </Field>
         <Field label="Auto-send" help="Email the invoice automatically when generated"><label className="check" style={{ marginTop: 8 }}><input type="checkbox" checked={!!r.auto_send} onChange={e => set('auto_send', e.target.checked)} /> Send by email on generation</label></Field>
       </div>
       <h3 className="mt mb">Line items <span className="muted small" style={{ fontWeight: 400 }}>— placeholders: {'{month} {year} {period}'}</span></h3>
@@ -66,7 +72,7 @@ function RecurringForm({ initial, clients, onSaved, onClose }: { initial?: Recur
       </table></div>
       <div className="row between mt">
         <button type="button" className="btn" onClick={() => set('items', [...items, { description: '', unit: unitForBilling(r.billing_mode || 'monthly'), quantity: 1, unit_price: 0, tax_rate: settings?.default_tax_rate || 0, discount: 0 }])}><Icon name="plus" size={15} />Add line</button>
-        <div className="bold">Total per invoice: {money(totals.total, r.currency!)}</div>
+        <div style={{ textAlign: 'right' }}>{totals.discount > 0 && <div className="muted small">Subtotal {money(totals.subtotal, r.currency!)} · Discount −{money(totals.discount, r.currency!)}</div>}<div className="bold">Total per invoice: {money(totals.total, r.currency!)}</div></div>
       </div>
       <div className="form-grid mt">
         <Field label="Notes"><textarea value={r.notes} onChange={e => set('notes', e.target.value)} /></Field>

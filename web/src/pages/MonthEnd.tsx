@@ -53,7 +53,7 @@ export default function MonthEnd() {
   const selected = rows.filter(r => r.include)
   const totals = useMemo(() => {
     const m: Record<string, number> = {}
-    for (const r of selected) m[r.currency] = (m[r.currency] || 0) + computeTotals(r.items, 'none', 0).total
+    for (const r of selected) m[r.currency] = (m[r.currency] || 0) + computeTotals(r.items, r.discount_type || 'none', r.discount_value || 0).total
     return m
   }, [rows])
 
@@ -63,7 +63,7 @@ export default function MonthEnd() {
     try {
       const r = await api.post<{ invoices: Invoice[]; errors: string[] }>(`${V1}/month-end`, {
         month, issue_date: issue,
-        rows: selected.map(r => ({ client_id: r.client_id, recurring_id: r.recurring_id, template_id: r.template_id, currency: r.currency, billing_mode: r.billing_mode, items: r.items, custom_fields: r.custom_fields, time_entry_ids: r.time_entry_ids, due_date: r.due_date, notes: r.notes, terms: r.terms, worked_days: days[r.client_id] || [] })),
+        rows: selected.map(r => ({ client_id: r.client_id, recurring_id: r.recurring_id, template_id: r.template_id, currency: r.currency, billing_mode: r.billing_mode, items: r.items, custom_fields: r.custom_fields, time_entry_ids: r.time_entry_ids, due_date: r.due_date, notes: r.notes, terms: r.terms, discount_type: r.discount_type, discount_value: r.discount_value, worked_days: days[r.client_id] || [] })),
       })
       if (r.errors?.length) toast(r.errors.join('; '), 'error')
       if (r.invoices.length) toast(`Created ${r.invoices.map(i => i.number).join(', ')}`, 'success')
@@ -95,7 +95,7 @@ export default function MonthEnd() {
         <h2 className="mb" style={{ fontSize: 16 }}>1. Prepare invoices</h2>
         {!rows.length ? <Card><Empty title="No clients">Add a client first.</Empty></Card> : <div className="grid mb">
           {rows.map((r, i) => {
-            const t = computeTotals(r.items, 'none', 0)
+            const t = computeTotals(r.items, r.discount_type || 'none', r.discount_value || 0)
             const open = r.existing.filter(e => e.status !== 'cancelled')
             return (
               <Card key={r.client_id} className={r.include ? '' : 'muted-card'} title={<label className="check" style={{ fontSize: 15 }}><input type="checkbox" checked={r.include} onChange={e => setRow(i, { include: e.target.checked })} /> {r.client_name} <span className="muted small" style={{ fontWeight: 400 }}>· {r.currency} · {r.billing_mode}{r.recurring_name ? ` · ${r.recurring_name}` : ''}</span></label>}
