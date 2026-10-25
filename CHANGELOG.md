@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [0.11.0] - 2026-10-25
+
+### Added
+- **Next-invoice-only discount on recurring profiles** (*Next invoice only*, on by default): the discount is used by the next generated invoice — scheduler, *Run now* or the month-end wizard — and then removed from the profile. Untick it to take the discount off every invoice. The profile list shows "−€20 next invoice only" under the amount. Field `discount_once` on recurring profiles.
+
+### Migration
+- `0017_recurring_discount_once`: `recurring_invoices.discount_once`, default 1.
+
 ## [0.10.0] - 2026-10-25
 
 ### Added

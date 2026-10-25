@@ -78,3 +78,17 @@ func TestShortNumber(t *testing.T) {
 		}
 	}
 }
+
+func TestConsumeOnceDiscount(t *testing.T) {
+	rec := &store.RecurringInvoice{DiscountType: "fixed", DiscountValue: 20, DiscountOnce: true}
+	if !consumeOnceDiscount(rec) || rec.DiscountType != "none" || rec.DiscountValue != 0 {
+		t.Fatalf("once: %+v", rec)
+	}
+	if consumeOnceDiscount(rec) {
+		t.Fatal("cleared twice")
+	}
+	rec = &store.RecurringInvoice{DiscountType: "fixed", DiscountValue: 20}
+	if consumeOnceDiscount(rec) || rec.DiscountValue != 20 {
+		t.Fatalf("every invoice: %+v", rec)
+	}
+}

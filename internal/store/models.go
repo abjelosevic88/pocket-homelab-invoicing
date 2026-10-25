@@ -264,6 +264,7 @@ type RecurringInvoice struct {
 	TemplateID     *int64          `json:"template_id"`
 	QuantityMode   string          `json:"quantity_mode"` // fixed | working_days
 	PeriodMode     string          `json:"period_mode"`   // forward | arrears
+	DiscountOnce   bool            `json:"discount_once"` // discount applies to the next invoice only, then is cleared
 	CreatedAt      string          `json:"created_at"`
 	UpdatedAt      string          `json:"updated_at"`
 }

@@ -369,6 +369,8 @@ func (s *Server) handleMonthEndCreate(w http.ResponseWriter, r *http.Request) {
 		if inv.RecurringID != nil {
 			if rec, err := s.store.GetRecurring(ctx, uid, *inv.RecurringID); err == nil && rec.ClientID == row.ClientID {
 				runDate := runDateFor(ps, pe, rec.PeriodMode)
+				// A next-invoice-only discount the wizard just used is cleared from the profile.
+				changed := row.DiscountType != "" && row.DiscountType != "none" && consumeOnceDiscount(rec)
 				advanced := false
 				for guard := 0; guard < 24 && rec.NextRun <= runDate; guard++ {
 					rec.NextRun = NextRun(rec.NextRun, rec.Frequency, rec.Interval)
@@ -380,6 +382,8 @@ func (s *Server) handleMonthEndCreate(w http.ResponseWriter, r *http.Request) {
 					if (rec.MaxOccurrences > 0 && rec.Occurrences >= rec.MaxOccurrences) || (rec.EndDate != nil && rec.NextRun > *rec.EndDate) {
 						rec.Status = "completed"
 					}
+				}
+				if advanced || changed {
 					_ = s.store.SaveRecurring(ctx, uid, rec)
 				}
 			}

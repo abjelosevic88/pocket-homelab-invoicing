@@ -126,6 +126,15 @@ func recurringItems(rec *store.RecurringInvoice, st store.Settings, ps, pe strin
 	return items, source
 }
 
+// consumeOnceDiscount clears a next-invoice-only discount after an invoice has used it.
+func consumeOnceDiscount(rec *store.RecurringInvoice) bool {
+	if !rec.DiscountOnce || rec.DiscountType == "none" || rec.DiscountType == "" {
+		return false
+	}
+	rec.DiscountType, rec.DiscountValue = "none", 0
+	return true
+}
+
 func (s *Server) handleListRecurring(w http.ResponseWriter, r *http.Request) {
 	list, err := s.store.ListRecurring(r.Context(), uidOf(r))
 	if err != nil {
@@ -301,6 +310,7 @@ func (s *Server) runRecurring(ctx context.Context, uid int64, rec *store.Recurri
 	}
 	rec.LastRun = &runDate
 	rec.Occurrences++
+	consumeOnceDiscount(rec)
 	if (rec.MaxOccurrences > 0 && rec.Occurrences >= rec.MaxOccurrences) || (rec.EndDate != nil && rec.NextRun > *rec.EndDate) {
 		rec.Status = "completed"
 	}
