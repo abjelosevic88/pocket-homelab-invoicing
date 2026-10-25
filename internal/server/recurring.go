@@ -93,8 +93,7 @@ func runDateFor(periodStart, periodEnd, periodMode string) string {
 
 // recurringItems expands a profile's line items for a service period: placeholders
 // are filled and, for quantity_mode = working_days, day/hour quantities are derived
-// from the working-days calendar minus the profile's days off. The second return value
-// names the quantity source.
+// from the working-days calendar. The second return value names the quantity source.
 func recurringItems(rec *store.RecurringInvoice, st store.Settings, ps, pe string) ([]store.InvoiceItem, string) {
 	t, err := time.Parse("2006-01-02", ps)
 	if err != nil {
@@ -115,12 +114,11 @@ func recurringItems(rec *store.RecurringInvoice, st store.Settings, ps, pe strin
 		desc = strings.ReplaceAll(desc, "{year}", t.Format("2006"))
 		qty := it.Quantity
 		if source == "working_days" {
-			days := max(float64(wd.WorkingDays)-rec.DaysOff, 0)
 			switch it.Unit {
 			case "day":
-				qty = days
+				qty = float64(wd.WorkingDays)
 			case "hour":
-				qty = days * st.HoursPerDay
+				qty = float64(wd.WorkingDays) * st.HoursPerDay
 			}
 		}
 		items = append(items, store.InvoiceItem{Description: desc, Unit: it.Unit, Quantity: qty, UnitPrice: it.UnitPrice, TaxRate: it.TaxRate, Discount: it.Discount})
@@ -214,9 +212,6 @@ func (s *Server) handleSaveRecurring(w http.ResponseWriter, r *http.Request) {
 	if rec.QuantityMode != "working_days" {
 		rec.QuantityMode = "fixed"
 	}
-	if rec.QuantityMode != "working_days" || rec.DaysOff < 0 {
-		rec.DaysOff = 0
-	}
 	if rec.PeriodMode != "arrears" {
 		rec.PeriodMode = "forward"
 	}
@@ -230,34 +225,6 @@ func (s *Server) handleSaveRecurring(w http.ResponseWriter, r *http.Request) {
 	}
 	saved, _ := s.store.GetRecurring(ctx, uid, rec.ID)
 	writeJSON(w, http.StatusOK, saved)
-}
-
-// handleRecurringPreview: POST /recurring/preview with an (unsaved) profile body ->
-// the service period of its next run and the line items that run would produce,
-// so the form shows the real quantity (working days minus days off) before saving.
-func (s *Server) handleRecurringPreview(w http.ResponseWriter, r *http.Request) {
-	var rec store.RecurringInvoice
-	if err := decode(r, &rec); err != nil {
-		writeErr(w, http.StatusBadRequest, "invalid json")
-		return
-	}
-	st, err := s.store.GetSettings(r.Context(), uidOf(r))
-	if err != nil {
-		s.fail(w, err, "settings")
-		return
-	}
-	run := firstNonEmpty(rec.NextRun, store.Today())
-	ps, pe := periodFor(run, rec.Frequency, rec.Interval, rec.PeriodMode)
-	if ps == "" {
-		writeErr(w, http.StatusBadRequest, "invalid next run date")
-		return
-	}
-	resp := map[string]any{"period_start": ps, "period_end": pe, "working_days": nil, "quantity_source": "profile"}
-	if res, err := workingDays(st, ps, pe); err == nil {
-		resp["working_days"] = res.WorkingDays
-	}
-	resp["items"], resp["quantity_source"] = recurringItems(&rec, st, ps, pe)
-	writeJSON(w, http.StatusOK, resp)
 }
 
 func (s *Server) handleDeleteRecurring(w http.ResponseWriter, r *http.Request) {

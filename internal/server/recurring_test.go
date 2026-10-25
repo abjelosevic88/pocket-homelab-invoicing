@@ -64,16 +64,6 @@ func TestRecurringItemsWorkingDays(t *testing.T) {
 	if items[0].Description != "Days – May 2026" {
 		t.Fatalf("placeholder: %q", items[0].Description)
 	}
-	// Days off come off the working days; hour lines lose days off x hours per day.
-	rec.DaysOff = 2.5
-	items, _ = recurringItems(rec, st, "2026-05-01", "2026-05-31")
-	if items[0].Quantity != 17.5 || items[1].Quantity != 140 || items[2].Quantity != 1 {
-		t.Fatalf("days off: %v %v %v", items[0].Quantity, items[1].Quantity, items[2].Quantity)
-	}
-	rec.DaysOff = 30 // never below zero
-	if items, _ = recurringItems(rec, st, "2026-05-01", "2026-05-31"); items[0].Quantity != 0 {
-		t.Fatalf("clamp: %v", items[0].Quantity)
-	}
 	rec.QuantityMode = "fixed"
 	items, source = recurringItems(rec, st, "2026-05-01", "2026-05-31")
 	if source != "profile" || items[0].Quantity != 21 {

@@ -341,7 +341,6 @@ func (s *Server) Router() http.Handler {
 
 			r.Get("/recurring", s.handleListRecurring)
 			r.Post("/recurring", s.handleSaveRecurring)
-			r.Post("/recurring/preview", s.handleRecurringPreview)
 			r.Get("/recurring/{id}", s.handleGetRecurring)
 			r.Put("/recurring/{id}", s.handleSaveRecurring)
 			r.Delete("/recurring/{id}", s.handleDeleteRecurring)
