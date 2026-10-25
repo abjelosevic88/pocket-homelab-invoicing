@@ -223,7 +223,11 @@ func (s *Server) monthEndPlan(ctx context.Context, uid int64, month string) (map
 		}
 		switch row.QuantitySource {
 		case "working_days":
-			row.Hint = firstNonEmpty(row.Hint, fmt.Sprintf("%d working days in %s", wd.WorkingDays, monthLabel))
+			hint := fmt.Sprintf("%d working days in %s", wd.WorkingDays, monthLabel)
+			if rec != nil && rec.DaysOff > 0 {
+				hint += fmt.Sprintf(" − %g days off", rec.DaysOff)
+			}
+			row.Hint = firstNonEmpty(row.Hint, hint)
 		case "time_entries":
 			row.Hint = firstNonEmpty(row.Hint, fmt.Sprintf("%.2f h tracked and unbilled", float64(row.UnbilledMin)/60))
 		case "profile":

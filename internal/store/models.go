@@ -264,6 +264,7 @@ type RecurringInvoice struct {
 	TemplateID     *int64          `json:"template_id"`
 	QuantityMode   string          `json:"quantity_mode"` // fixed | working_days
 	PeriodMode     string          `json:"period_mode"`   // forward | arrears
+	DaysOff        float64         `json:"days_off"`      // subtracted from the working days (working_days mode)
 	CreatedAt      string          `json:"created_at"`
 	UpdatedAt      string          `json:"updated_at"`
 }

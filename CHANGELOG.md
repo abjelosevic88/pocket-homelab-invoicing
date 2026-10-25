@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [0.9.0] - 2026-10-25
+
+### Added
+- **Days off on working-days recurring profiles.** With *Quantity: working days of the period* the profile form has a *Days off* field (halves allowed) that is subtracted from the working days of every run: day lines bill working days − days off, hour lines (working days − days off) × hours per day, never below zero. The month-end wizard uses it too and says so in its hint.
+- The recurring form now shows the real quantity: day/hour lines are filled from the next run's service period (e.g. "Oct 1 – Oct 31: 22 working days − 2 = 20") and are read-only while the quantity is derived. `POST /api/v1/recurring/preview` returns the period, working days and line items for an unsaved profile.
+
+### Migration
+- `0015_recurring_days_off`: `recurring_invoices.days_off`, 0 for existing profiles.
+
 ## [0.7.1] - 2026-10-21
 
 ### Added
