@@ -441,7 +441,7 @@ func TestSharedTimer(t *testing.T) {
 	tid := int64(out["time_id"].(float64))
 	start := ft.lastStart()
 	if start["app_ref"] != fmt.Sprintf("client:%d", mc.ID) || start["app_label"] != "Harbor Ltd" || start["app_url"] != fmt.Sprintf("/clients/%d", mc.ID) ||
-		start["deliver"] != true || start["switch"] != false || start["title"] != "Login bug" || start["billable"] != true {
+		start["deliver"] != true || start["switch"] != false || start["title"] != "Login bug" || start["billable"] != true || start["app"] != "invoicing" || start["source"] != "invoicing" {
 		t.Fatalf("Pocket Time got %v", start)
 	}
 	if got := ft.auth[len(ft.auth)-1]; got != "Bearer pcx_to_time_member" {
@@ -594,6 +594,9 @@ func TestTimerDirect(t *testing.T) {
 	fc.mu.Unlock()
 	if code, out, _ := call("POST", "/time/start", map[string]any{"client_id": mc.ID}); code != 201 || out["shared"] != true {
 		t.Fatalf("direct start: %d %v", code, out)
+	}
+	if st := ft.lastStart(); st["app"] != "invoicing" || st["source"] != "invoicing" {
+		t.Fatalf("direct start without app/source: %v", st)
 	}
 	if got := ft.auth[len(ft.auth)-1]; got != "Bearer ptm_secret" {
 		t.Fatalf("Pocket Time saw %q", got)

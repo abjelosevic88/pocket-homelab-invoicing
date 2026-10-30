@@ -59,7 +59,8 @@ func (s *Server) handleStartTimer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if tc != nil {
-		body := map[string]any{"app_ref": clientRef(client.ID), "app_label": client.Name, "app_url": clientPath(client.ID),
+		// app + source: a direct (ptm_ token) connection can't tell Pocket Time who calls; a Core link sets them anyway
+		body := map[string]any{"app": "invoicing", "source": "invoicing", "app_ref": clientRef(client.ID), "app_label": client.Name, "app_url": clientPath(client.ID),
 			"title": strings.TrimSpace(in.Description), "billable": true, "deliver": true, "switch": in.Switch}
 		if p := strings.TrimSpace(in.Project); p != "" {
 			body["project"] = p // a Pocket Time project of that name, if there is one; kept here in any case

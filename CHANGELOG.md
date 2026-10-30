@@ -2,6 +2,11 @@
 
 All notable changes to this project are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [0.12.1] - 2026-10-30
+
+### Fixed
+- Pocket Time over a direct connection (a `ptm_` token): the timer start now says it comes from Pocket Invoicing (`app`, `source`), so Pocket Time keeps the client it is for and shows it as started here (Pocket Time 0.1.1).
+
 ## [0.12.0] - 2026-10-30
 
 ### Added
