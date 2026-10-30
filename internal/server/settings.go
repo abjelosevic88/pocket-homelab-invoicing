@@ -37,6 +37,8 @@ func (s *Server) publicSettings(ctx context.Context, u *store.User, st store.Set
 	m := maskSettings(st)
 	mode, via, detail := s.docsStatus(ctx, u, st)
 	m["documents_mode"], m["documents_via"], m["documents_detail"] = mode, via, detail
+	mode, via, detail = s.timeStatus(ctx, u, st)
+	m["time_mode"], m["time_via"], m["time_detail"] = mode, via, detail
 	m["core_configured"] = s.core.Configured()
 	m["core_registered"] = s.coreStatus()["registered"]
 	return m
@@ -52,6 +54,8 @@ func maskSettings(st store.Settings) map[string]any {
 	m["smtp_password"] = ""
 	m["documents_token_set"] = st.DocumentsToken != ""
 	m["documents_token"] = ""
+	m["time_token_set"] = st.TimeToken != ""
+	m["time_token"] = ""
 	return m
 }
 
@@ -69,6 +73,7 @@ func (s *Server) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 	prevPwd := st.SMTPPassword
 	prevToken, prevMode := st.DocumentsToken, st.DocumentsMode
 	prevEffective := s.documentsMode(st)
+	prevTimeToken, prevTimeMode, prevTimeEffective := st.TimeToken, st.TimeMode, s.timeMode(st)
 	prevBase, prevProvider, prevSetup := st.BaseCurrency, st.ExchangeRateProvider, st.SetupComplete
 	prevText := map[string]string{"notes": st.DefaultNotes, "terms": st.DefaultTerms, "footer": st.DefaultFooter}
 	if err := decode(r, &st); err != nil {
@@ -95,6 +100,19 @@ func (s *Server) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 		st.DocumentsMode = prevMode
 	}
 	st.DocumentsURL = strings.TrimRight(strings.TrimSpace(st.DocumentsURL), "/")
+	st.TimeToken = strings.TrimSpace(st.TimeToken)
+	if st.TimeToken == "" {
+		st.TimeToken = prevTimeToken
+	}
+	timeDisconnect := st.TimeClearToken
+	if st.TimeClearToken {
+		st.TimeToken = ""
+	}
+	st.TimeClearToken = false
+	if !validMode(st.TimeMode) {
+		st.TimeMode = prevTimeMode
+	}
+	st.TimeURL = strings.TrimRight(strings.TrimSpace(st.TimeURL), "/")
 	st.DocumentsPublicURL = strings.TrimRight(strings.TrimSpace(st.DocumentsPublicURL), "/")
 	switch st.DocumentsArchiveInvoices {
 	case "off", "sent", "paid":
@@ -152,7 +170,8 @@ func (s *Server) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if disconnect || st.DocumentsMode != prevMode || s.documentsMode(st) != prevEffective {
+	if disconnect || st.DocumentsMode != prevMode || s.documentsMode(st) != prevEffective ||
+		timeDisconnect || st.TimeMode != prevTimeMode || s.timeMode(st) != prevTimeEffective {
 		go s.reportModes(context.Background(), uid) // Core's Links page follows the switch right away
 	}
 	if isAdmin {

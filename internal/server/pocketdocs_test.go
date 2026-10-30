@@ -277,6 +277,7 @@ func TestDocumentsConnectionModes(t *testing.T) {
 
 	// --- off: no calls anywhere ---
 	mst.DocumentsMode = modeOff
+	mst.TimeMode = modeOff // Pocket Time's status is in the settings too; off asks Core nothing either
 	_ = st.SaveSettings(ctx, member.ID, mst)
 	coreBefore, docsBefore := len(fc.tokenCalls()), len(docs.Calls())
 	fc.mu.Lock()
@@ -318,7 +319,7 @@ func TestDocumentsWithoutCore(t *testing.T) {
 		t.Fatalf("ping: %+v", ps)
 	}
 	s.reportModes(ctx, 0) // no Core: a no-op
-	if modes, err := s.connModes(ctx, 0); err != nil || len(modes) != 1 || modes[0].Mode != modeDirect || modes[0].Target != "documents" {
+	if modes, err := s.connModes(ctx, 0); err != nil || len(modes) != 2 || modes[0].Mode != modeDirect || modes[0].Target != "documents" || modes[1].Target != "time" || modes[1].Mode != modeDirect {
 		t.Fatalf("modes without core: %v %v", modes, err)
 	}
 }
@@ -434,7 +435,8 @@ func TestDocumentsModesReported(t *testing.T) {
 	fc.mu.Lock()
 	uses, svcs := fc.uses, fc.svcs
 	fc.mu.Unlock()
-	if len(svcs) != 0 || len(uses) != 1 || uses[0]["app"] != "documents" || fmt.Sprint(uses[0]["scopes"]) != "[documents:read documents:write]" {
+	if len(svcs) != 0 || len(uses) != 2 || uses[0]["app"] != "documents" || fmt.Sprint(uses[0]["scopes"]) != "[documents:read documents:write]" ||
+		uses[1]["app"] != "time" || fmt.Sprint(uses[1]["scopes"]) != "[time:read time:write]" {
 		t.Fatalf("manifest uses=%v services=%v", uses, svcs)
 	}
 

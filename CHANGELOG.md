@@ -2,6 +2,19 @@
 
 All notable changes to this project are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [0.12.0] - 2026-10-30
+
+### Added
+- **Pocket Time.** Settings → *Pocket Time* (Pocket Core | Off, Direct under Advanced): connected, the timer on *Time tracking* is your one timer in Pocket Time. Starting it here starts it there for the client; a timer started anywhere else (Pocket Time, Pocket Guitar…) shows here with *Stop*; stopping in either place stops both. Only one timer runs: starting another asks "Stop it and start this". Not connected, the timer works here on its own as before.
+- **Worklog for Pocket Time** (Core link offers `worklog:read` "See your time entries" and `worklog:write` "Add time to bill"): Pocket Time shows the time kept here and adds time tracked there for a client as an unbilled entry, ready to invoice — rounded like the timer, with the project and rate the timer was started with. It may change or remove only what it added, never invoiced time. `GET/POST /worklog`, `GET /worklog/items`, `DELETE /worklog/{id}`.
+- Time entries show a *Pocket Time* badge when they came from there.
+
+### Changed
+- Link tokens must be meant for Pocket Invoicing (Core's audience) to be accepted.
+
+### Migration
+- `0018_time_worklog`: `time_entries.source` (default `app`) and `external_id` (unique per person when set); table `shared_timers`.
+
 ## [0.11.0] - 2026-10-25
 
 ### Added

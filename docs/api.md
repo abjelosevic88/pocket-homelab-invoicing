@@ -104,9 +104,21 @@ Body: `{name, client_id, status: active|paused, frequency: daily|weekly|biweekly
 | GET | `/time?client_id=&unbilled=1&from=&to=` | |
 | POST | `/time` | `{client_id, project, description, started_at, duration_minutes | ended_at, billable, rate}` |
 | PUT/DELETE | `/time/{id}` | |
-| GET | `/time/running` | |
-| POST | `/time/start` | `{client_id, project, description, rate?}` (stops any running timer) |
-| POST | `/time/stop` | rounds to the configured block |
+| GET | `/time/running` | `{running, shared, time_error?}`; with Pocket Time connected `running` may be a timer there (`shared`, `time_id`, `ours` = for a client here, `started_in`) |
+| POST | `/time/start` | `{client_id, project, description, rate?, switch?}`. Here: stops any running timer. With Pocket Time: starts your one timer there; another one running → `409 {error, running}` unless `switch: true` |
+| POST | `/time/stop` | `{time_id?}`; rounds to the configured block. With Pocket Time `time_id` = the timer you saw (a different one running → 409); the finished time comes back through the worklog |
+
+Entries carry `source` (`app`, or `time` for what Pocket Time wrote) and `external_id` (`time:<id>`); both are read-only here.
+
+### Worklog (Pocket Time)
+Pocket Time's worklog contract (`docs/worklog.md` in pocket-homelab-time), offered to Core links as `worklog:read` / `worklog:write`; your own API token works too.
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/worklog?from=&to=` | finished entries by local date: `{entries: [{id, title, started_at, ended_at, date, duration_s, ref: "client:<id>", label, url, source, external_id}]}` (no rates or amounts) |
+| GET | `/worklog/items?q=` | active clients, most recent time first: `{items: [{ref, label, detail, url}]}` |
+| POST | `/worklog` | `{ref, title, started_at \| date, ended_at?, duration_s, billable?, project?, external_id}` → `{id, url}`. The same `external_id` updates; unknown client → 400; invoiced → 409. Rounded like the timer |
+| DELETE | `/worklog/{id}` | only entries written through the worklog (a link: by its own app); invoiced → 409 |
 
 ## Expenses
 `GET /expenses?client_id=&unbilled=1`, `POST /expenses`, `PUT/DELETE /expenses/{id}` — `{client_id, date, category, description, amount, currency, exchange_rate, billable}`.

@@ -6,7 +6,7 @@ import { useApp } from '../lib/app-context'
 import { money } from '../lib/format'
 import type { Client, Invoice, TimeEntry } from '../lib/types'
 import { Icon } from './icons'
-import { type CreateKind, elapsed, useOnChange } from './shell'
+import { type CreateKind, elapsed, timerLabel, useOnChange } from './shell'
 import { type Anchor, type MenuItem, Menu, rectOf } from './ui'
 
 type NavItem = { to: string; label: string; icon: string; end?: boolean; badge?: number; badgeTitle?: string; live?: boolean }
@@ -109,7 +109,7 @@ function TimerCard({ running, onNavigate }: { running: TimeEntry; onNavigate: ()
   return (
     <button type="button" className="sb-timer" onClick={() => { onNavigate(); navigate('/time') }} title="Open time tracking">
       <Icon name="timer" size={17} />
-      <span className="grow"><span className="sb-timer-t">{elapsed(running.started_at, now)}</span><span className="sb-timer-s">{[running.client_name, running.description || running.project].filter(Boolean).join(' · ')}</span></span>
+      <span className="grow"><span className="sb-timer-t">{elapsed(running.started_at, now)}</span><span className="sb-timer-s">{timerLabel(running)}</span></span>
     </button>
   )
 }

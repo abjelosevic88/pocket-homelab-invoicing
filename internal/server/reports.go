@@ -27,7 +27,7 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 	revenue, _ := s.store.RevenueByMonth(ctx, uid, from, to)
 	recent, _, _ := s.store.ListInvoices(ctx, uid, store.InvoiceFilter{Limit: 8})
 	overdue, _, _ := s.store.ListInvoices(ctx, uid, store.InvoiceFilter{Status: "overdue", Limit: 8})
-	running, _ := s.store.RunningTimer(ctx, uid)
+	running, _, _ := s.currentTimer(ctx, uid)
 	activity, _ := s.store.ListActivity(ctx, uid, "", 0, 10)
 	upcoming, _ := s.store.ListRecurring(ctx, uid)
 	var next []store.RecurringInvoice

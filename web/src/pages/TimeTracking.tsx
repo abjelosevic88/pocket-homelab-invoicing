@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { api, V1 } from '../lib/api'
+import { api, ApiError, V1 } from '../lib/api'
 import { useApp } from '../lib/app-context'
 import { fmtDateTime, hours, hoursDecimal, money, today } from '../lib/format'
 import type { Client, TimeEntry } from '../lib/types'
-import { Card, Empty, Field, Loading, Modal, PageHeader, useAsync, useToast } from '../components/ui'
+import { Card, Confirm, Empty, Field, Loading, Modal, PageHeader, useAsync, useToast } from '../components/ui'
+import { elapsed, timerChanged, timerLabel, useTimer } from '../components/shell'
 import { Icon } from '../components/icons'
 import { Select } from '../components/Select'
 
@@ -77,45 +78,62 @@ export default function TimeTracking() {
   const { data: clients } = useAsync(() => api.get<Client[]>(`${V1}/clients`))
   const { data: entries, loading, reload } = useAsync(() => api.get<TimeEntry[]>(`${V1}/time?client_id=${clientId || ''}&unbilled=${unbilled ? 1 : 0}&limit=300`), [clientId, unbilled])
   const [timer, setTimer] = useState({ client_id: 0, project: '', description: '' })
-  const [running, setRunning] = useState<TimeEntry | null>(null)
-  const [tick, setTick] = useState(0)
+  const { running, shared, time_error: timeError } = useTimer()
+  const [now, setNow] = useState(Date.now())
   const [editing, setEditing] = useState<TimeEntry | 'new' | null>(null)
   const [invoicing, setInvoicing] = useState(false)
-  const loadRunning = () => api.get<{ running: TimeEntry | null }>(`${V1}/time/running`).then(r => setRunning(r.running))
-  useEffect(() => { loadRunning() }, [])
-  useEffect(() => { const i = setInterval(() => setTick(t => t + 1), 1000); return () => clearInterval(i) }, [])
+  // "Stop it and start this": the running timer (or what Pocket Time said about it) when starting another
+  const [switchAsk, setSwitchAsk] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  useEffect(() => { const i = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(i) }, [])
   useEffect(() => { if (clients?.length && !timer.client_id) setTimer(t => ({ ...t, client_id: clientId || clients[0].id })) }, [clients, clientId, timer.client_id])
-  const start = async () => { try { await api.post(`${V1}/time/start`, timer); await loadRunning(); window.dispatchEvent(new Event('pi:timer')); reload() } catch (e) { toast((e as Error).message, 'error') } }
-  const stop = async () => { await api.post(`${V1}/time/stop`); await loadRunning(); window.dispatchEvent(new Event('pi:timer')); reload(); toast('Timer stopped', 'success') }
+  // time from Pocket Time arrives through the worklog a moment after it stops
+  const reloadSoon = () => { reload(); setTimeout(reload, 2500); setTimeout(reload, 6000) }
+  const start = async (sw = false) => {
+    if (!sw && running) { setSwitchAsk(`${timerLabel(running)} is running${running.ours === false && running.started_in ? ` (started in ${running.started_in})` : ''}.`); return }
+    setBusy(true)
+    try { await api.post(`${V1}/time/start`, { ...timer, switch: sw }); setSwitchAsk(null); timerChanged(); if (running) reloadSoon(); else reload() }
+    catch (e) { if (e instanceof ApiError && e.status === 409) setSwitchAsk(e.message); else toast((e as Error).message, 'error'); timerChanged() }
+    finally { setBusy(false) }
+  }
+  const stop = async () => {
+    if (!running) return
+    setBusy(true)
+    try {
+      await api.post(`${V1}/time/stop`, running.shared ? { time_id: running.time_id } : {})
+      toast(running.shared ? (running.ours ? 'Timer stopped. Pocket Time adds the time here in a moment.' : 'Timer stopped in Pocket Time') : 'Timer stopped', 'success')
+      if (running.shared) reloadSoon(); else reload()
+    } catch (e) { toast((e as Error).message, 'error') } finally { setBusy(false); timerChanged() }
+  }
   const del = async (e: TimeEntry) => { if (!confirm('Delete entry?')) return; await api.del(`${V1}/time/${e.id}`); reload() }
   const setParam = (k: string, v: string) => { const n = new URLSearchParams(sp); if (v) n.set(k, v); else n.delete(k); setSp(n) }
-  const elapsed = running ? Math.max(0, Math.floor((Date.now() - new Date(running.started_at).getTime()) / 1000)) : 0
-  void tick
   const unbilledEntries = (entries || []).filter(e => e.billable && !e.invoice_id && e.ended_at)
   const unbilledByClient = unbilledEntries.reduce((m, e) => { m[e.client_id] = (m[e.client_id] || 0) + e.duration_minutes; return m }, {} as Record<number, number>)
   const totalMinutes = (entries || []).reduce((a, e) => a + e.duration_minutes, 0)
   const invoiceClient = clientId || Number(Object.keys(unbilledByClient)[0]) || 0
   return (
     <>
-      <PageHeader title="Time tracking" sub={`Rounded to ${settings?.time_rounding_minutes || 15} min blocks when the timer stops (Settings → Invoicing).`} actions={<>
+      <PageHeader title="Time tracking" sub={`Rounded to ${settings?.time_rounding_minutes || 15} min blocks when the timer stops (Settings → Invoicing)${shared ? '. The timer is your timer in Pocket Time: start it here or there, stop it in either place.' : '.'}`} actions={<>
         <a className="btn" href={`${V1}/reports/export.csv?type=time`}>Export CSV</a>
         <button type="button" className="btn" onClick={() => setEditing('new')}><Icon name="plus" size={15} />Manual entry</button>
         <button type="button" className="btn primary" disabled={!unbilledEntries.length} onClick={() => setInvoicing(true)}>Invoice unbilled time</button>
       </>} />
       <Card className="mb">
-        {running ? (
-          <div className="row between">
-            <div className="row"><span className="timer-pill"><span className="dot" /> {String(Math.floor(elapsed / 3600)).padStart(2, '0')}:{String(Math.floor((elapsed % 3600) / 60)).padStart(2, '0')}:{String(elapsed % 60).padStart(2, '0')}</span><span><strong>{running.client_name}</strong>{running.project && <span className="muted"> · {running.project}</span>}<div className="muted small">{running.description}</div></span></div>
-            <button type="button" className="btn danger" onClick={stop}><Icon name="stop" size={14} />Stop</button>
-          </div>
-        ) : (
+        {running && <div className="row between" style={running.ours === false ? { marginBottom: 12 } : undefined}>
+          <div className="row"><span className="timer-pill"><span className="dot" /> {elapsed(running.started_at, now)}</span>{running.ours === false
+            ? <span><strong>Timer running in Pocket Time: {running.description}</strong><div className="muted small">{running.started_in ? `Started in ${running.started_in}. ` : ''}Only one timer runs at a time.</div></span>
+            : <span><strong>{running.client_name}</strong>{running.project && <span className="muted"> · {running.project}</span>}<div className="muted small">{running.description}{running.shared && <>{running.description ? ' · ' : ''}also running in Pocket Time</>}</div></span>}</div>
+          <button type="button" className="btn danger" onClick={stop} disabled={busy}><Icon name="stop" size={14} />Stop</button>
+        </div>}
+        {(!running || running.ours === false) && (
           <div className="row" style={{ gap: 10 }}>
             <Select className="timer-client" ariaLabel="Client" placeholder="Choose a client…" value={String(timer.client_id)} onChange={v => setTimer({ ...timer, client_id: Number(v) })} options={(clients || []).map(c => ({ value: String(c.id), label: c.name }))} />
             <input value={timer.project} onChange={e => setTimer({ ...timer, project: e.target.value })} placeholder="Project (optional)" style={{ width: 180 }} />
             <input value={timer.description} onChange={e => setTimer({ ...timer, description: e.target.value })} placeholder="What are you working on?" style={{ flex: 1, minWidth: 200 }} onKeyDown={e => e.key === 'Enter' && start()} />
-            <button type="button" className="btn primary" onClick={start} disabled={!timer.client_id}><Icon name="play" size={14} />Start timer</button>
+            <button type="button" className="btn primary" onClick={() => start()} disabled={!timer.client_id || busy}><Icon name="play" size={14} />Start timer</button>
           </div>
         )}
+        {timeError && <div className="muted small" style={{ marginTop: 8 }}>Pocket Time could not be asked just now: {timeError}</div>}
       </Card>
       <div className="filters">
         <Select value={String(clientId)} onChange={v => setParam('client_id', v === '0' ? '' : v)} ariaLabel="Client" placeholder="All clients" options={[{ value: '0', label: 'All clients' }, ...(clients || []).map(c => ({ value: String(c.id), label: c.name }))]} />
@@ -128,13 +146,14 @@ export default function TimeTracking() {
           <tbody>{entries.map(e => <tr key={e.id}>
             <td className="muted">{fmtDateTime(e.started_at)}</td>
             <td>{e.client_name}</td>
-            <td>{e.project && <span className="muted">{e.project}: </span>}{e.description}{e.rate != null && <span className="muted small"> · {money(e.rate, clients?.find(c => c.id === e.client_id)?.currency || '')}/h</span>}</td>
+            <td>{e.project && <span className="muted">{e.project}: </span>}{e.description}{e.rate != null && <span className="muted small"> · {money(e.rate, clients?.find(c => c.id === e.client_id)?.currency || '')}/h</span>}{e.source === 'time' && <span className="badge" style={{ marginLeft: 6 }} title="Tracked in Pocket Time">Pocket Time</span>}</td>
             <td className="num">{e.ended_at ? hours(e.duration_minutes) : <span className="timer-pill">running</span>}</td>
             <td>{!e.billable ? <span className="badge">non-billable</span> : e.invoice_id ? <span className="badge paid" onClick={() => navigate(`/invoices/${e.invoice_id}`)} style={{ cursor: 'pointer' }}>invoiced</span> : <span className="badge sent">unbilled</span>}</td>
             <td className="actions">{!e.invoice_id && <><button type="button" className="btn ghost sm" onClick={() => setEditing(e)}>Edit</button><button type="button" className="btn ghost icon-only sm" aria-label="Delete" title="Delete" onClick={() => del(e)}><Icon name="trash" size={14} /></button></>}</td>
           </tr>)}</tbody>
         </table></div>}
       </Card>
+      {switchAsk && <Confirm title="Switch timers?" danger={false} confirmLabel="Stop it and start this" message={<>{switchAsk} Only one timer runs at a time. Stop it and start the timer for <b>{clients?.find(c => c.id === timer.client_id)?.name}</b>?</>} onCancel={() => setSwitchAsk(null)} onConfirm={() => start(true)} />}
       {editing && clients && <Modal title={editing === 'new' ? 'Manual time entry' : 'Edit entry'} onClose={() => setEditing(null)}><EntryForm initial={editing === 'new' ? undefined : editing} clients={clients} onDone={() => { setEditing(null); reload() }} /></Modal>}
       {invoicing && clients && <Modal title="Create invoice from unbilled time" size="lg" onClose={() => setInvoicing(false)}>
         {!clientId && Object.keys(unbilledByClient).length > 1 && <div className="callout mb">Multiple clients have unbilled time. Choose one: {Object.keys(unbilledByClient).map(id => <button type="button" key={id} className="link-btn" style={{ marginLeft: 8 }} onClick={() => setParam('client_id', id)}>{clients.find(c => c.id === Number(id))?.name} ({hours(unbilledByClient[Number(id)])})</button>)}</div>}

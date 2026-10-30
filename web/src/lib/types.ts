@@ -35,7 +35,9 @@ export interface RecurringItem { description: string; unit: string; quantity: nu
 export interface Recurring {
   id: number; name: string; client_id: number; client_name: string; status: string; frequency: string; interval: number; start_date: string; end_date: string | null; next_run: string; last_run: string | null; occurrences: number; max_occurrences: number; due_days: number; currency: string; billing_mode: string; items: RecurringItem[]; discount_type: string; discount_value: number; notes: string; terms: string; auto_send: boolean; template_id: number | null; quantity_mode: string; period_mode: string; discount_once: boolean;
 }
-export interface TimeEntry { id: number; client_id: number; client_name: string; project: string; description: string; started_at: string; ended_at: string | null; duration_minutes: number; billable: boolean; rate: number | null; invoice_id: number | null }
+export interface TimeEntry { id: number; client_id: number; client_name: string; project: string; description: string; started_at: string; ended_at: string | null; duration_minutes: number; billable: boolean; rate: number | null; invoice_id: number | null; source?: string; external_id?: string
+  /** running timer only: it runs in Pocket Time (time_id = its id there); ours = for a client here; started_in = the app it was started in */
+  shared?: boolean; time_id?: number; ours?: boolean; started_in?: string }
 export interface Expense { id: number; client_id: number | null; client_name: string; date: string; category: string; description: string; amount: number; currency: string; exchange_rate: number; billable: boolean; invoice_id: number | null }
 export interface Webhook { id: number; url: string; events: string; secret: string; enabled: boolean }
 export interface APIToken { id: number; name: string; prefix: string; last_used_at: string | null; created_at: string }
@@ -50,6 +52,7 @@ export interface Settings {
   smtp_host: string; smtp_port: number; smtp_user: string; smtp_password: string; smtp_password_set?: boolean; smtp_from: string; smtp_from_name: string; smtp_tls: string; smtp_bcc: string; email_subject: string; email_body: string; reminder_days: string; reminders_enabled: boolean; setup_complete: boolean;
   documents_url: string; documents_public_url: string; documents_token: string; documents_token_set?: boolean; documents_clear_token?: boolean; documents_tags: string; documents_invoice_type: string; documents_create_correspondents: boolean; documents_archive_invoices: string; documents_category_as_type: boolean;
   documents_mode: ConnMode; documents_via?: string; documents_detail?: string; core_configured?: boolean; core_registered?: boolean;
+  time_mode: ConnMode; time_url: string; time_token: string; time_token_set?: boolean; time_clear_token?: boolean; time_via?: string; time_detail?: string;
 }
 export type ConnMode = 'core' | 'direct' | 'off'
 export interface DashboardStats { outstanding: number; outstanding_count: number; overdue: number; overdue_count: number; paid_this_month: number; paid_this_year: number; invoiced_this_year: number; draft_count: number; unbilled_minutes: number; unbilled_expenses: number; active_clients: number }

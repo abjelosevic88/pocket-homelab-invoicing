@@ -56,7 +56,7 @@ func (s *Server) requireAdmin(next http.Handler) http.Handler {
 // or trusted proxy header depending on AUTH_MODE.
 func (s *Server) requireAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		u, err := s.resolveUser(r)
+		u, app, err := s.resolveUser(r)
 		if errors.Is(err, errLinkScope) {
 			writeErr(w, http.StatusForbidden, "this Pocket Core link does not cover "+r.Method+" "+r.URL.Path)
 			return
@@ -65,24 +65,36 @@ func (s *Server) requireAuth(next http.Handler) http.Handler {
 			writeErr(w, http.StatusUnauthorized, "unauthorized")
 			return
 		}
-		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), userKey, u)))
+		ctx := context.WithValue(r.Context(), userKey, u)
+		if app != "" {
+			ctx = context.WithValue(ctx, linkAppKey{}, app)
+		}
+		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 
-func (s *Server) resolveUser(r *http.Request) (*store.User, error) {
+// resolveUser finds the person behind the request; the second value is the
+// acting app's slug when another Pocket app calls through a Core link.
+func (s *Server) resolveUser(r *http.Request) (*store.User, string, error) {
+	if tok := bearerToken(r); tok != "" && s.core.Configured() && core.IsLinkToken(tok) {
+		return s.linkUser(r.Context(), tok, r)
+	}
+	u, err := s.resolvePerson(r)
+	return u, "", err
+}
+
+func bearerToken(r *http.Request) string {
+	if h := r.Header.Get("Authorization"); strings.HasPrefix(strings.ToLower(h), "bearer ") {
+		return strings.TrimSpace(h[7:])
+	}
+	return r.Header.Get("X-API-Key")
+}
+
+func (s *Server) resolvePerson(r *http.Request) (*store.User, error) {
 	ctx := r.Context()
 	// 1. API token (Core-issued pcd_/pcu_/pco_ tokens go to Core's introspection,
 	// pcx_ link tokens too, limited to the routes their scopes cover)
-	tok := ""
-	if h := r.Header.Get("Authorization"); strings.HasPrefix(strings.ToLower(h), "bearer ") {
-		tok = strings.TrimSpace(h[7:])
-	} else if t := r.Header.Get("X-API-Key"); t != "" {
-		tok = t
-	}
-	if tok != "" {
-		if s.core.Configured() && core.IsLinkToken(tok) {
-			return s.linkUser(ctx, tok, r)
-		}
+	if tok := bearerToken(r); tok != "" {
 		if s.core.Configured() && core.IsCoreToken(tok) {
 			return s.coreUser(ctx, tok)
 		}
@@ -164,7 +176,7 @@ func (s *Server) handleAuthStatus(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, err, "count users")
 		return
 	}
-	u, _ := s.resolveUser(r)
+	u, _, _ := s.resolveUser(r)
 	// Signed in: your own company name. Signed out: the box owner's (the login page brand,
 	// already public on every invoice link).
 	owner := s.store.OwnerID(r.Context())

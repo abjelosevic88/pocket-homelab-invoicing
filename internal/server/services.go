@@ -10,11 +10,12 @@ import (
 
 // ---- Connection modes ----
 //
-// A sibling Pocket app (Pocket Documents) is reached in one of three ways,
-// chosen per person (see pocketdocs.go): core (a Pocket Core app link), direct
-// (a URL and the person's own token saved here) or off.
+// A sibling Pocket app (Pocket Documents, Pocket Time) is reached in one of
+// three ways, chosen per person (see pocketdocs.go, pockettime.go): core (a
+// Pocket Core app link), direct (a URL and the person's own token saved here)
+// or off.
 //
-// The mode in effect is reported to Core ("documents" per person) so its Links
+// The mode in effect is reported to Core ("documents" and "time" per person) so its Links
 // page shows Direct connections too: after registering (on start and every 30
 // minutes with the re-registration) and right after someone changes their mode
 // or disconnects. Report only; failures are logged.
@@ -25,9 +26,12 @@ const (
 	modeOff    = "off"
 )
 
-// docsUses is what Invoicing does in other Pocket apps for a person (manifest Uses).
-var docsUses = []core.Use{
-	{App: "documents", Scopes: documentsScopes, Reason: "File issued invoices, their attachments and company documents as documents of the client, and show a client's documents"},
+// linkUses is what Invoicing does in other Pocket apps for a person (manifest Uses).
+func linkUses() []core.Use {
+	return []core.Use{
+		{App: "documents", Scopes: documentsScopes, Reason: "File issued invoices, their attachments and company documents as documents of the client, and show a client's documents"},
+		{App: "time", Scopes: timeScopes, Reason: "Your timer here is the same timer as in Pocket Time"},
+	}
 }
 
 func validMode(m string) bool { return m == modeCore || m == modeDirect || m == modeOff }
@@ -44,7 +48,7 @@ func connMode(mode, token string, coreOn bool) string {
 	return modeDirect
 }
 
-// connModes is the Pocket Documents mode in effect (what Settings shows,
+// connModes is the Pocket Documents and Pocket Time mode in effect (what Settings shows,
 // defaults included) for each person, or just uid when uid > 0.
 func (s *Server) connModes(ctx context.Context, uid int64) ([]core.ConnMode, error) {
 	var users []store.User
@@ -67,12 +71,13 @@ func (s *Server) connModes(ctx context.Context, uid int64) ([]core.ConnMode, err
 		if err != nil {
 			continue
 		}
-		out = append(out, core.ConnMode{User: u.Email, Target: "documents", Mode: s.documentsMode(st)})
+		out = append(out, core.ConnMode{User: u.Email, Target: "documents", Mode: s.documentsMode(st)},
+			core.ConnMode{User: u.Email, Target: "time", Mode: s.timeMode(st)})
 	}
 	return out, nil
 }
 
-// reportModes tells Core how people reach Pocket Documents (everyone, or just
+// reportModes tells Core how people reach Pocket Documents and Pocket Time (everyone, or just
 // uid). Only with a Core; never fatal.
 func (s *Server) reportModes(ctx context.Context, uid int64) {
 	if !s.core.Configured() {

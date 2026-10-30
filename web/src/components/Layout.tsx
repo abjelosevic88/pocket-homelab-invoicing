@@ -11,7 +11,7 @@ import { CommandPalette, type PaletteCommand } from './CommandPalette'
 import { ShortcutsSheet } from './ShortcutsSheet'
 import { Avatar, Modal, type MenuItem, MenuButton, modalOpen, useIsMobile, useMediaQuery } from './ui'
 import { ClientForm } from '../pages/Clients'
-import { announceChange, type CreateKind, elapsed, useRunningTimer } from './shell'
+import { announceChange, type CreateKind, elapsed, timerLabel, useRunningTimer } from './shell'
 import { AskButton } from './AskButton'
 
 const SIDEBAR_KEY = 'pi-sidebar'
@@ -120,8 +120,8 @@ function TimerPill({ running }: { running: TimeEntry }) {
   const [now, setNow] = useState(Date.now())
   useEffect(() => { const i = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(i) }, [])
   return (
-    <button type="button" className="timer-pill" onClick={() => navigate('/time')} title={`Timer running: ${running.client_name} · ${running.description || running.project}`}>
-      <span className="dot" />{elapsed(running.started_at, now)}<span className="muted">{running.client_name}</span>
+    <button type="button" className="timer-pill" onClick={() => navigate('/time')} title={`Timer running: ${timerLabel(running)}`}>
+      <span className="dot" />{elapsed(running.started_at, now)}<span className="muted">{running.ours === false ? running.description : running.client_name}</span>
     </button>
   )
 }

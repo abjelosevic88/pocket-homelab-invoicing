@@ -129,7 +129,7 @@ func (s *Server) registerWithCore(ctx context.Context) error {
 		URL: s.cfg.CoreAppURL, PublicURL: s.cfg.BaseURL, HealthPath: "/healthz", EnvPrefix: "INVOICING",
 		Publishes: []string{"invoicing.invoice_created", "invoicing.invoice_sent", "invoicing.invoice_paid"},
 		Offers:    linkOffers,
-		Uses:      docsUses,
+		Uses:      linkUses(),
 	}
 	if s.cfg.BaseURL != "" {
 		// ask Core for a relying-party client so "Sign in with Pocket Core" needs no configuration
@@ -257,6 +257,7 @@ func (s *Server) Router() http.Handler {
 			r.Delete("/settings/logo", s.handleDeleteLogo)
 			r.Post("/settings/test-email", s.handleTestEmail)
 			r.Post("/settings/test-documents", s.handleTestDocs)
+			r.Post("/settings/test-time", s.handleTestTime)
 
 			// Currencies and exchange rates are box-wide reference data: everyone reads them,
 			// only admins change them (see the admin group below).
@@ -353,6 +354,11 @@ func (s *Server) Router() http.Handler {
 			r.Post("/time/stop", s.handleStopTimer)
 			r.Put("/time/{id}", s.handleSaveTime)
 			r.Delete("/time/{id}", s.handleDeleteTime)
+			// Pocket Time's worklog contract (worklog.go)
+			r.Get("/worklog", s.handleWorklog)
+			r.Get("/worklog/items", s.handleWorklogItems)
+			r.Post("/worklog", s.handleWorklogWrite)
+			r.Delete("/worklog/{id}", s.handleWorklogDelete)
 
 			r.Get("/expenses", s.handleListExpenses)
 			r.Post("/expenses", s.handleSaveExpense)

@@ -99,6 +99,14 @@ type Settings struct {
 	DocumentsArchiveInvoices      string `json:"documents_archive_invoices"`      // off | sent | paid — file the invoice automatically
 	DocumentsCategoryAsType       bool   `json:"documents_category_as_type"`      // use the company document's category as document type
 
+	// Pocket Time (optional): the timer here is the person's one timer in
+	// Pocket Time. Through a Pocket Core link (nothing to paste), a URL and a
+	// ptm_ API token of one's own, or off (the timer works on its own here).
+	TimeMode       string `json:"time_mode"`                  // core | direct | off; empty = direct with a token, else core when Pocket Core is there
+	TimeURL        string `json:"time_url"`                   // direct: how this app reaches it (empty = ask Core)
+	TimeToken      string `json:"time_token"`                 // direct: the person's ptm_ API token (never cleared by an empty PUT)
+	TimeClearToken bool   `json:"time_clear_token,omitempty"` // transient: PUT with true removes the stored token
+
 	SetupComplete bool `json:"setup_complete"`
 }
 

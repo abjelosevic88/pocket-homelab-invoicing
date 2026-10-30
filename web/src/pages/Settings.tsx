@@ -9,7 +9,7 @@ import { Card, Confirm, CoreHint, Empty, Field, Loading, Modal, SettingRow, Swit
 import { Icon } from '../components/icons'
 import { Select } from '../components/Select'
 
-type Tab = 'company' | 'invoicing' | 'currencies' | 'taxes' | 'catalog' | 'templates' | 'email' | 'documents' | 'api' | 'webhooks' | 'users' | 'backup' | 'system'
+type Tab = 'company' | 'invoicing' | 'currencies' | 'taxes' | 'catalog' | 'templates' | 'email' | 'documents' | 'time' | 'api' | 'webhooks' | 'users' | 'backup' | 'system'
 const TABS: { id: Tab; label: string; icon: string; sub: string; wide?: boolean }[] = [
   { id: 'company', label: 'Company', icon: 'building', sub: 'Your business as it is printed on invoices, the logo, and the date format and timezone.' },
   { id: 'invoicing', label: 'Invoicing', icon: 'invoice', sub: 'Numbering, custom fields, defaults for new invoices, the text printed on them and your working days.' },
@@ -19,6 +19,7 @@ const TABS: { id: Tab; label: string; icon: string; sub: string; wide?: boolean 
   { id: 'templates', label: 'Templates', icon: 'palette', sub: 'How invoice PDFs look: design templates, Word templates and the labels printed on them.', wide: true },
   { id: 'email', label: 'Email', icon: 'mail', sub: 'The SMTP server invoices are sent through, the invoice email and payment reminders.' },
   { id: 'documents', label: 'Pocket Documents', icon: 'file', sub: 'File invoices and company documents in Pocket Documents, through Pocket Core or directly.' },
+  { id: 'time', label: 'Pocket Time', icon: 'timer', sub: 'Use your one timer in Pocket Time here, through Pocket Core or directly.' },
   { id: 'api', label: 'API tokens', icon: 'key', sub: 'Personal tokens for scripts, n8n, Home Assistant and the phone app.' },
   { id: 'webhooks', label: 'Webhooks', icon: 'zap', sub: 'Send invoice, payment and client events to other services as they happen.' },
   { id: 'users', label: 'Users', icon: 'users', sub: 'Your profile, and everyone who has an account on this server.' },
@@ -94,6 +95,7 @@ export default function Settings() {
             {tab === 'templates' && <Templates />}
             {tab === 'email' && <Email />}
             {tab === 'documents' && <PocketDocuments />}
+            {tab === 'time' && <PocketTime />}
             {tab === 'api' && <Tokens />}
             {tab === 'webhooks' && <Webhooks />}
             {tab === 'users' && <Users />}
@@ -736,6 +738,50 @@ function Connection({ app, mode: saved, via, detail, core, onMode, onDisconnect,
         <div className="row">{test}{hasToken && <button type="button" className="btn ghost sm danger-text" onClick={onDisconnect} title="Remove the saved URL and token">Disconnect</button>}</div>
       </>}
       {mode === 'core' && <div className="row">{test}</div>}
+    </div>
+  )
+}
+
+// ---------- Pocket Time ----------
+function PocketTime() {
+  const { s, set, setS } = useSettingsForm()
+  const { refresh } = useApp()
+  const toast = useToast()
+  const [testing, setTesting] = useState(false)
+  const [result, setResult] = useState<{ ok: boolean; via?: string; running?: string } | null>(null)
+  if (!s) return <Loading />
+  const coreOn = !!s.core_configured && s.core_registered !== false
+  const typed = s.time_mode === 'direct' && !!s.time_token
+  const test = async () => {
+    setTesting(true); setResult(null)
+    try {
+      const r = await api.post<{ ok: boolean; via: string; running: string }>(`${V1}/settings/test-time`, typed ? { url: s.time_url, token: s.time_token } : {})
+      setResult(r)
+      toast(`Connected to Pocket Time${r.via === 'core' ? ' through Pocket Core' : ''}`, 'success')
+    } catch (e) { toast((e as Error).message, 'error') } finally { setTesting(false) }
+  }
+  const saveNow = async (patch: Partial<S>, msg: string) => {
+    try { const r = await api.put<S>(`${V1}/settings`, { ...s, ...patch }); setS(r); setResult(null); await refresh(); window.dispatchEvent(new Event('pi:timer')); toast(msg, 'success') } catch (e) { toast((e as Error).message, 'error') }
+  }
+  return (
+    <div className="stack loose">
+      <Section title="Connection" actions={connBadge(!coreOn && s.time_mode === 'core' ? 'off' : s.time_mode, s.time_via)}>
+        <p className="muted small">Optional. Connected, the timer on Time tracking is <b>your</b> timer in Pocket Time: start it here and it runs there, stop it in either place. Only one timer runs at a time, so starting one here while another runs (say, in Pocket Guitar) asks first. Time you track in Pocket Time for a client lands here as unbilled time, ready to invoice. Not connected, the timer here works on its own.</p>
+        <Connection app="Pocket Time" mode={s.time_mode} via={s.time_via} detail={s.time_detail} core={coreOn}
+          hasToken={!!s.time_token_set || !!s.time_url}
+          onMode={m => saveNow({ time_mode: m }, m === 'off' ? 'Pocket Time switched off' : m === 'core' ? 'Pocket Time through Pocket Core' : 'Direct Pocket Time connection')}
+          onDisconnect={() => saveNow({ time_url: '', time_token: '', time_clear_token: true }, 'Pocket Time URL and token removed')}
+          test={<><button type="button" className="btn sm" onClick={test} disabled={testing || (s.time_mode === 'direct' && !s.time_token && !s.time_token_set)}>{testing ? 'Testing…' : 'Test connection'}</button>
+            {result && <span className="muted small">{result.running ? `Running now: ${result.running}` : 'No timer running'}</span>}</>}
+          direct={<div className="form-grid">
+            <Field label="Pocket Time URL" help="As reached from this container, e.g. http://pocket-time:8080; empty = ask Pocket Core"><input value={s.time_url} onChange={set('time_url')} placeholder="http://pocket-time:8080" /></Field>
+            <Field label="API token" help={s.time_token_set ? 'A token is stored. Leave blank to keep it.' : 'Pocket Time → Settings → API tokens (ptm_…)'}><input type="password" value={s.time_token} onChange={set('time_token')} autoComplete="new-password" placeholder={s.time_token_set ? '••••••••' : 'ptm_…'} /></Field>
+            <div className="full"><button type="button" className="btn primary sm" onClick={() => saveNow({}, 'Saved')}>Save</button></div>
+          </div>} />
+      </Section>
+      <Section title="Time from Pocket Time">
+        <p className="muted small" style={{ marginTop: 0 }}>For this, Pocket Time needs your permission to add time here: in Pocket Core → Links, switch on <b>Pocket Time → Pocket Invoicing</b> ("See your time entries" and "Add time to bill"). Pocket Time then shows the time entries kept here, lists your clients when you pick what a timer is for, and adds what you track for a client as an unbilled entry (marked "Pocket Time" in the list), rounded like the timer here. It can change or remove only the entries it added, and never time that is already on an invoice.</p>
+      </Section>
     </div>
   )
 }

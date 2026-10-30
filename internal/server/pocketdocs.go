@@ -61,25 +61,28 @@ func (s *Server) documentsMode(st store.Settings) string {
 	return connMode(st.DocumentsMode, st.DocumentsToken, s.core.Configured())
 }
 
-// linkReason turns Core's refusal of a link token into a sentence for the person.
-func linkReason(reason string) string {
+// linkReason turns Core's refusal of a Pocket Documents link token into a sentence for the person.
+func linkReason(reason string) string { return linkReasonFor("Pocket Documents", reason) }
+
+// linkReasonFor turns Core's refusal of a link token to app into a sentence for the person.
+func linkReasonFor(app, reason string) string {
 	switch reason {
 	case "off_person":
-		return "you switched the Invoicing → Pocket Documents link off in Pocket Core (Settings → Apps acting for me)"
+		return "you switched the Invoicing → " + app + " link off in Pocket Core (Settings → Apps acting for me)"
 	case "off_admin":
-		return "the Invoicing → Pocket Documents link is switched off in Pocket Core (Links)"
+		return "the Invoicing → " + app + " link is switched off in Pocket Core (Links)"
 	case "target_missing":
-		return "Pocket Documents is not registered with Pocket Core"
+		return app + " is not registered with Pocket Core"
 	case "not_offered":
-		return "this Pocket Documents version does not accept app links yet"
+		return "this " + app + " version does not accept app links yet"
 	case "not_declared":
 		return "Pocket Core has not seen this Pocket Invoicing version yet; it re-registers within a minute of starting"
 	case "not_in_audience":
-		return "you do not have access to Pocket Documents in Pocket Core"
+		return "you do not have access to " + app + " in Pocket Core"
 	case "unknown_user":
 		return "your email is not a person in Pocket Core"
 	case "no_account":
-		return "you have no Pocket Documents account of your own yet"
+		return "you have no " + app + " account of your own yet"
 	}
 	return ""
 }

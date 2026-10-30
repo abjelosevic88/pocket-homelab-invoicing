@@ -283,6 +283,11 @@ type TimeEntry struct {
 	Rate            *float64 `json:"rate"`
 	InvoiceID       *int64   `json:"invoice_id"`
 	CreatedAt       string   `json:"created_at"`
+	// Who made it: "app" (here) or the Pocket app that wrote it through the
+	// worklog ("time"); ExternalID is that app's id for it ("time:812").
+	// Read-only through /time: only the worklog sets them.
+	Source     string `json:"source"`
+	ExternalID string `json:"external_id"`
 }
 
 // Expense is a cost, optionally re-billable to a client.
