@@ -39,6 +39,8 @@ func (s *Server) publicSettings(ctx context.Context, u *store.User, st store.Set
 	m["documents_mode"], m["documents_via"], m["documents_detail"] = mode, via, detail
 	mode, via, detail = s.timeStatus(ctx, u, st)
 	m["time_mode"], m["time_via"], m["time_detail"] = mode, via, detail
+	mode, via, detail = s.signStatus(ctx, u, st)
+	m["sign_mode"], m["sign_via"], m["sign_detail"] = mode, via, detail
 	m["core_configured"] = s.core.Configured()
 	m["core_registered"] = s.coreStatus()["registered"]
 	return m
@@ -56,6 +58,8 @@ func maskSettings(st store.Settings) map[string]any {
 	m["documents_token"] = ""
 	m["time_token_set"] = st.TimeToken != ""
 	m["time_token"] = ""
+	m["sign_token_set"] = st.SignToken != ""
+	m["sign_token"] = ""
 	return m
 }
 
@@ -74,6 +78,7 @@ func (s *Server) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 	prevToken, prevMode := st.DocumentsToken, st.DocumentsMode
 	prevEffective := s.documentsMode(st)
 	prevTimeToken, prevTimeMode, prevTimeEffective := st.TimeToken, st.TimeMode, s.timeMode(st)
+	prevSignToken, prevSignMode, prevSignEffective := st.SignToken, st.SignMode, s.signMode(st)
 	prevBase, prevProvider, prevSetup := st.BaseCurrency, st.ExchangeRateProvider, st.SetupComplete
 	prevText := map[string]string{"notes": st.DefaultNotes, "terms": st.DefaultTerms, "footer": st.DefaultFooter}
 	if err := decode(r, &st); err != nil {
@@ -113,6 +118,19 @@ func (s *Server) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 		st.TimeMode = prevTimeMode
 	}
 	st.TimeURL = strings.TrimRight(strings.TrimSpace(st.TimeURL), "/")
+	st.SignToken = strings.TrimSpace(st.SignToken)
+	if st.SignToken == "" {
+		st.SignToken = prevSignToken
+	}
+	signDisconnect := st.SignClearToken
+	if st.SignClearToken {
+		st.SignToken = ""
+	}
+	st.SignClearToken = false
+	if !validMode(st.SignMode) {
+		st.SignMode = prevSignMode
+	}
+	st.SignURL = strings.TrimRight(strings.TrimSpace(st.SignURL), "/")
 	st.DocumentsPublicURL = strings.TrimRight(strings.TrimSpace(st.DocumentsPublicURL), "/")
 	switch st.DocumentsArchiveInvoices {
 	case "off", "sent", "paid":
@@ -171,7 +189,8 @@ func (s *Server) handlePutSettings(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if disconnect || st.DocumentsMode != prevMode || s.documentsMode(st) != prevEffective ||
-		timeDisconnect || st.TimeMode != prevTimeMode || s.timeMode(st) != prevTimeEffective {
+		timeDisconnect || st.TimeMode != prevTimeMode || s.timeMode(st) != prevTimeEffective ||
+		signDisconnect || st.SignMode != prevSignMode || s.signMode(st) != prevSignEffective {
 		go s.reportModes(context.Background(), uid) // Core's Links page follows the switch right away
 	}
 	if isAdmin {

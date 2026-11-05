@@ -107,6 +107,14 @@ type Settings struct {
 	TimeToken      string `json:"time_token"`                 // direct: the person's ptm_ API token (never cleared by an empty PUT)
 	TimeClearToken bool   `json:"time_clear_token,omitempty"` // transient: PUT with true removes the stored token
 
+	// Pocket Sign (optional): "Get it signed" sends an invoice to the client to
+	// sign. Through a Pocket Core link (nothing to paste), a URL and a psg_ API
+	// token of one's own, or off (no button).
+	SignMode       string `json:"sign_mode"`                  // core | direct | off; empty = direct with a token, else core when Pocket Core is there
+	SignURL        string `json:"sign_url"`                   // direct: how this app reaches it (empty = ask Core)
+	SignToken      string `json:"sign_token"`                 // direct: the person's psg_ API token (never cleared by an empty PUT)
+	SignClearToken bool   `json:"sign_clear_token,omitempty"` // transient: PUT with true removes the stored token
+
 	SetupComplete bool `json:"setup_complete"`
 }
 

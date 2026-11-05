@@ -53,6 +53,7 @@ export interface Settings {
   documents_url: string; documents_public_url: string; documents_token: string; documents_token_set?: boolean; documents_clear_token?: boolean; documents_tags: string; documents_invoice_type: string; documents_create_correspondents: boolean; documents_archive_invoices: string; documents_category_as_type: boolean;
   documents_mode: ConnMode; documents_via?: string; documents_detail?: string; core_configured?: boolean; core_registered?: boolean;
   time_mode: ConnMode; time_url: string; time_token: string; time_token_set?: boolean; time_clear_token?: boolean; time_via?: string; time_detail?: string;
+  sign_mode: ConnMode; sign_url: string; sign_token: string; sign_token_set?: boolean; sign_clear_token?: boolean; sign_via?: string; sign_detail?: string;
 }
 export type ConnMode = 'core' | 'direct' | 'off'
 export interface DashboardStats { outstanding: number; outstanding_count: number; overdue: number; overdue_count: number; paid_this_month: number; paid_this_year: number; invoiced_this_year: number; draft_count: number; unbilled_minutes: number; unbilled_expenses: number; active_clients: number }

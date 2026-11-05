@@ -258,6 +258,7 @@ func (s *Server) Router() http.Handler {
 			r.Post("/settings/test-email", s.handleTestEmail)
 			r.Post("/settings/test-documents", s.handleTestDocs)
 			r.Post("/settings/test-time", s.handleTestTime)
+			r.Post("/settings/test-sign", s.handleTestSign)
 
 			// Currencies and exchange rates are box-wide reference data: everyone reads them,
 			// only admins change them (see the admin group below).
@@ -306,6 +307,7 @@ func (s *Server) Router() http.Handler {
 			r.Post("/invoices/{id}/send", s.handleSendInvoice)
 			r.Post("/invoices/{id}/duplicate", s.handleDuplicateInvoice)
 			r.Get("/invoices/{id}/pdf", s.handleInvoicePDF)
+			r.Post("/invoices/{id}/sign", s.handleInvoiceSign)
 			r.Get("/invoices/{id}/html", s.handleInvoiceHTML)
 			r.Get("/invoices/{id}/docx", s.handleInvoiceDocx)
 			r.Get("/invoices/{id}/emails", s.handleInvoiceEmails)
@@ -327,6 +329,7 @@ func (s *Server) Router() http.Handler {
 			r.Post("/documents/{id}/pocket-documents", s.handleDocumentToDocs)
 
 			r.Get("/pocket-documents/status", s.handleDocsStatus)
+			r.Get("/pocket-sign/status", s.handleSignStatus)
 			r.Get("/pocket-documents/documents", s.handleDocsSearch)
 			r.Get("/pocket-documents/correspondents", s.handleDocsCorrespondents)
 			r.Post("/pocket-documents/correspondents", s.handleCreateCorrespondent)

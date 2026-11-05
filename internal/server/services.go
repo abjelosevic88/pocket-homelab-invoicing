@@ -15,7 +15,7 @@ import (
 // Pocket Core app link), direct (a URL and the person's own token saved here)
 // or off.
 //
-// The mode in effect is reported to Core ("documents" and "time" per person) so its Links
+// The mode in effect is reported to Core ("documents", "time" and "sign" per person) so its Links
 // page shows Direct connections too: after registering (on start and every 30
 // minutes with the re-registration) and right after someone changes their mode
 // or disconnects. Report only; failures are logged.
@@ -31,6 +31,7 @@ func linkUses() []core.Use {
 	return []core.Use{
 		{App: "documents", Scopes: documentsScopes, Reason: "File issued invoices, their attachments and company documents as documents of the client, and show a client's documents"},
 		{App: "time", Scopes: timeScopes, Reason: "Your timer here is the same timer as in Pocket Time"},
+		{App: "sign", Scopes: signScopes, Reason: "Send an invoice to the client to sign (accepting a quote, a delivery note) right from the invoice"},
 	}
 }
 
@@ -48,7 +49,7 @@ func connMode(mode, token string, coreOn bool) string {
 	return modeDirect
 }
 
-// connModes is the Pocket Documents and Pocket Time mode in effect (what Settings shows,
+// connModes is the Pocket Documents, Pocket Time and Pocket Sign mode in effect (what Settings shows,
 // defaults included) for each person, or just uid when uid > 0.
 func (s *Server) connModes(ctx context.Context, uid int64) ([]core.ConnMode, error) {
 	var users []store.User
@@ -72,12 +73,13 @@ func (s *Server) connModes(ctx context.Context, uid int64) ([]core.ConnMode, err
 			continue
 		}
 		out = append(out, core.ConnMode{User: u.Email, Target: "documents", Mode: s.documentsMode(st)},
-			core.ConnMode{User: u.Email, Target: "time", Mode: s.timeMode(st)})
+			core.ConnMode{User: u.Email, Target: "time", Mode: s.timeMode(st)},
+			core.ConnMode{User: u.Email, Target: "sign", Mode: s.signMode(st)})
 	}
 	return out, nil
 }
 
-// reportModes tells Core how people reach Pocket Documents and Pocket Time (everyone, or just
+// reportModes tells Core how people reach Pocket Documents, Pocket Time and Pocket Sign (everyone, or just
 // uid). Only with a Core; never fatal.
 func (s *Server) reportModes(ctx context.Context, uid int64) {
 	if !s.core.Configured() {

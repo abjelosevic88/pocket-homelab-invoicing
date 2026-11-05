@@ -37,6 +37,40 @@ function PaymentForm({ inv, onDone }: { inv: Invoice; onDone: () => void }) {
   )
 }
 
+/** Get it signed: the invoice PDF goes to the client through the person's Pocket Sign. */
+function SignForm({ inv, onDone }: { inv: Invoice; onDone: () => void }) {
+  const toast = useToast()
+  const { data: clientInfo } = useAsync(() => api.get<{ client: Client }>(`${V1}/clients/${inv.client_id}`), [inv.client_id])
+  const client = clientInfo?.client
+  const [name, setName] = useState('')
+  const [email, setEmail] = useState('')
+  const [message, setMessage] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [done, setDone] = useState<{ url: string; emailed: boolean; link?: string; note?: string; name: string; email: string } | null>(null)
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault(); setBusy(true)
+    try { const r = await api.post<{ url: string; emailed: boolean; link?: string; note?: string; name: string; email: string }>(`${V1}/invoices/${inv.id}/sign`, { name, email, message }); setDone(r); toast(r.emailed ? `Sent to ${r.name} to sign` : 'Ready in Pocket Sign', 'success') } catch (e) { toast((e as Error).message, 'error') } finally { setBusy(false) }
+  }
+  if (done) return (
+    <div className="grid" style={{ gap: 12 }}>
+      <p style={{ margin: 0 }}>{done.emailed ? <>Sent to <b>{done.name}</b> ({done.email}) to sign. You'll see in Pocket Sign when they open and sign it.</> : <>It's in Pocket Sign, but the email to <b>{done.email}</b> did not go out{done.note ? ` (${done.note})` : ''}. Send them their link yourself.</>}</p>
+      {!done.emailed && done.link && <div className="row"><input readOnly value={done.link} onFocus={e => e.target.select()} /><button type="button" className="btn" onClick={() => navigator.clipboard.writeText(done.link!).then(() => toast('Link copied', 'success'))}>Copy</button></div>}
+      <div className="form-actions">{done.url && <a className="btn" href={done.url} target="_blank" rel="noreferrer">Open in Pocket Sign<Icon name="external" size={13} /></a>}<button type="button" className="btn primary" onClick={onDone}>Done</button></div>
+    </div>
+  )
+  return (
+    <form onSubmit={submit}>
+      <p className="muted small" style={{ marginTop: 0 }}>The PDF of {inv.number} goes to them through Pocket Sign, with a box for their signature and the date at the end. They sign it from a link on any phone, without an account.</p>
+      <div className="grid" style={{ gap: 12 }}>
+        <Field label="Who signs" help={`Leave blank for the client's contact${client?.contact_name || client?.name ? ` (${client.contact_name || client.name})` : ''}`}><input value={name} onChange={e => setName(e.target.value)} placeholder={client?.contact_name || client?.name || 'Name'} /></Field>
+        <Field label="Their email" help={client?.email ? `Leave blank to use the client's email (${client.email})` : 'The client has no email: type one'}><input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder={client?.email || 'client@example.com'} /></Field>
+        <Field label="Message" help={`Leave blank for “Please sign invoice ${inv.number} to confirm you accept it.”`}><textarea rows={3} value={message} onChange={e => setMessage(e.target.value)} /></Field>
+      </div>
+      <div className="form-actions"><button type="submit" className="btn primary" disabled={busy || (!email && !client?.email)}>{busy ? 'Sending…' : 'Send to sign'}</button></div>
+    </form>
+  )
+}
+
 export function SendForm({ inv, onDone }: { inv: Invoice; onDone: () => void }) {
   const toast = useToast()
   const { settings } = useApp()
@@ -80,7 +114,9 @@ export default function InvoiceDetail() {
   const { settings } = useApp()
   const { data: inv, loading, reload, setData } = useAsync(() => api.get<Invoice>(`${V1}/invoices/${id}`), [id])
   const { data: activity, reload: reloadAct } = useAsync(() => api.get<Activity[]>(`${V1}/activity?entity_type=invoice&entity_id=${id}&limit=20`), [id])
-  const [modal, setModal] = useState<'' | 'payment' | 'send' | 'delete' | 'cancel'>('')
+  const [modal, setModal] = useState<'' | 'payment' | 'send' | 'sign' | 'delete' | 'cancel'>('')
+  const [signOn, setSignOn] = useState(false)
+  useEffect(() => { api.get<{ configured: boolean }>(`${V1}/pocket-sign/status`).then(r => setSignOn(!!r.configured)).catch(() => setSignOn(false)) }, [])
   const [archiving, setArchiving] = useState(false)
   const pocketDocs = usePocketDocs()
   const docsOn = !!pocketDocs?.configured
@@ -109,6 +145,7 @@ export default function InvoiceDetail() {
         <a className="btn" href={`${V1}/invoices/${inv.id}/pdf?download=1`}>Download</a>
         {docsOn && (archived ? <a className="btn" href={filedLink?.url} target="_blank" rel="noreferrer" title={`Open in Pocket Documents (#${filedLink?.documents_id})`}>In Documents<Icon name="external" size={13} /></a> : <button type="button" className="btn" disabled={archiving} onClick={() => archive()} title={inv.pocket_documents?.error ? `Last attempt: ${inv.pocket_documents.error}` : 'File the PDF / uploaded files in Pocket Documents, under the client'}>{archiving ? 'Filing…' : 'File in Documents'}</button>)}
         {inv.status !== 'paid' && inv.status !== 'cancelled' && <button type="button" className="btn" onClick={() => setModal('send')}>Email</button>}
+        {signOn && inv.status !== 'cancelled' && <button type="button" className="btn" onClick={() => setModal('sign')} title="Send the PDF to the client to sign, through Pocket Sign">Get it signed</button>}
         {inv.status === 'draft' && <button type="button" className="btn primary" onClick={() => setStatus('sent')}>Mark as sent</button>}
         {['sent', 'viewed', 'partial', 'overdue'].includes(inv.status) && <button type="button" className="btn primary" onClick={() => setModal('payment')}>Record payment</button>}
       </>} />
@@ -177,6 +214,7 @@ export default function InvoiceDetail() {
         </div>
       </div>
       {modal === 'payment' && <Modal title={`Record payment for ${inv.number}`} onClose={() => setModal('')}><PaymentForm inv={inv} onDone={() => { setModal(''); reload(); reloadAct() }} /></Modal>}
+      {modal === 'sign' && <Modal title={`Get ${inv.number} signed`} onClose={() => setModal('')}><SignForm inv={inv} onDone={() => { setModal(''); reloadAct() }} /></Modal>}
       {modal === 'send' && <Modal title={`Email ${inv.number}`} onClose={() => setModal('')}><SendForm inv={inv} onDone={() => { setModal(''); reload(); reloadAct() }} /></Modal>}
       {modal === 'delete' && <Confirm title="Delete invoice?" message="This permanently deletes the invoice and its payments. Linked time entries become unbilled again." onConfirm={del} onCancel={() => setModal('')} />}
       {modal === 'cancel' && <Confirm title="Cancel invoice?" message="The invoice will be marked cancelled and excluded from reports." onConfirm={() => { setStatus('cancelled'); setModal('') }} onCancel={() => setModal('')} />}

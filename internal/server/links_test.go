@@ -105,8 +105,15 @@ func TestCoreLinkScopes(t *testing.T) {
 	if code, _ := call(link, "GET", fmt.Sprintf("/invoices/%d", ownerInv), nil); code != 404 {
 		t.Fatalf("owner's invoice through the member's link: %d, want 404", code)
 	}
+	// The PDF of the member's own invoice too (Pocket Sign takes it to be signed); never the owner's.
+	if code, out := call(link, "GET", fmt.Sprintf("/invoices/%d/pdf", memberInv), nil); code != 200 || !strings.HasPrefix(out, "%PDF") {
+		t.Fatalf("PDF through the link: %d %.40s", code, out)
+	}
+	if code, _ := call(link, "GET", fmt.Sprintf("/invoices/%d/pdf", ownerInv), nil); code != 404 {
+		t.Fatalf("owner's PDF through the member's link: %d, want 404", code)
+	}
 	// A token without invoices:read cannot read.
-	for _, p := range []string{"/invoices", fmt.Sprintf("/invoices/%d", memberInv), "/payments"} {
+	for _, p := range []string{"/invoices", fmt.Sprintf("/invoices/%d", memberInv), fmt.Sprintf("/invoices/%d/pdf", memberInv), "/payments"} {
 		if code, _ := call(other, "GET", p, nil); code != 403 {
 			t.Fatalf("GET %s without invoices:read: %d, want 403", p, code)
 		}
@@ -116,7 +123,7 @@ func TestCoreLinkScopes(t *testing.T) {
 		{"PUT", "/auth/me"}, {"POST", "/auth/logout"}, {"GET", "/dashboard"}, {"GET", "/activity"},
 		{"POST", "/invoices"}, {"PUT", fmt.Sprintf("/invoices/%d", memberInv)}, {"DELETE", fmt.Sprintf("/invoices/%d", memberInv)},
 		{"POST", fmt.Sprintf("/invoices/%d/status", memberInv)}, {"POST", fmt.Sprintf("/invoices/%d/send", memberInv)},
-		{"GET", fmt.Sprintf("/invoices/%d/pdf", memberInv)}, {"GET", fmt.Sprintf("/invoices/%d/html", memberInv)}, {"GET", fmt.Sprintf("/invoices/%d/attachments", memberInv)},
+		{"POST", fmt.Sprintf("/invoices/%d/sign", memberInv)}, {"GET", fmt.Sprintf("/invoices/%d/html", memberInv)}, {"GET", fmt.Sprintf("/invoices/%d/attachments", memberInv)},
 		{"GET", "/invoices/next-number"}, {"GET", "/invoices/check-number"},
 		{"POST", "/payments"}, {"DELETE", "/payments/1"}, {"GET", "/clients"}, {"GET", "/expenses"}, {"GET", "/time"}, {"GET", "/documents"},
 		{"GET", "/reports/revenue"}, {"GET", "/reports/export.csv"}, {"GET", "/reports/accountant-package.zip"}, {"GET", "/export.json"},

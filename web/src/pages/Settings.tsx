@@ -9,7 +9,7 @@ import { Card, Confirm, CoreHint, Empty, Field, Loading, Modal, SettingRow, Swit
 import { Icon } from '../components/icons'
 import { Select } from '../components/Select'
 
-type Tab = 'company' | 'invoicing' | 'currencies' | 'taxes' | 'catalog' | 'templates' | 'email' | 'documents' | 'time' | 'api' | 'webhooks' | 'users' | 'backup' | 'system'
+type Tab = 'company' | 'invoicing' | 'currencies' | 'taxes' | 'catalog' | 'templates' | 'email' | 'documents' | 'time' | 'sign' | 'api' | 'webhooks' | 'users' | 'backup' | 'system'
 const TABS: { id: Tab; label: string; icon: string; sub: string; wide?: boolean }[] = [
   { id: 'company', label: 'Company', icon: 'building', sub: 'Your business as it is printed on invoices, the logo, and the date format and timezone.' },
   { id: 'invoicing', label: 'Invoicing', icon: 'invoice', sub: 'Numbering, custom fields, defaults for new invoices, the text printed on them and your working days.' },
@@ -20,6 +20,7 @@ const TABS: { id: Tab; label: string; icon: string; sub: string; wide?: boolean 
   { id: 'email', label: 'Email', icon: 'mail', sub: 'The SMTP server invoices are sent through, the invoice email and payment reminders.' },
   { id: 'documents', label: 'Pocket Documents', icon: 'file', sub: 'File invoices and company documents in Pocket Documents, through Pocket Core or directly.' },
   { id: 'time', label: 'Pocket Time', icon: 'timer', sub: 'Use your one timer in Pocket Time here, through Pocket Core or directly.' },
+  { id: 'sign', label: 'Pocket Sign', icon: 'edit', sub: 'Send an invoice to the client to sign right from the invoice, through Pocket Core or directly.' },
   { id: 'api', label: 'API tokens', icon: 'key', sub: 'Personal tokens for scripts, n8n, Home Assistant and the phone app.' },
   { id: 'webhooks', label: 'Webhooks', icon: 'zap', sub: 'Send invoice, payment and client events to other services as they happen.' },
   { id: 'users', label: 'Users', icon: 'users', sub: 'Your profile, and everyone who has an account on this server.' },
@@ -96,6 +97,7 @@ export default function Settings() {
             {tab === 'email' && <Email />}
             {tab === 'documents' && <PocketDocuments />}
             {tab === 'time' && <PocketTime />}
+            {tab === 'sign' && <PocketSign />}
             {tab === 'api' && <Tokens />}
             {tab === 'webhooks' && <Webhooks />}
             {tab === 'users' && <Users />}
@@ -781,6 +783,44 @@ function PocketTime() {
       </Section>
       <Section title="Time from Pocket Time">
         <p className="muted small" style={{ marginTop: 0 }}>For this, Pocket Time needs your permission to add time here: in Pocket Core → Links, switch on <b>Pocket Time → Pocket Invoicing</b> ("See your time entries" and "Add time to bill"). Pocket Time then shows the time entries kept here, lists your clients when you pick what a timer is for, and adds what you track for a client as an unbilled entry (marked "Pocket Time" in the list), rounded like the timer here. It can change or remove only the entries it added, and never time that is already on an invoice.</p>
+      </Section>
+    </div>
+  )
+}
+
+// ---------- Pocket Sign ----------
+function PocketSign() {
+  const { s, set, setS } = useSettingsForm()
+  const { refresh } = useApp()
+  const toast = useToast()
+  const [testing, setTesting] = useState(false)
+  if (!s) return <Loading />
+  const coreOn = !!s.core_configured && s.core_registered !== false
+  const typed = s.sign_mode === 'direct' && !!s.sign_token
+  const test = async () => {
+    setTesting(true)
+    try {
+      const r = await api.post<{ ok: boolean; via: string }>(`${V1}/settings/test-sign`, typed ? { url: s.sign_url, token: s.sign_token } : {})
+      toast(`Connected to Pocket Sign${r.via === 'core' ? ' through Pocket Core' : ''}`, 'success')
+    } catch (e) { toast((e as Error).message, 'error') } finally { setTesting(false) }
+  }
+  const saveNow = async (patch: Partial<S>, msg: string) => {
+    try { const r = await api.put<S>(`${V1}/settings`, { ...s, ...patch }); setS(r); await refresh(); toast(msg, 'success') } catch (e) { toast((e as Error).message, 'error') }
+  }
+  return (
+    <div className="stack loose">
+      <Section title="Connection" actions={connBadge(!coreOn && s.sign_mode === 'core' ? 'off' : s.sign_mode, s.sign_via)}>
+        <p className="muted small">Optional. Connected, an invoice has <b>Get it signed</b>: its PDF goes to the client through your Pocket Sign, with a box for their signature and the date, and they sign it from a link on any phone, without an account. Handy when an invoice is also a quote to accept or a delivery note to confirm. Pocket Sign keeps who signed when and the signed PDF; the invoice's activity says when it went and to whom.</p>
+        <Connection app="Pocket Sign" mode={s.sign_mode} via={s.sign_via} detail={s.sign_detail} core={coreOn}
+          hasToken={!!s.sign_token_set || !!s.sign_url}
+          onMode={m => saveNow({ sign_mode: m }, m === 'off' ? 'Pocket Sign switched off' : m === 'core' ? 'Pocket Sign through Pocket Core' : 'Direct Pocket Sign connection')}
+          onDisconnect={() => saveNow({ sign_url: '', sign_token: '', sign_clear_token: true }, 'Pocket Sign URL and token removed')}
+          test={<button type="button" className="btn sm" onClick={test} disabled={testing || (s.sign_mode === 'direct' && !s.sign_token && !s.sign_token_set)}>{testing ? 'Testing…' : 'Test connection'}</button>}
+          direct={<div className="form-grid">
+            <Field label="Pocket Sign URL" help="As reached from this container, e.g. http://host.docker.internal:8234; empty = ask Pocket Core"><input value={s.sign_url} onChange={set('sign_url')} placeholder="http://host.docker.internal:8234" /></Field>
+            <Field label="API token" help={s.sign_token_set ? 'A token is stored. Leave blank to keep it.' : 'Pocket Sign → Settings → API & shortcuts (psg_…)'}><input type="password" value={s.sign_token} onChange={set('sign_token')} autoComplete="new-password" placeholder={s.sign_token_set ? '••••••••' : 'psg_…'} /></Field>
+            <div className="full"><button type="button" className="btn primary sm" onClick={() => saveNow({}, 'Saved')}>Save</button></div>
+          </div>} />
       </Section>
     </div>
   )

@@ -19,7 +19,7 @@ For a ready-made client, [Pocket Homelab](https://pockethomelab.com/) (iPhone, i
 | Scope | Routes |
 |---|---|
 | any | `GET /auth/me` |
-| `invoices:read` | `GET /invoices`, `GET /invoices/{id}`, `GET /payments` (same filters as with a personal token) |
+| `invoices:read` | `GET /invoices`, `GET /invoices/{id}`, `GET /invoices/{id}/pdf`, `GET /payments` (same filters as with a personal token) |
 
 ## Auth
 | Method | Path | Notes |
@@ -60,6 +60,7 @@ Client fields: `name, contact_name, email, phone, address1, address2, city, stat
 | POST | `/invoices/{id}/send` | `{to?, subject?, body?}` — emails PDF, marks sent |
 | POST | `/invoices/{id}/duplicate` | new draft |
 | GET | `/invoices/{id}/pdf?download=1` | |
+| POST | `/invoices/{id}/sign` | Get it signed through Pocket Sign: `{name?, email?, message?}` (default: the client's contact and email) → `{document_id, status, url, name, email, emailed, link?, note?}`. Needs Settings → Pocket Sign (Pocket Core link `signing:write`, or a URL + `psg_` token); `GET /pocket-sign/status` says whether it is connected |
 | GET | `/invoices/{id}/html` | |
 | GET | `/invoices/{id}/emails` | email log |
 
