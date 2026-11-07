@@ -41,6 +41,11 @@ func fakeCore(t *testing.T) *httptest.Server {
 				"user": people["pcd_member-phone"], "app": map[string]any{"id": 4, "slug": "day", "name": "Pocket Day"}})
 			return
 		}
+		if in.Token == "pcx_member_crm" { // Pocket CRM making draft invoices for the member
+			_ = json.NewEncoder(w).Encode(map[string]any{"active": true, "kind": "delegated", "scope": "invoices:read invoices:write", "audience": "invoicing",
+				"user": people["pcd_member-phone"], "app": map[string]any{"id": 9, "slug": "crm", "name": "Pocket CRM"}})
+			return
+		}
 		if u, ok := people[in.Token]; ok {
 			_ = json.NewEncoder(w).Encode(map[string]any{"active": true, "kind": "device", "user": u})
 			return

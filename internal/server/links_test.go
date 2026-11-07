@@ -134,6 +134,52 @@ func TestCoreLinkScopes(t *testing.T) {
 			t.Fatalf("%s %s with a link token: %d, want 403", c.m, c.p, code)
 		}
 	}
+	// Without invoices:write a link cannot see or add clients, nor start an invoice.
+	for _, c := range []struct{ m, p string }{{"GET", "/clients"}, {"GET", "/clients?q=Member"}, {"POST", "/clients"}, {"POST", "/invoices"}} {
+		if code, _ := call(other, c.m, c.p, map[string]any{}); code != 403 {
+			t.Fatalf("%s %s without invoices:write: %d, want 403", c.m, c.p, code)
+		}
+	}
+
+	// invoices:write (Pocket CRM, a deal won): find or add the client, start a draft.
+	crm := "pcx_member_crm"
+	code, out := call(crm, "GET", "/clients?q=Member", nil)
+	if code != 200 || !strings.Contains(out, "Member Client") || strings.Contains(out, "Owner") {
+		t.Fatalf("GET /clients?q= with invoices:write: %d %s", code, out)
+	}
+	cl := create(crm, "/clients", map[string]any{"name": "Acme d.o.o.", "contact_name": "Ana", "email": "ana@acme.example", "phone": "+387 61 000"})
+	code, out = call(crm, "POST", "/invoices", map[string]any{"client_id": cl, "currency": "EUR", "status": "sent", "notes": "Website redesign",
+		"items": []map[string]any{{"description": "Website redesign", "quantity": 1, "unit_price": 4500}}})
+	var made struct {
+		ID     int64   `json:"id"`
+		Number string  `json:"number"`
+		Status string  `json:"status"`
+		SentAt *string `json:"sent_at"`
+		Total  float64 `json:"total"`
+	}
+	_ = json.Unmarshal([]byte(out), &made)
+	if code != 201 || made.ID == 0 || made.Number == "" || made.Status != "draft" || made.SentAt != nil || made.Total != 4500 {
+		t.Fatalf("POST /invoices through the CRM link must make a draft: %d %s", code, out)
+	}
+	if code, out := call(crm, "GET", fmt.Sprintf("/invoices/%d", made.ID), nil); code != 200 || !strings.Contains(out, `"status":"draft"`) {
+		t.Fatalf("GET the CRM's draft: %d %s", code, out)
+	}
+	// It is the member's, not the owner's.
+	if code, _ := call(ownerTok, "GET", fmt.Sprintf("/invoices/%d", made.ID), nil); code != 404 {
+		t.Fatalf("the member's CRM draft seen by the owner: %d, want 404", code)
+	}
+	// And it can still never send, change, pay or delete anything.
+	for _, c := range []struct{ m, p string }{
+		{"POST", fmt.Sprintf("/invoices/%d/send", made.ID)}, {"POST", fmt.Sprintf("/invoices/%d/status", made.ID)},
+		{"PUT", fmt.Sprintf("/invoices/%d", made.ID)}, {"DELETE", fmt.Sprintf("/invoices/%d", made.ID)},
+		{"GET", fmt.Sprintf("/clients/%d", cl)}, {"PUT", fmt.Sprintf("/clients/%d", cl)}, {"DELETE", fmt.Sprintf("/clients/%d", cl)},
+		{"POST", "/payments"}, {"GET", "/settings"},
+	} {
+		if code, _ := call(crm, c.m, c.p, map[string]any{"status": "sent"}); code != 403 {
+			t.Fatalf("%s %s with invoices:write: %d, want 403", c.m, c.p, code)
+		}
+	}
+
 	// And a link token never counts as a signed-in session.
 	if code, out := call(link, "GET", "/auth/status", nil); code != 200 || !strings.Contains(out, `"authenticated":false`) {
 		t.Fatalf("auth/status with a link token: %d %s", code, out)

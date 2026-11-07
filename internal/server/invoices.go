@@ -248,6 +248,12 @@ func (s *Server) handleCreateInvoice(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	inv := &store.Invoice{Status: store.StatusDraft}
+	app := linkApp(ctx)
+	if app != "" {
+		// Another Pocket app (invoices:write) only ever starts a draft for the
+		// person to check and send; it never marks one sent or bills time.
+		in.Status, in.TimeEntryIDs, in.ExpenseIDs = store.StatusDraft, nil, nil
+	}
 	if in.Status == store.StatusSent {
 		inv.Status = store.StatusSent
 		now := store.Now()
@@ -280,7 +286,11 @@ func (s *Server) handleCreateInvoice(w http.ResponseWriter, r *http.Request) {
 	if len(in.ExpenseIDs) > 0 {
 		_ = s.store.LinkExpenses(ctx, uid, inv.ID, in.ExpenseIDs)
 	}
-	s.store.LogActivity(ctx, uid, "invoice", inv.ID, "created", "Invoice "+inv.Number+" created")
+	msg := "Invoice " + inv.Number + " created"
+	if app != "" {
+		msg = "Invoice " + inv.Number + " started as a draft by " + appTitle(app)
+	}
+	s.store.LogActivity(ctx, uid, "invoice", inv.ID, "created", msg)
 	full, _ := s.store.GetInvoice(ctx, uid, inv.ID)
 	s.hooks.Emit(uid, "invoice.created", full)
 	writeJSON(w, http.StatusCreated, full)

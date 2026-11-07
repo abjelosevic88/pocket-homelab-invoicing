@@ -14,12 +14,14 @@ Errors: `{"error": "message"}` with a 4xx/5xx status. Dates are `YYYY-MM-DD`; ti
 
 For a ready-made client, [Pocket Homelab](https://pockethomelab.com/) (iPhone, iPad, Mac, Android) uses this API with a token: the dashboard, invoices, payments, the timer and recurring profiles. See the README's [Companion app](../README.md#companion-app-pocket-homelab) section.
 
-**Pocket Core app links.** With Pocket Core on the box, another Pocket app may act for a person with a five-minute `pcx_` token from Core (see `docs/links.md` in pocket-homelab-core). It sees exactly that person's records, read-only, and only these routes; everything else answers `403`:
+**Pocket Core app links.** With Pocket Core on the box, another Pocket app may act for a person with a five-minute `pcx_` token from Core (see `docs/links.md` in pocket-homelab-core). It sees exactly that person's records, and only these routes; everything else answers `403`:
 
 | Scope | Routes |
 |---|---|
 | any | `GET /auth/me` |
 | `invoices:read` | `GET /invoices`, `GET /invoices/{id}`, `GET /invoices/{id}/pdf`, `GET /payments` (same filters as with a personal token) |
+| `invoices:write` | `GET /clients` (`?q=` to search), `POST /clients`, `POST /invoices` — the invoice is always a **draft** (`status: sent` is ignored, no time or expenses are attached) and its activity says which app started it. Nothing can be sent, changed, paid or deleted. Pocket CRM uses it when a deal is won. |
+| `worklog:read` / `worklog:write` | the worklog below (Pocket Time) |
 
 ## Auth
 | Method | Path | Notes |

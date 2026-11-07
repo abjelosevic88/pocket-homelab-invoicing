@@ -2,6 +2,11 @@
 
 All notable changes to this project are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [0.14.0] - 2026-11-07
+
+### Added
+- **Draft invoices from Pocket CRM** (Core link offer `invoices:write`, "Make draft invoices"): another Pocket app — Pocket CRM when a deal is won — may find or add a client (`GET /clients?q=`, `POST /clients`) and start an invoice (`POST /invoices`). It is always a draft for you to check and send: `status: sent` is ignored, no time or expenses are attached, and it can never send, change, pay or delete anything. The invoice's activity says "started as a draft by Pocket CRM". New links arrive off in Pocket Core → Links.
+
 ## [0.12.1] - 2026-10-30
 
 ### Fixed

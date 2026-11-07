@@ -20,9 +20,14 @@ import (
 // (docs/worklog.md in pocket-homelab-time, see worklog.go): Pocket Time shows
 // the time entries kept here, and writes time tracked there for a client here,
 // ready to bill.
+//
+// invoices:write lets an app (Pocket CRM, when a deal is won) find or add a
+// client and start an invoice — always as a draft (handleCreateInvoice); it
+// can never send, change, pay or delete one.
 
 var linkOffers = []core.Offer{
 	{Scope: "invoices:read", Name: "See invoices and payments", Description: "List your invoices, their PDFs and the payments received — for your journal, and to send an invoice for signing."},
+	{Scope: "invoices:write", Name: "Make draft invoices", Description: "Add a client and start an invoice as a draft for you to check and send — for example when a deal is won in Pocket CRM. It never sends anything."},
 	{Scope: "worklog:read", Name: "See your time entries", Description: "See the time you logged for your clients here (when, how long, for which client and what it was) and your client names, for Pocket Time. Never rates or amounts."},
 	{Scope: "worklog:write", Name: "Add time to bill", Description: "Add time you tracked elsewhere for a client as an unbilled time entry here, and change or remove only the entries it added itself. Time already on an invoice is never changed."},
 }
@@ -39,6 +44,9 @@ var linkRoutes = []linkRoute{
 	{"GET", regexp.MustCompile(`^/api/v1/invoices/\d+$`), "invoices:read"},
 	{"GET", regexp.MustCompile(`^/api/v1/invoices/\d+/pdf$`), "invoices:read"},
 	{"GET", regexp.MustCompile(`^/api/v1/payments$`), "invoices:read"},
+	{"GET", regexp.MustCompile(`^/api/v1/clients$`), "invoices:write"},
+	{"POST", regexp.MustCompile(`^/api/v1/clients$`), "invoices:write"},
+	{"POST", regexp.MustCompile(`^/api/v1/invoices$`), "invoices:write"},
 	{"GET", regexp.MustCompile(`^/api/v1/worklog$`), "worklog:read"},
 	{"GET", regexp.MustCompile(`^/api/v1/worklog/items$`), "worklog:read"},
 	{"POST", regexp.MustCompile(`^/api/v1/worklog$`), "worklog:write"},
