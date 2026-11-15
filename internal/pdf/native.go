@@ -398,7 +398,9 @@ func renderNative(d *Document, logo []byte, logoType string, k float64) ([]byte,
 	if d.ShowPaid {
 		row(d.Label("amount_paid"), "-"+d.AmountPaid, false, false)
 	}
-	row(d.Label("balance_due"), d.Balance, true, d.Layout != "minimal")
+	if d.Kind != "quote" {
+		row(d.Label("balance_due"), d.Balance, true, d.Layout != "minimal")
+	}
 	if d.BaseTotal != "" {
 		row(d.BaseTotalLabel, d.BaseTotal, true, false)
 	}

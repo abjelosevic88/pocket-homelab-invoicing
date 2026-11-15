@@ -33,6 +33,8 @@ export default function ClientDetail() {
         <button type="button" className="btn" onClick={() => setEditing(true)}>Edit</button>
         <button type="button" className="btn danger" onClick={() => setConfirmDel(true)}>{c.invoice_count ? 'Archive' : 'Delete'}</button>
         <Link className="btn" to={`/time?client_id=${c.id}`}>Time entries</Link>
+        <Link className="btn" to={`/quotes?client_id=${c.id}`}>Quotes</Link>
+        <Link className="btn" to={`/quotes/new?client_id=${c.id}`}>New quote</Link>
         <Link className="btn primary" to={`/invoices/new?client_id=${c.id}`}>New invoice</Link>
       </>} />
       <div className="grid cols-4 mb">

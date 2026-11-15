@@ -37,6 +37,7 @@ export default function Layout() {
   const create = (kind: CreateKind) => {
     closeDrawer()
     if (kind === 'invoice') navigate('/invoices/new')
+    else if (kind === 'quote') navigate('/quotes/new')
     else setNewClient(true)
   }
   const createRef = useRef(create)
@@ -61,6 +62,7 @@ export default function Layout() {
         case 'a': e.preventDefault(); createRef.current('client'); break
         case 'd': go('/'); break
         case 'i': go('/invoices'); break
+        case 'q': go('/quotes'); break
         case 'c': go('/clients'); break
         case 'p': go('/payments'); break
         case 'm': go('/month-end'); break
@@ -80,6 +82,8 @@ export default function Layout() {
     { id: 'new-client', label: 'New client', icon: 'briefcase', hint: 'A', keywords: 'add customer', run: () => create('client') },
     { id: 'dashboard', label: 'Dashboard', icon: 'home', hint: 'D', run: () => navigate('/') },
     { id: 'invoices', label: 'Invoices', icon: 'invoice', hint: 'I', run: () => navigate('/invoices') },
+    { id: 'new-quote', label: 'New quote', icon: 'plus', keywords: 'create estimate offer proposal', run: () => create('quote') },
+    { id: 'quotes', label: 'Quotes', icon: 'file', hint: 'Q', keywords: 'estimates offers proposals', run: () => navigate('/quotes') },
     { id: 'overdue', label: 'Overdue invoices', icon: 'alert', keywords: 'late unpaid', run: () => navigate('/invoices?status=overdue') },
     { id: 'drafts', label: 'Draft invoices', icon: 'edit', keywords: 'unsent', run: () => navigate('/invoices?status=draft') },
     { id: 'month-end', label: 'Month-end', icon: 'calendar-check', hint: 'M', keywords: 'wizard monthly', run: () => navigate('/month-end') },
@@ -105,7 +109,7 @@ export default function Layout() {
         <TopBar onMenu={toggleSidebar} onPalette={() => setPalette(true)} mobile={mobile} compact={narrow} sidebarOpen={sidebarOpen} running={running} />
         <main className="content"><div className="content-inner"><ErrorBoundary key={loc.pathname} where="page"><Outlet /></ErrorBoundary></div></main>
       </div>
-      {mobile && !loc.pathname.startsWith('/invoices/') && <button type="button" className="fab" aria-label="New invoice" title="New invoice" onClick={() => create('invoice')}><Icon name="plus" size={24} strokeWidth={2} /></button>}
+      {mobile && !loc.pathname.startsWith('/invoices/') && !loc.pathname.startsWith('/quotes/') && <button type="button" className="fab" aria-label="New invoice" title="New invoice" onClick={() => create('invoice')}><Icon name="plus" size={24} strokeWidth={2} /></button>}
       {palette && <CommandPalette onClose={() => setPalette(false)} commands={commands} />}
       {shortcuts && <ShortcutsSheet onClose={() => setShortcuts(false)} />}
       {newClient && <Modal title="New client" size="lg" onClose={() => setNewClient(false)}><ClientForm onSaved={c => { setNewClient(false); announceChange(); navigate(`/clients/${c.id}`) }} onClose={() => setNewClient(false)} /></Modal>}
@@ -113,7 +117,7 @@ export default function Layout() {
   )
 }
 
-const SECTION: Record<string, string> = { '': 'Dashboard', invoices: 'Invoices', 'month-end': 'Month-end', recurring: 'Recurring', payments: 'Payments', clients: 'Clients', time: 'Time tracking', expenses: 'Expenses', documents: 'Documents', reports: 'Reports' }
+const SECTION: Record<string, string> = { '': 'Dashboard', invoices: 'Invoices', quotes: 'Quotes', 'month-end': 'Month-end', recurring: 'Recurring', payments: 'Payments', clients: 'Clients', time: 'Time tracking', expenses: 'Expenses', documents: 'Documents', reports: 'Reports' }
 
 function TimerPill({ running }: { running: TimeEntry }) {
   const navigate = useNavigate()
@@ -141,7 +145,7 @@ function TopBar({ onMenu, onPalette, mobile, compact, sidebarOpen, running }: { 
   const top = parts[0] || ''
   const section = SECTION[top] || ''
   // a second level: an invoice, the new-invoice editor, a client
-  const sub = top === 'invoices' && parts[1] === 'new' ? 'New invoice' : (top === 'invoices' || top === 'clients') && parts[1] ? (crumb || '…') + (parts[2] === 'edit' ? ' · edit' : '') : ''
+  const sub = top === 'invoices' && parts[1] === 'new' ? 'New invoice' : top === 'quotes' && parts[1] === 'new' ? 'New quote' : (top === 'invoices' || top === 'quotes' || top === 'clients') && parts[1] ? (crumb || '…') + (parts[2] === 'edit' ? ' · edit' : '') : ''
   const signOut = async () => { await api.post(`${V1}/auth/logout`).catch(() => {}); setUser(null); navigate('/login') }
   const avatarMenu = (): MenuItem[] => [
     { heading: user?.name || user?.email || '' },

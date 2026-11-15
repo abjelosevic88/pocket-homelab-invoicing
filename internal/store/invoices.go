@@ -239,6 +239,10 @@ func (s *Store) DeleteInvoice(ctx context.Context, uid, id int64) error {
 		if _, err := tx.ExecContext(ctx, `UPDATE expenses SET invoice_id = NULL WHERE invoice_id = ?`, id); err != nil {
 			return err
 		}
+		// A quote this invoice was made from goes back to accepted, so it can be invoiced again.
+		if _, err := tx.ExecContext(ctx, `UPDATE quotes SET status = 'accepted', invoice_id = NULL, updated_at = ? WHERE invoice_id = ? AND user_id = ?`, Now(), id, uid); err != nil {
+			return err
+		}
 		_, err := tx.ExecContext(ctx, `DELETE FROM invoices WHERE id = ? AND user_id = ?`, id, uid)
 		return err
 	})

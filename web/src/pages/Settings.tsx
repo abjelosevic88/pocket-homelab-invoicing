@@ -12,12 +12,12 @@ import { Select } from '../components/Select'
 type Tab = 'company' | 'invoicing' | 'currencies' | 'taxes' | 'catalog' | 'templates' | 'email' | 'documents' | 'time' | 'sign' | 'api' | 'webhooks' | 'users' | 'backup' | 'system'
 const TABS: { id: Tab; label: string; icon: string; sub: string; wide?: boolean }[] = [
   { id: 'company', label: 'Company', icon: 'building', sub: 'Your business as it is printed on invoices, the logo, and the date format and timezone.' },
-  { id: 'invoicing', label: 'Invoicing', icon: 'invoice', sub: 'Numbering, custom fields, defaults for new invoices, the text printed on them and your working days.' },
+  { id: 'invoicing', label: 'Invoicing', icon: 'invoice', sub: 'Numbering, custom fields, defaults for new invoices and quotes, the text printed on them and your working days.' },
   { id: 'currencies', label: 'Currencies', icon: 'banknote', sub: 'The base currency, where exchange rates come from, and the currencies you invoice in.' },
   { id: 'taxes', label: 'Taxes', icon: 'percent', sub: 'Tax rates for invoice lines, and an estimate of your own income tax for Reports.' },
   { id: 'catalog', label: 'Catalog', icon: 'package', sub: 'Your standard products and rates, added to an invoice with one click.' },
   { id: 'templates', label: 'Templates', icon: 'palette', sub: 'How invoice PDFs look: design templates, Word templates and the labels printed on them.', wide: true },
-  { id: 'email', label: 'Email', icon: 'mail', sub: 'The SMTP server invoices are sent through, the invoice email and payment reminders.' },
+  { id: 'email', label: 'Email', icon: 'mail', sub: 'The SMTP server invoices are sent through, the invoice and quote emails and payment reminders.' },
   { id: 'documents', label: 'Pocket Documents', icon: 'file', sub: 'File invoices and company documents in Pocket Documents, through Pocket Core or directly.' },
   { id: 'time', label: 'Pocket Time', icon: 'timer', sub: 'Use your one timer in Pocket Time here, through Pocket Core or directly.' },
   { id: 'sign', label: 'Pocket Sign', icon: 'edit', sub: 'Send an invoice to the client to sign right from the invoice, through Pocket Core or directly.' },
@@ -216,6 +216,7 @@ function Invoicing() {
   const { settings } = useApp()
   const { s, set, put, save, busy, setS } = useSettingsForm()
   const { data: next } = useAsync(() => api.get<{ number: string }>(`${V1}/invoices/next-number`))
+  const { data: nextQuote } = useAsync(() => api.get<{ number: string }>(`${V1}/quotes/next-number`))
   if (!s) return <Loading />
   const dirty = JSON.stringify(s) !== JSON.stringify(settings)
   return (
@@ -229,6 +230,16 @@ function Invoicing() {
                 <Field label="Next sequence number"><input type="number" value={s.invoice_next_seq} onChange={set('invoice_next_seq')} /></Field>
               </div>
               <SettingRow title="Reset every year" help="The sequence starts again at 1 on January 1st"><Switch checked={s.invoice_seq_reset_yearly} onChange={put('invoice_seq_reset_yearly')} label="Reset every year" /></SettingRow>
+            </div>
+          </Section>
+          <Section title="Quotes">
+            <div className="grid" style={{ gap: 12 }}>
+              <Field label="Quote number format" help={<>Same placeholders as invoices · next: <code>{nextQuote?.number}</code>{s.invoice_seq_reset_yearly ? ' · resets every year like invoices' : ''}</>}><input value={s.quote_number_format} onChange={set('quote_number_format')} /></Field>
+              <div className="form-grid">
+                <Field label="Next quote sequence number"><input type="number" value={s.quote_next_seq} onChange={set('quote_next_seq')} /></Field>
+                <Field label="Valid for (days)" help="A new quote is valid this long"><input type="number" value={s.quote_valid_days} onChange={set('quote_valid_days')} /></Field>
+                <Field label="Terms on new quotes" className="full" help="{valid_until} is replaced with the quote's date. Accepting a quote starts a draft invoice with your invoice notes and terms."><textarea rows={2} value={s.quote_terms} onChange={set('quote_terms')} /></Field>
+              </div>
             </div>
           </Section>
           <Section title="Custom invoice fields">
@@ -549,6 +560,13 @@ function Email() {
           <Field label="Body" help="Placeholders: {number} {number_short} {client} {contact} {first_name} {company} {total} {balance} {due_date} {issue_date} {month} {year} {period} {link}. Clients can override subject and message on their own page."><textarea rows={8} value={s.email_body} onChange={set('email_body')} /></Field>
           <SettingRow title="Payment reminders" help="Email automatic reminders for overdue invoices"><Switch checked={s.reminders_enabled} onChange={put('reminders_enabled')} label="Send automatic payment reminders" /></SettingRow>
           <Field label="Remind on days after due date" help="Comma separated"><input value={s.reminder_days} onChange={set('reminder_days')} placeholder="3,7,14" /></Field>
+        </div>
+        <SaveBar onSave={save} busy={busy} />
+      </Section>
+      <Section title="Quote email">
+        <div className="grid" style={{ gap: 12 }}>
+          <Field label="Subject"><input value={s.quote_email_subject} onChange={set('quote_email_subject')} /></Field>
+          <Field label="Body" help="Placeholders: {number} {number_short} {client} {contact} {first_name} {company} {total} {valid_until} {issue_date} {link}. {link} is where the client reads the quote and accepts or declines it."><textarea rows={8} value={s.quote_email_body} onChange={set('quote_email_body')} /></Field>
         </div>
         <SaveBar onSave={save} busy={busy} />
       </Section>

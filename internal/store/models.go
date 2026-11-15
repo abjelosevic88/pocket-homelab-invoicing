@@ -208,6 +208,7 @@ type Invoice struct {
 	Payments    []Payment     `json:"payments,omitempty"`
 	Attachments []Attachment  `json:"attachments,omitempty"`
 	PocketDocs  *DocsLink     `json:"pocket_documents,omitempty"`
+	FromQuote   *QuoteRef     `json:"from_quote,omitempty"` // the quote this invoice was made from (detail view only)
 }
 
 // Payment records money received against an invoice.

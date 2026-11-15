@@ -66,5 +66,5 @@ export function elapsed(since: string, now: number) {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
 }
 
-export type CreateKind = 'invoice' | 'client'
+export type CreateKind = 'invoice' | 'quote' | 'client'
 

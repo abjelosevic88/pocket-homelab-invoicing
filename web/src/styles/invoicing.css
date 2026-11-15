@@ -117,9 +117,10 @@ details > summary { cursor: pointer; }
 .badge.draft { background: var(--surface-3); color: var(--text-2); }
 .badge.sent, .badge.viewed, .badge.open { background: var(--accent-soft); color: var(--accent-ink); }
 .badge.partial, .badge.warn { background: var(--warning-soft); color: var(--warning); }
-.badge.paid, .badge.active, .badge.ok { background: var(--success-soft); color: var(--success); }
-.badge.overdue, .badge.failed { background: var(--danger-soft); color: var(--danger); }
-.badge.cancelled, .badge.paused, .badge.completed { background: var(--surface-2); color: var(--muted); text-decoration: line-through; }
+.badge.paid, .badge.active, .badge.ok, .badge.accepted, .badge.invoiced { background: var(--success-soft); color: var(--success); }
+.badge.overdue, .badge.failed, .badge.declined { background: var(--danger-soft); color: var(--danger); }
+.badge.cancelled, .badge.paused, .badge.completed, .badge.expired { background: var(--surface-2); color: var(--muted); text-decoration: line-through; }
+.badge.expired { text-decoration: none; }
 .badge.accent { background: var(--accent-soft); color: var(--accent-ink); }
 a.badge:hover, .badge-link:hover { text-decoration: none; filter: brightness(.97); }
 .badge-link { text-decoration: none !important; }
@@ -290,3 +291,4 @@ a.badge:hover, .badge-link:hover { text-decoration: none; filter: brightness(.97
 .callout.mb { margin-bottom: 14px; }
 /* stacked fields directly in a card or section */
 .card-body > .field + .field, .set-section-body > .field + .field, .set-section-body > .field + .form-actions { margin-top: 14px; }
+.callout.ok { background: var(--success-soft); }

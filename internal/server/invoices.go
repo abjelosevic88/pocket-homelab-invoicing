@@ -231,6 +231,7 @@ func (s *Server) handleGetInvoice(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.decorateInvoiceDocs(r.Context(), inv)
+	inv.FromQuote = s.store.QuoteForInvoice(r.Context(), inv.UserID, inv.ID)
 	writeJSON(w, http.StatusOK, inv)
 }
 
@@ -460,6 +461,11 @@ func (s *Server) handleDuplicateInvoice(w http.ResponseWriter, r *http.Request) 
 // buildDocument assembles the render model for an invoice with its owner's company
 // profile, logo and templates (also for the public link, where nobody is signed in).
 func (s *Server) buildDocument(ctx context.Context, inv *store.Invoice, templateID *int64) (*pdf.Document, *store.InvoiceTemplate, []byte, string, error) {
+	return s.buildDoc(ctx, inv, templateID, false)
+}
+
+// buildDoc is buildDocument for an invoice, or for a quote in invoice shape (quote = true).
+func (s *Server) buildDoc(ctx context.Context, inv *store.Invoice, templateID *int64, quote bool) (*pdf.Document, *store.InvoiceTemplate, []byte, string, error) {
 	uid := inv.UserID
 	st, err := s.store.GetSettings(ctx, uid)
 	if err != nil {
@@ -481,10 +487,14 @@ func (s *Server) buildDocument(ctx context.Context, inv *store.Invoice, template
 	if len(logo) > 0 {
 		logoURL = "data:" + logoMime + ";base64," + base64.StdEncoding.EncodeToString(logo)
 	}
+	public := s.cfg.BaseURL + "/i/" + inv.PublicToken
+	if quote {
+		public = s.cfg.BaseURL + "/q/" + inv.PublicToken
+	}
 	doc := pdf.Build(pdf.BuildInput{
 		Invoice: inv, Client: client, Settings: st, Template: tpl,
 		Currency: s.store.GetCurrency(ctx, inv.Currency), BaseCurrency: s.store.GetCurrency(ctx, st.BaseCurrency),
-		PublicURL: s.cfg.BaseURL + "/i/" + inv.PublicToken, LogoDataURL: logoURL,
+		PublicURL: public, LogoDataURL: logoURL, Quote: quote,
 	})
 	return doc, tpl, logo, logoType, nil
 }

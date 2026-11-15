@@ -27,28 +27,38 @@ type Settings struct {
 	LogoPath       string `json:"logo_path"`
 	IssuePlace     string `json:"issue_place"` // place of issue printed next to the date (e.g. Banja Luka)
 
-	BaseCurrency         string  `json:"base_currency"`
-	ExchangeRateProvider string  `json:"exchange_rate_provider"` // frankfurter | cbbh | none; empty = EXCHANGE_RATE_PROVIDER env
-	Locale               string  `json:"locale"`
-	DateFormat           string  `json:"date_format"` // Go layout
-	Timezone             string  `json:"timezone"`
-	InvoiceNumberFmt     string  `json:"invoice_number_format"` // e.g. INV-{YYYY}-{SEQ:4}
-	InvoiceNextSeq       int64   `json:"invoice_next_seq"`
-	InvoiceSeqResetYr    bool    `json:"invoice_seq_reset_yearly"`
-	InvoiceSeqYear       int     `json:"invoice_seq_year"`
-	DefaultDueDays       int     `json:"default_due_days"`
-	DefaultNotes         string  `json:"default_notes"`
-	DefaultTerms         string  `json:"default_terms"`
-	DefaultFooter        string  `json:"default_footer"`
-	DefaultBilling       string  `json:"default_billing_mode"`
-	DefaultHourlyRate    float64 `json:"default_hourly_rate"`
-	DefaultDailyRate     float64 `json:"default_daily_rate"`
-	DefaultMonthlyRate   float64 `json:"default_monthly_rate"`
-	DefaultTaxRate       float64 `json:"default_tax_rate"`
-	HoursPerDay          float64 `json:"hours_per_day"`
-	TimeRoundingMin      int     `json:"time_rounding_minutes"`
-	ShowTaxColumn        bool    `json:"show_tax_column"`
-	AlwaysShowTax        bool    `json:"always_show_tax"` // print the tax line in the totals even at 0% (VAT rate and amount must appear on the invoice)
+	BaseCurrency         string `json:"base_currency"`
+	ExchangeRateProvider string `json:"exchange_rate_provider"` // frankfurter | cbbh | none; empty = EXCHANGE_RATE_PROVIDER env
+	Locale               string `json:"locale"`
+	DateFormat           string `json:"date_format"` // Go layout
+	Timezone             string `json:"timezone"`
+	InvoiceNumberFmt     string `json:"invoice_number_format"` // e.g. INV-{YYYY}-{SEQ:4}
+	InvoiceNextSeq       int64  `json:"invoice_next_seq"`
+	InvoiceSeqResetYr    bool   `json:"invoice_seq_reset_yearly"`
+	InvoiceSeqYear       int    `json:"invoice_seq_year"`
+	DefaultDueDays       int    `json:"default_due_days"`
+
+	// Quotes: their own numbering (resets yearly with invoices when that is on),
+	// how long a new quote is valid, and the email that sends one.
+	QuoteNumberFmt     string  `json:"quote_number_format"` // e.g. Q-{YYYY}-{SEQ:4}
+	QuoteNextSeq       int64   `json:"quote_next_seq"`
+	QuoteSeqYear       int     `json:"quote_seq_year"`
+	QuoteValidDays     int     `json:"quote_valid_days"`
+	QuoteTerms         string  `json:"quote_terms"` // copied into new quotes; {valid_until} is replaced
+	QuoteEmailSubject  string  `json:"quote_email_subject"`
+	QuoteEmailBody     string  `json:"quote_email_body"`
+	DefaultNotes       string  `json:"default_notes"`
+	DefaultTerms       string  `json:"default_terms"`
+	DefaultFooter      string  `json:"default_footer"`
+	DefaultBilling     string  `json:"default_billing_mode"`
+	DefaultHourlyRate  float64 `json:"default_hourly_rate"`
+	DefaultDailyRate   float64 `json:"default_daily_rate"`
+	DefaultMonthlyRate float64 `json:"default_monthly_rate"`
+	DefaultTaxRate     float64 `json:"default_tax_rate"`
+	HoursPerDay        float64 `json:"hours_per_day"`
+	TimeRoundingMin    int     `json:"time_rounding_minutes"`
+	ShowTaxColumn      bool    `json:"show_tax_column"`
+	AlwaysShowTax      bool    `json:"always_show_tax"` // print the tax line in the totals even at 0% (VAT rate and amount must appear on the invoice)
 
 	DefaultPaymentMethod     string            `json:"default_payment_method"`      // method for recorded payments and "Mark fully paid" (clients can override)
 	PaymentDetails           string            `json:"payment_details"`             // bank account, IBAN, PayPal etc. shown on invoice
@@ -130,6 +140,12 @@ func DefaultSettings() Settings {
 		InvoiceNextSeq:                1,
 		InvoiceSeqResetYr:             true,
 		DefaultDueDays:                14,
+		QuoteNumberFmt:                "Q-{YYYY}-{SEQ:4}",
+		QuoteNextSeq:                  1,
+		QuoteValidDays:                30,
+		QuoteTerms:                    "This quote is valid until {valid_until}.",
+		QuoteEmailSubject:             "Quote {number} from {company}",
+		QuoteEmailBody:                "Hi {first_name},\n\nHere is my quote {number} for {total}. It is valid until {valid_until}.\n\nYou can read it and accept it here: {link}\n\nThank you,\n{company}",
 		DefaultTerms:                  "Payment is due within {due_days} days of the invoice date.",
 		DefaultFooter:                 "Thank you for your business.",
 		DefaultBilling:                "hourly",

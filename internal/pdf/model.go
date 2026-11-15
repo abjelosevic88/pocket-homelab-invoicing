@@ -50,6 +50,7 @@ type TaxLine struct {
 
 // Document is everything a renderer needs, pre-formatted.
 type Document struct {
+	Kind        string // "invoice" or "quote"
 	Title       string
 	Number      string
 	Status      string
@@ -102,6 +103,10 @@ type Document struct {
 var DefaultLabels = map[string]string{
 	"invoice":         "INVOICE",
 	"invoice_number":  "Invoice #",
+	"quote":           "QUOTE",
+	"quote_number":    "Quote #",
+	"valid_until":     "Valid until",
+	"quote_total":     "Total",
 	"issue_date":      "Date",
 	"issue_place":     "Place of issue",
 	"due_date":        "Due date",
@@ -163,6 +168,7 @@ type BuildInput struct {
 	BaseCurrency store.Currency
 	PublicURL    string
 	LogoDataURL  string
+	Quote        bool // render as a quote: its own title, "valid until" for the due date, no payment details
 }
 
 func fmtDate(layout, s string) string {
@@ -213,6 +219,7 @@ func Build(in BuildInput) *Document {
 	m := func(v float64) string { return money.FormatStyle(v, cur.Decimals, cur.Symbol, symPos, style) }
 
 	d := &Document{
+		Kind:           "invoice",
 		Number:         inv.Number,
 		Status:         inv.Status,
 		IssueDate:      fmtDate(st.DateFormat, inv.IssueDate),
@@ -252,7 +259,7 @@ func Build(in BuildInput) *Document {
 	// Drafts follow the current default text, so editing Settings shows up
 	// without re-saving every open draft. Sent/paid invoices keep what they
 	// went out with.
-	if inv.Status == "draft" {
+	if inv.Status == "draft" && !in.Quote {
 		if strings.TrimSpace(d.Notes) == "" {
 			d.Notes = st.DefaultNotes
 		}
@@ -272,6 +279,21 @@ func Build(in BuildInput) *Document {
 		}
 		if v := strings.TrimSpace(inv.CustomFields[def.Key]); v != "" {
 			d.CustomFields = append(d.CustomFields, KV{Label: def.Label, Value: v})
+		}
+	}
+	if in.Quote {
+		// The invoice keys the templates print are pointed at the quote's own labels,
+		// so every design and Word template prints a quote without changes.
+		d.Kind = "quote"
+		d.Labels["invoice"] = d.Label("quote")
+		d.Labels["invoice_number"] = d.Label("quote_number")
+		d.Labels["due_date"] = d.Label("valid_until")
+		d.Labels["balance_due"] = d.Label("quote_total")
+		d.PaymentDetails = ""
+		d.Notes = strings.ReplaceAll(d.Notes, "{valid_until}", d.DueDate)
+		d.Terms = strings.ReplaceAll(d.Terms, "{valid_until}", d.DueDate)
+		if inv.Status == "draft" && strings.TrimSpace(d.Footer) == "" {
+			d.Footer = st.DefaultFooter
 		}
 	}
 	d.Title = d.Label("invoice")
@@ -360,7 +382,7 @@ func Build(in BuildInput) *Document {
 	d.AmountPaid = m(inv.AmountPaid)
 	d.Balance = m(inv.Total - inv.AmountPaid)
 	d.ShowPaid = inv.AmountPaid > 0
-	if inv.Currency != st.BaseCurrency && inv.ExchangeRate > 0 && st.ShowBaseTotal {
+	if inv.Currency != st.BaseCurrency && inv.ExchangeRate > 0 && st.ShowBaseTotal && !in.Quote { // a quote has no rate fixed yet
 		bc := in.BaseCurrency
 		bpos := "before"
 		if strings.HasSuffix(bc.Symbol, " ") {
@@ -426,7 +448,16 @@ func buildData(d *Document, in BuildInput) map[string]any {
 		"quantity_total": quantityTotalFor(d, inv), "total_in_base": d.BaseTotal, "base_total_label": d.BaseTotalLabel, "base_note": d.BaseCurrencyNote,
 		"notes": d.Notes, "terms": d.Terms, "footer": d.Footer, "payment_details": d.PaymentDetails, "public_url": d.PublicURL, "paid": inv.Status == "paid",
 		"has_discount": d.Discount != "", "has_tax": len(d.Taxes) > 0, "has_payments": d.ShowPaid, "is_foreign_currency": d.BaseTotal != "",
+		"is_quote": in.Quote, "valid_until": validUntil(d, in), "document_type": d.Kind,
 	}
+}
+
+// validUntil is the quote's valid-until date ("" for invoices).
+func validUntil(d *Document, in BuildInput) string {
+	if !in.Quote {
+		return ""
+	}
+	return d.DueDate
 }
 
 // quantityTotalFor always returns the summed quantity when all lines share a unit
@@ -466,6 +497,7 @@ var DataKeys = []struct{ Key, Description string }{
 	{"subtotal", "Subtotal"}, {"discount", "Document discount amount (with minus)"}, {"discount_label", "Discount label"}, {"tax_total", "Total tax"}, {"total", "Grand total"}, {"amount_paid", "Amount paid"}, {"balance", "Balance due"}, {"quantity_total", "Summed quantity, e.g. 21 days"},
 	{"total_in_base", "Total converted to base currency"}, {"base_total_label", "e.g. Total in BAM"}, {"base_note", "The configured base-currency sentence"},
 	{"payment_details", "Payment details for this currency"}, {"notes", "Notes"}, {"terms", "Terms"}, {"footer", "Footer"}, {"public_url", "Public link"},
+	{"title", "INVOICE, or QUOTE on a quote"}, {"valid_until", "Quote: valid until (also in due_date)"}, {"#is_quote … /is_quote", "Section shown only on quotes (^is_quote … /is_quote: only on invoices)"},
 	{"#paid … /paid", "Section shown only when paid (also: has_discount, has_tax, has_payments, is_foreign_currency, po_number, notes …)"}, {"^paid … /paid", "Inverted section: shown when NOT paid"},
 }
 

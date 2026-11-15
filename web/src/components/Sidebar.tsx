@@ -29,6 +29,7 @@ export function Sidebar({ onCreate, onNavigate, running }: { onCreate: (k: Creat
   const brand = settings?.brand_name?.trim()
   const createItems: MenuItem[] = [
     { label: 'Invoice', icon: 'invoice', hint: 'N', onSelect: () => onCreate('invoice') },
+    { label: 'Quote', icon: 'file', onSelect: () => onCreate('quote') },
     { label: 'Client', icon: 'briefcase', hint: 'A', onSelect: () => onCreate('client') },
     'sep',
     { label: 'Track time', icon: 'timer', hint: 'T', onSelect: () => { onNavigate(); navigate('/time') } },
@@ -37,6 +38,7 @@ export function Sidebar({ onCreate, onNavigate, running }: { onCreate: (k: Creat
   const main: NavItem[] = [
     { to: '/', label: 'Dashboard', icon: 'home', end: true },
     { to: '/invoices', label: 'Invoices', icon: 'invoice', badge: overdue, badgeTitle: `${overdue} overdue` },
+    { to: '/quotes', label: 'Quotes', icon: 'file' },
     { to: '/clients', label: 'Clients', icon: 'users' },
     { to: '/payments', label: 'Payments', icon: 'banknote' },
   ]
@@ -143,8 +145,10 @@ function ClientRow({ c, onNavigate }: { c: Client; onNavigate: () => void }) {
   const items: MenuItem[] = [
     { label: 'Open', icon: 'briefcase', onSelect: () => go(`/clients/${c.id}`) },
     { label: 'New invoice', icon: 'plus', onSelect: () => go(`/invoices/new?client_id=${c.id}`) },
+    { label: 'New quote', icon: 'plus', onSelect: () => go(`/quotes/new?client_id=${c.id}`) },
     'sep',
     { label: 'Invoices', icon: 'invoice', onSelect: () => go(`/invoices?client_id=${c.id}`) },
+    { label: 'Quotes', icon: 'file', onSelect: () => go(`/quotes?client_id=${c.id}`) },
     { label: 'Time entries', icon: 'timer', onSelect: () => go(`/time?client_id=${c.id}`) },
     { label: 'Documents', icon: 'file', onSelect: () => go(`/documents?client_id=${c.id}`) },
   ]

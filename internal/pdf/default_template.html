@@ -138,7 +138,7 @@
       {{range .Taxes}}<tr><td>{{.Label}}</td><td class="num">{{.Amount}}</td></tr>{{end}}
       <tr class="grand"><td>{{.Label "total"}}</td><td class="num">{{.Total}}</td></tr>
       {{if .ShowPaid}}<tr><td>{{.Label "amount_paid"}}</td><td class="num">-{{.AmountPaid}}</td></tr>{{end}}
-      <tr class="balance"><td>{{.Label "balance_due"}}</td><td class="num">{{.Balance}}</td></tr>
+      {{if ne .Kind "quote"}}<tr class="balance"><td>{{.Label "balance_due"}}</td><td class="num">{{.Balance}}</td></tr>{{end}}
       {{if .BaseTotal}}<tr class="grand"><td>{{.BaseTotalLabel}}</td><td class="num">{{.BaseTotal}}</td></tr>{{end}}
     </table>
   </div>

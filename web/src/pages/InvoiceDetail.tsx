@@ -208,6 +208,7 @@ export default function InvoiceDetail() {
               {inv.viewed_at && <><dt>Viewed</dt><dd>{fmtDateTime(inv.viewed_at)}</dd></>}
               {inv.paid_at && <><dt>Paid</dt><dd>{fmtDateTime(inv.paid_at)}</dd></>}
               {inv.recurring_id && <><dt>Recurring</dt><dd><Link to="/recurring">profile #{inv.recurring_id}</Link></dd></>}
+              {inv.from_quote && <><dt>From quote</dt><dd><Link to={`/quotes/${inv.from_quote.id}`}>{inv.from_quote.number}</Link></dd></>}
             </dl>
             {activity && activity.length > 0 && <><hr />{activity.map(a => <div key={a.id} className="small" style={{ marginBottom: 6 }}><span className="muted">{fmtDateTime(a.created_at)}</span> — {a.message}</div>)}</>}
           </Card>

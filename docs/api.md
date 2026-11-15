@@ -89,6 +89,23 @@ Create/update body:
 }
 ```
 
+## Quotes
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/quotes?status=&client_id=&q=&limit=&offset=` | `status`: draft, sent, viewed, accepted, declined, expired, invoiced, `open` (sent or viewed) |
+| POST | `/quotes` | body like an invoice's: `{client_id, number?, issue_date?, valid_until?, currency?, billing_mode?, po_number?, discount_type?, discount_value?, notes?, terms?, footer?, template_id?, items[]}`; blank number = next `quote_number_format`, blank valid_until = date + `quote_valid_days` |
+| GET | `/quotes/next-number` | |
+| GET | `/quotes/{id}` | includes `items[]`, `invoice_id` / `invoice_number` once invoiced |
+| PUT | `/quotes/{id}` | same body; 409 once accepted. A sent/viewed quote gets `revision + 1`; a declined/expired one also goes back to draft |
+| DELETE | `/quotes/{id}` | an invoice made from it stays |
+| POST | `/quotes/{id}/status` | `{status: sent}` (draft → sent without email), `{status: draft}`, `{status: declined, reason?}` |
+| POST | `/quotes/{id}/send` | `{to?, subject?, body?}` — emails the PDF and the link, marks sent |
+| POST | `/quotes/{id}/convert` | marks it accepted (when it isn't yet) and makes the draft invoice → `{quote, invoice}`; 409 when already invoiced |
+| POST | `/quotes/{id}/duplicate` | new draft |
+| GET | `/quotes/{id}/pdf?download=1` | |
+
+The client's side is public: `GET /q/{token}` (HTML with Accept / Decline; drafts are 404), `GET /q/{token}/pdf`, and the form posts `POST /q/{token}/accept` (`name`, `agree`, `po?`) and `POST /q/{token}/decline` (`reason?`). Accepting makes the draft invoice right away and emails the owner.
+
 ## Payments
 | Method | Path | Notes |
 |---|---|---|
@@ -171,7 +188,7 @@ See [month-end.md](month-end.md).
 | `GET /api/v1/activity?entity_type=&entity_id=` | audit log |
 
 ## Public (no auth)
-`GET /i/{token}` (HTML), `GET /i/{token}/pdf`, `GET /api/public/invoices/{token}` (JSON). Opening a link marks a *sent* invoice as *viewed*.
+`GET /i/{token}` (HTML), `GET /i/{token}/pdf`, `GET /api/public/invoices/{token}` (JSON). Opening a link marks a *sent* invoice as *viewed*. Quotes: `GET /q/{token}`, `GET /q/{token}/pdf`, `POST /q/{token}/accept|decline` (see Quotes).
 
 ## Webhooks
 Configured under Settings → Webhooks. Each delivery is `POST` with:
@@ -181,7 +198,7 @@ Configured under Settings → Webhooks. Each delivery is `POST` with:
 ```
 Headers: `X-Webhook-Event`, `X-Webhook-Signature: sha256=<hex HMAC-SHA256 of body with your secret>`.
 
-Events: `invoice.created`, `invoice.updated`, `invoice.sent`, `invoice.viewed`, `invoice.partial`, `invoice.paid`, `invoice.overdue`, `invoice.cancelled`, `invoice.draft`, `invoice.deleted`, `payment.created`, `client.created`, `client.updated`, `test`. Subscribe with `*`, a comma-separated list, or a prefix like `invoice.*`.
+Events: `invoice.created`, `invoice.updated`, `invoice.sent`, `invoice.viewed`, `invoice.partial`, `invoice.paid`, `invoice.overdue`, `invoice.cancelled`, `invoice.draft`, `invoice.deleted`, `payment.created`, `client.created`, `client.updated`, `quote.created`, `quote.updated`, `quote.sent`, `quote.viewed`, `quote.accepted`, `quote.declined`, `quote.expired`, `quote.invoiced`, `quote.draft`, `quote.deleted`, `test`. Subscribe with `*`, a comma-separated list, or a prefix like `invoice.*`.
 
 ### Example: n8n / Home Assistant
 ```yaml

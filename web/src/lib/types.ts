@@ -28,6 +28,14 @@ export interface Invoice {
   notes: string; terms: string; footer: string; template_id: number | null; recurring_id: number | null; public_token: string; sent_at: string | null; viewed_at: string | null; paid_at: string | null; created_at: string; updated_at: string;
   custom_fields: Record<string, string>;
   items?: InvoiceItem[]; payments?: Payment[]; attachments?: Attachment[]; pocket_documents?: DocsLink;
+  from_quote?: { id: number; number: string };
+}
+export type QuoteStatus = 'draft' | 'sent' | 'viewed' | 'accepted' | 'declined' | 'expired' | 'invoiced'
+export interface Quote {
+  id: number; number: string; client_id: number; client_name: string; status: QuoteStatus; issue_date: string; valid_until: string; currency: string; billing_mode: string; po_number: string;
+  discount_type: string; discount_value: number; subtotal: number; discount_total: number; tax_total: number; total: number; notes: string; terms: string; footer: string; template_id: number | null;
+  public_token: string; revision: number; sent_at: string | null; viewed_at: string | null; accepted_at: string | null; accepted_name: string; accepted_ip: string; declined_at: string | null; decline_reason: string;
+  invoice_id: number | null; invoice_number: string; created_at: string; updated_at: string; items?: InvoiceItem[];
 }
 export interface Holiday { date: string; name: string; yearly: boolean }
 export interface WorkingDays { from: string; to: string; working_days: number; week_days: number; holidays: { date: string; name: string; weekday: string }[]; all_holidays: { date: string; name: string; weekday: string }[]; hours_per_day: number; working_hours: number; work_week: string }
@@ -44,7 +52,8 @@ export interface APIToken { id: number; name: string; prefix: string; last_used_
 export interface Activity { id: number; entity_type: string; entity_id: number; action: string; message: string; created_at: string }
 export interface Settings {
   company_name: string; brand_name: string; company_email: string; company_phone: string; company_website: string; address1: string; address2: string; city: string; state: string; postal_code: string; country: string; tax_id: string; vat_id: string; issue_place: string; default_payment_method: string; logo_path: string;
-  base_currency: string; exchange_rate_provider: string; locale: string; date_format: string; timezone: string; invoice_number_format: string; invoice_next_seq: number; invoice_seq_reset_yearly: boolean; invoice_seq_year: number; default_due_days: number; default_notes: string; default_terms: string; default_footer: string; default_billing_mode: string;
+  base_currency: string; exchange_rate_provider: string; locale: string; date_format: string; timezone: string; invoice_number_format: string; invoice_next_seq: number; invoice_seq_reset_yearly: boolean; invoice_seq_year: number; default_due_days: number;
+  quote_number_format: string; quote_next_seq: number; quote_seq_year: number; quote_valid_days: number; quote_terms: string; quote_email_subject: string; quote_email_body: string; default_notes: string; default_terms: string; default_footer: string; default_billing_mode: string;
   default_hourly_rate: number; default_daily_rate: number; default_monthly_rate: number; default_tax_rate: number; hours_per_day: number; time_rounding_minutes: number; show_tax_column: boolean; always_show_tax: boolean; payment_details: string;
   payment_details_by_currency: Record<string, string> | null; number_format: string; custom_fields: CustomFieldDef[] | null; show_base_total: boolean; base_total_note: string; email_attachment_mode: string;
   income_tax_rate: number; income_tax_basis: string; income_tax_by_payment_date: boolean; income_tax_min_yearly: number; income_tax_deduction: number; contributions_monthly: number; income_tax_label: string;

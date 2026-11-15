@@ -233,6 +233,11 @@ func (s *Server) Router() http.Handler {
 	r.Get("/i/{token}", s.handlePublicInvoice)
 	r.Get("/i/{token}/pdf", s.handlePublicInvoicePDF)
 	r.Get("/i/{token}/files/{aid}", s.handlePublicAttachment)
+	// Public quote: the client reads it and accepts or declines it (quotes_public.go)
+	r.Get("/q/{token}", s.handlePublicQuote)
+	r.Get("/q/{token}/pdf", s.handlePublicQuotePDF)
+	r.Post("/q/{token}/accept", s.handlePublicQuoteAccept)
+	r.Post("/q/{token}/decline", s.handlePublicQuoteDecline)
 	r.Get("/api/public/invoices/{token}", s.handlePublicInvoiceJSON)
 
 	r.Route("/api/v1", func(r chi.Router) {
@@ -338,6 +343,18 @@ func (s *Server) Router() http.Handler {
 			r.Get("/pocket-documents/documents/{pid}/thumb", s.handleDocsFile)
 			r.Post("/pocket-documents/documents/{pid}/import", s.handleDocsImport)
 			r.Delete("/pocket-documents/links/{id}", s.handleUnlinkDocs)
+
+			r.Get("/quotes", s.handleListQuotes)
+			r.Post("/quotes", s.handleCreateQuote)
+			r.Get("/quotes/next-number", s.handleNextQuoteNumber)
+			r.Get("/quotes/{id}", s.handleGetQuote)
+			r.Put("/quotes/{id}", s.handleUpdateQuote)
+			r.Delete("/quotes/{id}", s.handleDeleteQuote)
+			r.Post("/quotes/{id}/status", s.handleQuoteStatus)
+			r.Post("/quotes/{id}/send", s.handleSendQuote)
+			r.Post("/quotes/{id}/convert", s.handleConvertQuote)
+			r.Post("/quotes/{id}/duplicate", s.handleDuplicateQuote)
+			r.Get("/quotes/{id}/pdf", s.handleQuotePDF)
 
 			r.Get("/payments", s.handleListPayments)
 			r.Post("/payments", s.handleCreatePayment)

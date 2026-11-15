@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [0.15.0] - 2026-11-15
+
+### Added
+- **Quotes**: write a quote like an invoice (client, lines, discount, tax, notes, terms, template) and send it. The client opens its link (`/q/<token>`, no account), reads it, downloads the PDF and clicks **Accept** (typed name, optional PO / reference, a tick box) or **Decline** (optional reason). Accepting starts a **draft invoice** with the quote's lines, client, currency, discount and PO — never sent on its own — and emails you that it was accepted (with your own SMTP settings). "Accepted? Make invoice" does the same when the client said yes by phone or email.
+- Quotes have their own numbering (`Q-{YYYY}-{SEQ:4}`, resets yearly with invoices), a valid-until date (default 30 days, Settings → Invoicing → Quotes), their own email text (Settings → Email → Quote email; `{valid_until}` and `{link}` placeholders) and default terms.
+- Statuses: draft → sent → viewed → accepted / declined / expired → invoiced. Editing a quote that was already sent makes a new revision (the link shows it); a declined or expired quote goes back to draft when revised. Accepted quotes are locked. The nightly scheduler expires open quotes past their date, and an expired quote can't be accepted.
+- Every design and Word template prints a quote without changes: **QUOTE**, **Quote #** and **Valid until** replace the invoice words (new labels `quote`, `quote_number`, `valid_until`, `quote_total`), and there is no balance due, payment details or base-currency total. Word templates also get `is_quote`, `valid_until` and `document_type`.
+- An invoice made from a quote links back to it; deleting that invoice puts the quote back to accepted. Quotes stay out of invoice lists, reports, payments and overdue marking, and other Pocket apps' links can't reach them.
+- Webhook events `quote.created`, `quote.updated`, `quote.sent`, `quote.viewed`, `quote.accepted`, `quote.declined`, `quote.expired`, `quote.invoiced`, `quote.draft`, `quote.deleted`.
+- Quotes in the sidebar, the New menu, the client menu and page, the command palette and the `Q` shortcut.
+
 ## [0.14.0] - 2026-11-07
 
 ### Added

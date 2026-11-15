@@ -86,7 +86,7 @@ func (s *Store) DeleteClient(ctx context.Context, uid, id int64) (deleted bool, 
 		return false, err
 	}
 	var n int
-	if err := s.DB.QueryRowContext(ctx, `SELECT COUNT(1) FROM invoices WHERE client_id = ?`, id).Scan(&n); err != nil {
+	if err := s.DB.QueryRowContext(ctx, `SELECT (SELECT COUNT(1) FROM invoices WHERE client_id = ?) + (SELECT COUNT(1) FROM quotes WHERE client_id = ?)`, id, id).Scan(&n); err != nil {
 		return false, err
 	}
 	if n > 0 {

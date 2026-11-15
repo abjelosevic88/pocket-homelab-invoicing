@@ -33,6 +33,7 @@ On the go, **[Pocket Homelab](https://pockethomelab.com/)** is its companion app
 | **PDF & templates** | Three built-in layouts (Classic, Modern, Minimal), accent colour, logo, per-template label overrides for localisation (RECHNUNG / FAKTURA / …), optional custom HTML template. **Word templates:** upload any `.docx` with `{{placeholders}}`, keep several, assign per client, converted by Gotenberg. Pure-Go PDF engine by default. |
 | **Documents** | Company papers (contracts, registration, tax, bank, certificates) in one place with categories, client link, expiry reminders. Optional **Pocket Documents** integration: file invoices and documents under the client, see each client's documents on the client page, browse and pull from your archive. |
 | **Payments** | Partial payments, multiple methods, references. Status flow draft → sent → viewed → partial → paid, with automatic overdue marking. |
+| **Quotes** | Send a quote (own numbering, valid-until date, revisions); the client accepts or declines it from its link (`/q/<token>`) and accepting starts a draft invoice with the same lines for you to check and send. Expires on its own; prints with any template as QUOTE. |
 | **Client portal link** | Every invoice has a share link (`/i/<token>`) with web view, PDF download and view tracking. No client accounts needed. |
 | **Email** | SMTP with PDF attachment, test button, BCC yourself, automatic payment reminders (e.g. 3, 7, 14 days after due). |
 | **Expenses** | Track costs, re-bill them to clients, see net income. |

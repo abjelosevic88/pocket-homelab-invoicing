@@ -403,6 +403,9 @@ func (s *Server) runSchedulerFor(ctx context.Context, uid int64) (generated, ove
 	}
 	overdue = len(ids)
 
+	// 2a. Quotes past their valid-until date expire
+	s.expireQuotes(ctx, uid)
+
 	// 2b. Carry old Paperless links over to Pocket Documents (no-op once none are left)
 	resolved = s.adoptPaperlessLinks(ctx, uid)
 

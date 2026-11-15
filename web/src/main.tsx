@@ -16,6 +16,9 @@ import ClientDetail from './pages/ClientDetail'
 import Invoices from './pages/Invoices'
 import InvoiceEditor from './pages/InvoiceEditor'
 import InvoiceDetail from './pages/InvoiceDetail'
+import Quotes from './pages/Quotes'
+import QuoteEditor from './pages/QuoteEditor'
+import QuoteDetail from './pages/QuoteDetail'
 import Recurring from './pages/Recurring'
 import MonthEnd from './pages/MonthEnd'
 import TimeTracking from './pages/TimeTracking'
@@ -48,6 +51,10 @@ function App() {
         <Route path="/invoices/new" element={<InvoiceEditor />} />
         <Route path="/invoices/:id" element={<InvoiceDetail />} />
         <Route path="/invoices/:id/edit" element={<InvoiceEditor />} />
+        <Route path="/quotes" element={<Quotes />} />
+        <Route path="/quotes/new" element={<QuoteEditor />} />
+        <Route path="/quotes/:id" element={<QuoteDetail />} />
+        <Route path="/quotes/:id/edit" element={<QuoteEditor />} />
         <Route path="/recurring" element={<Recurring />} />
         <Route path="/month-end" element={<MonthEnd />} />
         <Route path="/time" element={<TimeTracking />} />
