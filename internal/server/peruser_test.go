@@ -41,6 +41,15 @@ func fakeCore(t *testing.T) *httptest.Server {
 				"user": people["pcd_member-phone"], "app": map[string]any{"id": 4, "slug": "day", "name": "Pocket Day"}})
 			return
 		}
+		if who, kind, ok := strings.Cut(strings.TrimPrefix(in.Token, "pcx_"), "_"); ok && (kind == "export" || kind == "import") { // Pocket Move
+			u := people["pcd_member-phone"]
+			if who == "owner" {
+				u = people["pcu_owner"]
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"active": true, "kind": "delegated", "scope": "move:" + kind, "audience": "invoicing",
+				"user": u, "app": map[string]any{"id": 11, "slug": "move", "name": "Pocket Move"}})
+			return
+		}
 		if in.Token == "pcx_member_crm" { // Pocket CRM making draft invoices for the member
 			_ = json.NewEncoder(w).Encode(map[string]any{"active": true, "kind": "delegated", "scope": "invoices:read invoices:write", "audience": "invoicing",
 				"user": people["pcd_member-phone"], "app": map[string]any{"id": 9, "slug": "crm", "name": "Pocket CRM"}})

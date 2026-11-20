@@ -32,6 +32,16 @@ var linkOffers = []core.Offer{
 	{Scope: "worklog:write", Name: "Add time to bill", Description: "Add time you tracked elsewhere for a client as an unbilled time entry here, and change or remove only the entries it added itself. Time already on an invoice is never changed."},
 }
 
+// portable is what Pocket Move may copy out for a person (docs/move.md in
+// pocket-homelab-core); Register adds move:export. There is no import yet:
+// invoices carry their numbers and sent state, so they are not re-created
+// from a file.
+var portable = &core.Portable{
+	Exports: []core.PortableExport{
+		{Path: "/api/v1/export.json", File: "invoicing.json", Kind: core.KindPocket, Title: "Your clients, invoices with their lines, payments, recurring invoices, time, expenses, products, tax rates, templates and settings (no passwords)"},
+	},
+}
+
 type linkRoute struct {
 	methods string
 	path    *regexp.Regexp
@@ -56,6 +66,9 @@ var linkRoutes = []linkRoute{
 var errLinkScope = errors.New("outside the link's scope")
 
 func linkAllows(scopes []string, r *http.Request) bool {
+	if portable.LinkAllows(scopes, r) {
+		return true
+	}
 	for _, lr := range linkRoutes {
 		if !strings.Contains(" "+lr.methods+" ", " "+r.Method+" ") || !lr.path.MatchString(r.URL.Path) {
 			continue

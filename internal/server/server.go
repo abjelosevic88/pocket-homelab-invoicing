@@ -129,6 +129,7 @@ func (s *Server) registerWithCore(ctx context.Context) error {
 		URL: s.cfg.CoreAppURL, PublicURL: s.cfg.BaseURL, HealthPath: "/healthz", EnvPrefix: "INVOICING",
 		Publishes: []string{"invoicing.invoice_created", "invoicing.invoice_sent", "invoicing.invoice_paid"},
 		Offers:    linkOffers,
+		Portable:  portable,
 		Uses:      linkUses(),
 	}
 	if s.cfg.BaseURL != "" {
@@ -412,6 +413,7 @@ func (s *Server) Router() http.Handler {
 			r.Post("/webhooks/test", s.handleTestWebhook)
 
 			r.Get("/export.json", s.handleExportJSON)
+			r.Get(strings.TrimPrefix(core.PortablePath, "/api/v1"), portable.Handler())
 
 			// Box-wide administration. Admins get no extra access to anyone's content here
 			// except the whole-database backup, which is the box owner's disaster recovery.

@@ -184,6 +184,7 @@ See [month-end.md](month-end.md).
 | `GET /metrics` | Prometheus text format (no auth; disable with `METRICS_ENABLED=false`) |
 | `GET /api/v1/backup` | download a consistent `.db` |
 | `GET /api/v1/export.json` | everything as JSON |
+| `GET /api/v1/pocket/portable` | what Pocket Move may copy out (the export above, under the link scope `move:export`) |
 | `POST /api/v1/scheduler/run` | run background jobs now |
 | `GET /api/v1/activity?entity_type=&entity_id=` | audit log |
 

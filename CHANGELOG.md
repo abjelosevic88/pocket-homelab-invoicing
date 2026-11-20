@@ -2,6 +2,11 @@
 
 All notable changes to this project are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [0.16.0] - 2026-11-20
+
+### Added
+- Pocket Move can copy your invoicing out (link scope `move:export`: `GET /api/v1/pocket/portable` and your own `GET /api/v1/export.json`, nothing else). There is no import to bring it back in yet.
+
 ## [0.15.0] - 2026-11-15
 
 ### Added
