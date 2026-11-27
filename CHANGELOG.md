@@ -2,6 +2,11 @@
 
 All notable changes to this project are documented here. Format follows [Keep a Changelog](https://keepachangelog.com/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [0.17.0] - 2026-11-27
+
+### Added
+- Pocket Search, Pocket Day and Pocket Hub find Invoicing on their own (Pocket Core 0.49 capabilities, category `Work`). Search finds your invoices and quotes by number, client, line or notes, and your clients by name (`!invoice`, `!invoices`, `!quote`). Day lists the invoices issued, the payments received, the invoices that fell due and the quotes sent or accepted that day; only payments carry an amount, so the day's total is the money that came in. Hub shows late invoices first, then those due in the next two weeks, with this month's invoiced, received and outstanding totals from the dashboard. New link scopes `pocket:search`, `pocket:day`, `pocket:widget`, each opening only its one read-only route (`GET /api/v1/pocket/search`, `/api/v1/pocket/day/{date}`, `/api/v1/pocket/widget`). Quotes are now readable through `pocket:search` and `pocket:day` only; no other link reaches them.
+
 ## [0.16.0] - 2026-11-20
 
 ### Added

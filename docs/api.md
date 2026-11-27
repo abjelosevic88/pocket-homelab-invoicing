@@ -22,6 +22,15 @@ For a ready-made client, [Pocket Homelab](https://pockethomelab.com/) (iPhone, i
 | `invoices:read` | `GET /invoices`, `GET /invoices/{id}`, `GET /invoices/{id}/pdf`, `GET /payments` (same filters as with a personal token) |
 | `invoices:write` | `GET /clients` (`?q=` to search), `POST /clients`, `POST /invoices` — the invoice is always a **draft** (`status: sent` is ignored, no time or expenses are attached) and its activity says which app started it. Nothing can be sent, changed, paid or deleted. Pocket CRM uses it when a deal is won. |
 | `worklog:read` / `worklog:write` | the worklog below (Pocket Time) |
+| `pocket:search` / `pocket:day` / `pocket:widget` | one route each, below (Pocket Search, Pocket Day, Pocket Hub) |
+
+**Search, day and widget** (`docs/capabilities.md` in pocket-homelab-core). The manifest says what Invoicing can do (category `Work`), and Pocket Search, Pocket Day and Pocket Hub find it on their own. Each route also works with your own session or token, reads only and shows only your own things. Nothing can be kept here from a quick line (no `pocket:capture`): an invoice needs a client, lines and a number.
+
+| Route | Answers |
+|---|---|
+| `GET /pocket/search?q=&limit=` | clients whose name has every word, then invoices and quotes whose number, client, PO number, notes or a line has every word, newest first. Ids `client:7`, `invoice:12`, `quote:3`; the snippet is client · total · where it stands ("paid", "overdue 12 days", "sent") · issue date; `url` is `/clients/{id}`, `/invoices/{id}` or `/quotes/{id}`. Bangs `!invoice`, `!invoices`, `!quote`. |
+| `GET /pocket/day/{YYYY-MM-DD}?tz=` | the invoices issued that day (not drafts), the payments received, the invoices that fell due and the quotes sent or accepted, with a summary like "Received 1,200.00 EUR from Acme; 1 invoice sent". Only payments carry `amount` (minor units of the payment's currency), so adding up the day gives the money that came in, never what was billed. Quotes are placed by the moment they were sent or accepted in `tz`, else the time zone in your Settings. |
+| `GET /pocket/widget` | unpaid invoices that are late (the longest late first), then those due in the next two weeks, as client · "12 days late" · amount left; the dashboard's numbers as metrics (Invoiced and Received this month, Outstanding, in the base currency); a line like "2 overdue, 3,400.00 EUR outstanding". Empty when nothing is billed, paid or owed. |
 
 ## Auth
 | Method | Path | Notes |

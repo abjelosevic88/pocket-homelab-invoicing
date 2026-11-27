@@ -42,6 +42,18 @@ var portable = &core.Portable{
 	},
 }
 
+// capabilities is what Pocket Search, Pocket Day and Pocket Hub may read here
+// (docs/capabilities.md in pocket-homelab-core; capabilities.go): one route
+// each, reading only. Register adds the pocket:* offers. Nothing can be kept
+// here from a quick line: an invoice needs a client, lines and a number.
+var capabilities = core.Capabilities{
+	Search: &core.Searchable{What: "Your invoices and quotes, by number, client, line or notes, and your clients by name",
+		Kinds: []string{"invoice", "quote", "client"}, Bangs: []string{"invoice", "invoices", "quote"}},
+	Day: &core.DayFeed{Label: "Invoicing", One: "invoice", Many: "invoices", Unit: "amount",
+		What: "The invoices issued, payments received, invoices due and quotes sent or accepted that day (only payments count as money in)"},
+	Widget: &core.Widget{Title: "Invoices", What: "Late invoices first, then those due soon, and this month's invoiced, received and outstanding totals"},
+}
+
 type linkRoute struct {
 	methods string
 	path    *regexp.Regexp
@@ -66,7 +78,7 @@ var linkRoutes = []linkRoute{
 var errLinkScope = errors.New("outside the link's scope")
 
 func linkAllows(scopes []string, r *http.Request) bool {
-	if portable.LinkAllows(scopes, r) {
+	if portable.LinkAllows(scopes, r) || capabilities.LinkAllows(scopes, r) {
 		return true
 	}
 	for _, lr := range linkRoutes {

@@ -127,10 +127,12 @@ func (s *Server) registerWithCore(ctx context.Context) error {
 		Description: "Self-hosted invoicing for freelancers, consultants and homelabbers.",
 		Icon:        "/favicon.svg", Version: Version,
 		URL: s.cfg.CoreAppURL, PublicURL: s.cfg.BaseURL, HealthPath: "/healthz", EnvPrefix: "INVOICING",
-		Publishes: []string{"invoicing.invoice_created", "invoicing.invoice_sent", "invoicing.invoice_paid"},
-		Offers:    linkOffers,
-		Portable:  portable,
-		Uses:      linkUses(),
+		Publishes:    []string{"invoicing.invoice_created", "invoicing.invoice_sent", "invoicing.invoice_paid"},
+		Offers:       linkOffers,
+		Portable:     portable,
+		Uses:         linkUses(),
+		Category:     "Work",
+		Capabilities: capabilities,
 	}
 	if s.cfg.BaseURL != "" {
 		// ask Core for a relying-party client so "Sign in with Pocket Core" needs no configuration
@@ -411,6 +413,11 @@ func (s *Server) Router() http.Handler {
 			r.Put("/webhooks/{id}", s.handleSaveWebhook)
 			r.Delete("/webhooks/{id}", s.handleDeleteWebhook)
 			r.Post("/webhooks/test", s.handleTestWebhook)
+
+			// What Pocket Search, Day and Hub read (capabilities.go)
+			r.Get("/pocket/search", core.SearchHandler(s.pocketSearch))
+			r.Get("/pocket/day/{date}", core.DayHandler(s.pocketDay))
+			r.Get("/pocket/widget", core.WidgetHandler(s.pocketWidget))
 
 			r.Get("/export.json", s.handleExportJSON)
 			r.Get(strings.TrimPrefix(core.PortablePath, "/api/v1"), portable.Handler())
